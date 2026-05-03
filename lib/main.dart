@@ -22,6 +22,7 @@ import 'core/services/notification_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'core/providers/locale_provider.dart';
+import 'core/network/cloudflare_bypass.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +95,15 @@ class _AppRootState extends State<AppRoot> {
         setState(() {
           _initialized = true;
         });
+        // Pre-warm the system WebView after the first frame so the initial
+        // render isn't delayed. This eliminates the frame jank that occurs
+        // when the CF bypass spawns its HeadlessInAppWebView cold during search.
+        if (Platform.isAndroid || Platform.isIOS) {
+          Future.delayed(
+            const Duration(seconds: 3),
+            CloudflareBypass.instance.prewarm,
+          );
+        }
       }
     } catch (e, stack) {
       if (mounted) {
@@ -147,7 +157,6 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> {
-
   @override
   void initState() {
     super.initState();
@@ -186,9 +195,9 @@ class _MyAppState extends ConsumerState<MyApp> {
 
       final updated = await controller.checkForUpdates();
       if (updated.isNotEmpty && mounted) {
-        ref.read(notificationServiceProvider).showSuccess(
-          _buildUpdateMessage(updated),
-        );
+        ref
+            .read(notificationServiceProvider)
+            .showSuccess(_buildUpdateMessage(updated));
       }
     } catch (e) {
       if (kDebugMode) debugPrint("Auto-update failed: $e");
@@ -244,7 +253,9 @@ class _MyAppState extends ConsumerState<MyApp> {
         }
 
         return MaterialApp.router(
-          scaffoldMessengerKey: ref.read(notificationServiceProvider).messengerKey,
+          scaffoldMessengerKey: ref
+              .read(notificationServiceProvider)
+              .messengerKey,
           title: 'SkyStream',
           debugShowCheckedModeBanner: false,
           themeMode: themeMode,

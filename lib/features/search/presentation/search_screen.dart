@@ -61,15 +61,71 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final searchResultsAsync = ref.watch(searchResultsProvider);
     final suggestionState = ref.watch(searchSuggestionControllerProvider);
+    final filter = ref.watch(searchFilterProvider);
     final l10n = AppLocalizations.of(context)!;
     final typedLongEnough = suggestionState.query.trim().length >= 2;
     final hasSuggestionContent =
         suggestionState.isLoading || suggestionState.suggestions.isNotEmpty;
     final showSuggestions = typedLongEnough && hasSuggestionContent;
 
+    final cs = Theme.of(context).colorScheme;
+    final fillColor = Theme.of(context).inputDecorationTheme.fillColor ??
+        cs.surfaceContainerHighest;
+    final isLive = filter == SearchFilter.live;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: PopupMenuButton<SearchFilter>(
+              tooltip: 'Search scope',
+              onSelected: (value) =>
+                  ref.read(searchFilterProvider.notifier).set(value),
+              offset: const Offset(0, 48),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: SearchFilter.content,
+                  child: Row(
+                    children: [
+                      const Text('🍿', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Text('Non Livestreams')),
+                      if (!isLive)
+                        Icon(Icons.check, size: 18, color: cs.primary),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: SearchFilter.live,
+                  child: Row(
+                    children: [
+                      const Text('📺', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Text('Livestreams')),
+                      if (isLive)
+                        Icon(Icons.check, size: 18, color: cs.primary),
+                    ],
+                  ),
+                ),
+              ],
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: fillColor,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  isLive ? '📺' : '🍿',
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+            ),
+          ),
+        ],
         title: GestureDetector(
           onTap: () => _focusNode.requestFocus(),
           behavior: HitTestBehavior.opaque,
@@ -167,7 +223,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
       body: Column(
         children: [
-          _buildFilterRow(context),
           Expanded(
             child: showSuggestions
                 ? _buildSuggestionsView(context, suggestionState)
@@ -186,8 +241,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           // only repaints the list — not the entire scaffold.
           return RepaintBoundary(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                vertical: LayoutConstants.spacingMd,
+              padding: const EdgeInsets.only(
+                bottom: LayoutConstants.spacingMd,
               ),
               itemCount: state.results.length,
               itemBuilder: (context, index) {
@@ -211,29 +266,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
-  Widget _buildFilterRow(BuildContext context) {
-    final filter = ref.watch(searchFilterProvider);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
-        children: [
-          ChoiceChip(
-            label: const Text('Content'),
-            selected: filter == SearchFilter.content,
-            onSelected: (_) =>
-                ref.read(searchFilterProvider.notifier).set(SearchFilter.content),
-          ),
-          const SizedBox(width: 8),
-          ChoiceChip(
-            label: const Text('Live TV'),
-            selected: filter == SearchFilter.live,
-            onSelected: (_) =>
-                ref.read(searchFilterProvider.notifier).set(SearchFilter.live),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildSuggestionsView(
     BuildContext context,

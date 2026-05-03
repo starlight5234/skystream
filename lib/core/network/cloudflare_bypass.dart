@@ -7,6 +7,27 @@ class CloudflareBypass {
   CloudflareBypass._();
   static final instance = CloudflareBypass._();
 
+  bool _prewarmed = false;
+
+  /// Pre-warm the system WebView so the first real CF solve doesn't pay the
+  /// cold-start cost (~200–500 ms on Android: libwebviewchromium.so load +
+  /// AdrenoVK GPU context init). Call this once, a few seconds after the app
+  /// is displayed — it runs entirely in the background and disposes itself.
+  Future<void> prewarm() async {
+    if (_prewarmed) return;
+    _prewarmed = true;
+    try {
+      final dummy = HeadlessInAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri('about:blank')),
+        initialSettings: InAppWebViewSettings(javaScriptEnabled: false),
+      );
+      await dummy.run();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await dummy.dispose();
+      if (kDebugMode) debugPrint('$_tag WebView pre-warm complete');
+    } catch (_) {}
+  }
+
   static const _tag = '[CF Bypass]';
   static const _cfErrorCodes = [403, 503];
   static const _cfServers = ['cloudflare-nginx', 'cloudflare'];
