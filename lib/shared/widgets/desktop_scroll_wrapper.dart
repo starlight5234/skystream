@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/utils/responsive_breakpoints.dart';
+import '../../core/providers/device_info_provider.dart';
 
-class DesktopScrollWrapper extends StatefulWidget {
+class DesktopScrollWrapper extends ConsumerStatefulWidget {
   final Widget child;
   final ScrollController controller;
   final double scrollAmount;
@@ -26,10 +29,10 @@ class DesktopScrollWrapper extends StatefulWidget {
   });
 
   @override
-  State<DesktopScrollWrapper> createState() => _DesktopScrollWrapperState();
+  ConsumerState<DesktopScrollWrapper> createState() => _DesktopScrollWrapperState();
 }
 
-class _DesktopScrollWrapperState extends State<DesktopScrollWrapper> {
+class _DesktopScrollWrapperState extends ConsumerState<DesktopScrollWrapper> {
   bool _showLeft = false;
   bool _showRight = true;
 
@@ -100,6 +103,14 @@ class _DesktopScrollWrapperState extends State<DesktopScrollWrapper> {
   }
 
   bool get _shouldShowButtons {
+    // If running on a TV, always hide buttons (D-pad is used instead).
+    // We use the profile provider for the most accurate detection.
+    final profile = ref.watch(deviceProfileProvider).asData?.value;
+    if (profile?.isTv == true) return false;
+
+    // Fallback heuristic if provider is loading
+    if (context.isTv) return false;
+
     // If explicitly set, use that value
     if (widget.showButtons != null) return widget.showButtons!;
     // Default: show on desktop platforms only

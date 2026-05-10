@@ -155,7 +155,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
           child: DesktopScrollWrapper(
             // Wraps ListView
             controller: _scrollController,
-            showButtons: isDesktop, // Show nav buttons on desktop/TV
+            showButtons: isDesktop, // Handled globally by DesktopScrollWrapper for TV
             child: Builder(
               builder: (context) {
                 final double cardWidth = isDesktop ? 200.0 : 130.0;

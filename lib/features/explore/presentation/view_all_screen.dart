@@ -4,10 +4,11 @@ import '../../../../core/router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/responsive_breakpoints.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
+
 import '../../../../core/providers/device_info_provider.dart';
 import '../../../../shared/widgets/multimedia_card.dart';
 import '../../../../shared/widgets/shimmer_placeholder.dart';
+import '../../../../shared/widgets/custom_widgets.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import 'controllers/view_all_controller.dart';
 
@@ -115,12 +116,13 @@ class _ViewAllScreenState extends ConsumerState<ViewAllScreen> {
           widget.title,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
+        leading: CustomButton(
+          shape: const CircleBorder(),
+          backgroundColor: Colors.black45,
           onPressed: () => context.pop(),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.black45,
-            foregroundColor: Colors.white,
+          child: const Icon(
+            Icons.arrow_back_rounded,
+            color: Colors.white,
           ),
         ),
         elevation: 0,
@@ -178,19 +180,6 @@ class _ViewAllScreenState extends ConsumerState<ViewAllScreen> {
       ),
     );
 
-    return deviceProfileAsync.maybeWhen(
-      data: (profile) {
-        if (profile.isTv) {
-          return VirtualMouse(
-            visible: true,
-            velocity: 3,
-            pointerColor: Theme.of(context).colorScheme.primary,
-            child: scaffold,
-          );
-        }
-        return scaffold;
-      },
-      orElse: () => scaffold,
-    );
+    return scaffold;
   }
 }

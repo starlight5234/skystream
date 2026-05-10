@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../../shared/widgets/shimmer_placeholder.dart';
 import '../../../../shared/widgets/thumbnail_error_placeholder.dart';
+import '../../../../shared/widgets/multimedia_card.dart';
 
 import '../controllers/explore_search_controller.dart';
 
@@ -320,7 +321,10 @@ class _SearchResultsGridState extends ConsumerState<_SearchResultsGrid> {
         final id = item.id;
         final uniqueTag = 'search_result_${id}_$index';
 
-        return GestureDetector(
+        return MultimediaCard(
+          imageUrl: imageUrl,
+          title: title,
+          heroTag: uniqueTag,
           onTap: () {
             TmdbDetailsRoute(
               movieId: id,
@@ -329,41 +333,6 @@ class _SearchResultsGridState extends ConsumerState<_SearchResultsGrid> {
               placeholderPoster: imageUrl,
             ).push(context);
           },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Hero(
-                  tag: uniqueTag,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      placeholder: (_, _) =>
-                          ShimmerPlaceholder(borderRadius: 4),
-                      errorWidget: (_, _, _) =>
-                          const ThumbnailErrorPlaceholder(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.9),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
         );
       },
     );

@@ -23,6 +23,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'core/providers/locale_provider.dart';
 import 'core/network/cloudflare_bypass.dart';
+import 'package:dpad/dpad.dart';
+import 'core/providers/device_info_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -225,6 +227,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     final themeMode = ref.watch(appThemeModeProvider);
     final appRouter = ref.watch(appRouterProvider);
     final locale = ref.watch(localeProvider);
+    final profileAsync = ref.watch(deviceProfileProvider);
 
     // Reactive Listener: Keeps UpdateController alive and handles the UI side-effect
     ref.listen<UpdateState>(updateControllerProvider, (previous, next) {
@@ -252,7 +255,7 @@ class _MyAppState extends ConsumerState<MyApp> {
           darkScheme = darkDynamic;
         }
 
-        return MaterialApp.router(
+        final materialApp = MaterialApp.router(
           scaffoldMessengerKey: ref
               .read(notificationServiceProvider)
               .messengerKey,
@@ -272,6 +275,29 @@ class _MyAppState extends ConsumerState<MyApp> {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            Widget result = child!;
+
+            // Phase 1: Density override for TV devices
+            // Android TV often reports inflated pixel density; we clamp to 1.0 for standard scaling.
+            final profile = profileAsync.asData?.value;
+            if (profile?.isTv == true) {
+              result = MediaQuery(
+                data: mq.copyWith(
+                  devicePixelRatio: 1.0,
+                  textScaler: TextScaler.noScaling,
+                ),
+                child: result,
+              );
+            }
+
+            return result;
+          },
+        );
+
+        return DpadNavigator(
+          child: materialApp,
         );
       },
     );

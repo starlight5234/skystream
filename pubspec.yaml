@@ -76,9 +76,8 @@ dependencies:
   carousel_slider: ^5.1.1
   intl: ^0.20.2
   flutter_svg: ^2.2.3
+  dpad: ^2.0.2
   shimmer: ^3.0.0
-  virtual_mouse:
-    path: packages/virtual_mouse
   video_view:
     path: packages/video_view
   encrypt: ^5.0.3

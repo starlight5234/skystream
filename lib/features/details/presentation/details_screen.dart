@@ -10,7 +10,8 @@ import '../../../core/utils/image_fallbacks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
+
+import 'package:skystream/shared/widgets/custom_widgets.dart';
 import 'package:skystream/core/providers/device_info_provider.dart';
 
 import '../../library/presentation/library_provider.dart';
@@ -142,12 +143,13 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 ],
               ),
             ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
+            leading: CustomButton(
+              shape: const CircleBorder(),
+              backgroundColor: Colors.black45,
               onPressed: () => context.pop(),
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black45,
-                foregroundColor: Colors.white,
+              child: const Icon(
+                Icons.arrow_back_rounded,
+                color: Colors.white,
               ),
             ),
             actions: [
@@ -197,20 +199,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
       ),
     );
 
-    return deviceProfileAsync.maybeWhen(
-      data: (profile) {
-        if (profile.isTv) {
-          return VirtualMouse(
-            visible: true,
-            velocity: 3,
-            pointerColor: Theme.of(context).colorScheme.primary,
-            child: scaffold,
-          );
-        }
-        return scaffold;
-      },
-      orElse: () => scaffold,
-    );
+    return scaffold;
   }
 
   List<Widget> _buildDesktopSlivers(

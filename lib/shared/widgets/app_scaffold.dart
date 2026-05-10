@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:skystream/core/providers/device_info_provider.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
 import 'package:skystream/shared/widgets/custom_bottom_nav.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
+import 'package:skystream/shared/widgets/app_sidebar.dart';
+
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../features/settings/presentation/general_settings_provider.dart';
 
@@ -17,12 +19,25 @@ class AppScaffold extends ConsumerStatefulWidget {
 }
 
 class _AppScaffoldState extends ConsumerState<AppScaffold> {
+  // Owned here so the content-area LEFT key handler can focus them directly,
+  // crossing the Branch Navigator's FocusScope boundary.
+  static const _sidebarItemCount = 5;
+  late final List<FocusNode> _sidebarNodes = List.generate(
+    _sidebarItemCount,
+    (i) => FocusNode(debugLabel: 'sidebar_$i'),
+  );
+
+  @override
+  void dispose() {
+    for (final n in _sidebarNodes) {
+      n.dispose();
+    }
+    super.dispose();
+  }
+
   void _onItemTapped(int index, BuildContext context) {
     widget.navigationShell.goBranch(
       index,
-      // A common pattern when using bottom navigation bars is to support
-      // navigating to the initial location when tapping the item that is
-      // already active.
       initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
@@ -44,6 +59,20 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
     }
   }
 
+  // Intercepts D-pad LEFT before DpadNavigator's CallbackShortcuts can consume
+  // it, because this Focus sits above the Branch Navigator in the focus tree.
+  // From inside the Branch scope, focusInDirection(left) can't reach the
+  // sidebar (different FocusScope), so we focus the sidebar item explicitly.
+  KeyEventResult _onContentKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      final idx = widget.navigationShell.currentIndex;
+      _sidebarNodes[idx].requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final deviceProfileAsync = ref.watch(deviceProfileProvider);
@@ -55,80 +84,46 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
 
     return deviceProfileAsync.when(
       data: (profile) {
-        // Desktop or TV use Side Navigation
-        // Or if the screen is physically wide enough (like iPads/Tablets in landscape)
-        // VirtualMouse cursor only shown on TV, not desktop
         if (profile.isTv || context.isTabletOrLarger) {
-          final sideNavScaffold = PopScope(
+          return PopScope(
             canPop: isAtDefaultHome,
             onPopInvokedWithResult: (didPop, result) {
               if (!didPop) {
                 widget.navigationShell.goBranch(defaultIndex);
               }
             },
-            child: Scaffold(
-              body: Row(
+            child: Material(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Row(
                 children: [
-                  NavigationRail(
-                    elevation: 8,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).appBarTheme.backgroundColor,
-                    selectedIndex: widget.navigationShell.currentIndex,
-                    onDestinationSelected: (index) =>
-                        _onItemTapped(index, context),
-                    labelType: NavigationRailLabelType.all,
-                    groupAlignment: 0.0, // Center
-                    destinations: [
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.home_outlined),
-                        selectedIcon: const Icon(Icons.home),
-                        label: Text(AppLocalizations.of(context)!.home),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.search),
-                        label: Text(AppLocalizations.of(context)!.search),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.explore_outlined),
-                        selectedIcon: const Icon(Icons.explore),
-                        label: Text(AppLocalizations.of(context)!.explore),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.library_books_outlined),
-                        selectedIcon: const Icon(Icons.library_books),
-                        label: Text(AppLocalizations.of(context)!.library),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.settings_outlined),
-                        selectedIcon: const Icon(Icons.settings),
-                        label: Text(AppLocalizations.of(context)!.settings),
-                      ),
-                    ],
+                  // Sidebar in its own traversal group so UP/DOWN stays inside it.
+                  FocusTraversalGroup(
+                    policy: WidgetOrderTraversalPolicy(),
+                    child: AppSidebar(
+                      currentIndex: widget.navigationShell.currentIndex,
+                      onItemTapped: (int index) => _onItemTapped(index, context),
+                      focusNodes: _sidebarNodes,
+                    ),
                   ),
-                  Expanded(child: widget.navigationShell),
+                  // Content in its own traversal group.
+                  // The inner Focus wrapper intercepts LEFT before it can
+                  // escape to CallbackShortcuts, then explicitly focuses the
+                  // correct sidebar item — bypassing the FocusScope boundary.
+                  Expanded(
+                    child: FocusTraversalGroup(
+                      policy: WidgetOrderTraversalPolicy(),
+                      child: Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: _onContentKeyEvent,
+                        child: widget.navigationShell,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           );
-
-          // Wrap with VirtualMouse only on TV
-          if (profile.isTv) {
-            // Focus wrapper ensures the remote's back key is delivered to Flutter
-            // after returning from the player (which captures all key events itself).
-            // Without this, back key goes to the OS with nothing focused and is swallowed.
-            return VirtualMouse(
-              visible: true,
-              velocity: 3,
-              pointerColor: Theme.of(context).colorScheme.primary,
-              child: Focus(
-                autofocus: true,
-                child: sideNavScaffold,
-              ),
-            );
-          }
-
-          return sideNavScaffold;
         }
 
         // Mobile uses Bottom Navigation
@@ -152,7 +147,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (err, stack) => Scaffold(
           body: Center(
-              child: Text(AppLocalizations.of(context)!.errorPrefix(err.toString())))),
+              child: Text(
+                  AppLocalizations.of(context)!.errorPrefix(err.toString())))),
     );
   }
 }

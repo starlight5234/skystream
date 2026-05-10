@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CardsWrapper extends StatefulWidget {
   final Widget child;
@@ -59,7 +60,12 @@ class _CardsWrapperState extends State<CardsWrapper>
   bool _isHovered = false;
 
   void _updateAnimation() {
-    if (_isFocused || _isHovered) {
+    // In D-pad/keyboard mode the border+glow is the focus indicator; skip scale
+    // to prevent edge items from overflowing the viewport.
+    final isDpad = FocusManager.instance.highlightMode ==
+        FocusHighlightMode.traditional;
+    final shouldScale = _isHovered || (_isFocused && !isDpad);
+    if (shouldScale) {
       _controller.forward();
     } else {
       _controller.reverse();
@@ -86,6 +92,14 @@ class _CardsWrapperState extends State<CardsWrapper>
       focusNode: _node,
       onFocusChange: _onFocusChange,
       onKeyEvent: (node, event) {
+        if (event is KeyDownEvent || event is KeyRepeatEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+        }
         return KeyEventResult.ignored;
       },
       child: MouseRegion(
@@ -98,7 +112,7 @@ class _CardsWrapperState extends State<CardsWrapper>
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: widget.borderRadius ?? BorderRadius.circular(12),
-                border: _isFocused
+                border: (_isFocused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional)
                     ? Border.all(
                         color: Theme.of(context).colorScheme.primary,
                         width: 2,

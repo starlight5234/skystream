@@ -68,7 +68,7 @@ class PlayerLoadingOverlay extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: CustomButton(
-                  showFocusHighlight: isTv,
+
                   onPressed: onBack,
                   child: const Padding(
                     padding: EdgeInsets.all(8),
@@ -308,40 +308,15 @@ class _ActionButton extends StatelessWidget {
       children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(label)],
     );
 
-    // On TV use CustomButton so the D-pad focus ring is visible.
-    if (isTv) {
-      return CustomButton(
-        showFocusHighlight: true,
-        autofocus: autofocus,
-        isPrimary: primary,
-        onPressed: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: child,
-        ),
-      );
-    }
-
-    if (primary) {
-      return FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        ),
-        child: child,
-      );
-    }
-
-    return OutlinedButton(
+    return CustomButton(
+      autofocus: autofocus,
+      isPrimary: primary,
       onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.24)),
+      isOutlined: !primary,
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: child,
       ),
-      child: child,
     );
   }
 }

@@ -46,7 +46,12 @@ class _FocusableItemState extends State<FocusableItem>
   }
 
   void _updateState() {
-    if (_isFocused || _isHovered) {
+    // In D-pad/keyboard mode the border+glow is the focus indicator; skip scale
+    // to prevent edge items from overflowing the viewport.
+    final isDpad = FocusManager.instance.highlightMode ==
+        FocusHighlightMode.traditional;
+    final shouldScale = _isHovered || (_isFocused && !isDpad);
+    if (shouldScale) {
       _ctrl.forward();
     } else {
       _ctrl.reverse();

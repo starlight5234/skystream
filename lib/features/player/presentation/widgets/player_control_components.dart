@@ -44,7 +44,7 @@ class PlayerTopBar extends StatelessWidget {
           child: Row(
             children: [
               CustomButton(
-                showFocusHighlight: isTv,
+
                 focusNode: backFocusNode,
                 onPressed: onBack ?? () => context.pop(),
                 child: const Icon(
@@ -122,7 +122,7 @@ class PlayerCenterControls extends StatelessWidget {
         children: [
           // Seek Backward
           CustomButton(
-            showFocusHighlight: isTv,
+
             onPressed: onSeekBackward,
             child: const Icon(Icons.replay_10, color: Colors.white, size: 36),
           ),
@@ -139,7 +139,7 @@ class PlayerCenterControls extends StatelessWidget {
           const SizedBox(width: 48),
           // Seek Forward
           CustomButton(
-            showFocusHighlight: isTv,
+
             onPressed: onSeekForward,
             child: const Icon(Icons.forward_10, color: Colors.white, size: 36),
           ),
@@ -175,7 +175,7 @@ class PlayerActionButton extends StatelessWidget {
     return FocusTraversalOrder(
       order: NumericFocusOrder(focusOrder.toDouble()),
       child: CustomButton(
-        showFocusHighlight: isTv,
+
         onPressed: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),

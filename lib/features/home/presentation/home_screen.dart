@@ -18,7 +18,10 @@ import 'package:skystream/core/extensions/base_provider.dart';
 import 'package:skystream/core/router/app_router.dart';
 import 'delegates/home_search_delegate.dart';
 import '../../../shared/widgets/cards_wrapper.dart';
+import '../../../shared/widgets/custom_widgets.dart';
 import '../../../../core/utils/layout_constants.dart';
+import '../../../../core/utils/responsive_breakpoints.dart';
+import '../../../../core/providers/device_info_provider.dart';
 import 'dart:async';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -31,8 +34,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  final ValueNotifier<bool> _isScrolledNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<double> _appBarOpacityNotifier = ValueNotifier<double>(0);
   final ValueNotifier<bool> _isFabExtended = ValueNotifier<bool>(true);
+  final FocusNode _firstActionFocusNode = FocusNode();
 
   @override
   bool get wantKeepAlive => true;
@@ -46,13 +50,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void _onScroll() {
     if (!_scrollController.hasClients) return;
 
-    // Status Bar Logic
-    final isScrolled = _scrollController.offset > 200;
-    if (isScrolled != _isScrolledNotifier.value) {
-      _isScrolledNotifier.value = isScrolled;
+    final opacity = (_scrollController.offset * 0.8 / 300).clamp(0.0, 1.0);
+    if (opacity != _appBarOpacityNotifier.value) {
+      _appBarOpacityNotifier.value = opacity;
     }
 
-    // FAB Logic — uses ValueNotifier to avoid full-tree setState rebuild
     if (_scrollController.position.userScrollDirection ==
             ScrollDirection.reverse &&
         _isFabExtended.value) {
@@ -68,14 +70,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _isScrolledNotifier.dispose();
+    _appBarOpacityNotifier.dispose();
     _isFabExtended.dispose();
+    _firstActionFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     final homeDataAsync = ref.watch(homeDataProvider);
     final history = ref.watch(watchHistoryProvider);
     final generalSettings = ref.watch(generalSettingsProvider);
@@ -86,29 +89,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ? SystemUiOverlayStyle.light
         : SystemUiOverlayStyle.dark;
 
+    final profile = ref.watch(deviceProfileProvider).asData?.value;
+    final isTv = profile?.isTv == true || context.isTv;
+
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: isTv ? false : true,
       appBar: AppBar(
         systemOverlayStyle: overlayStyle,
         forceMaterialTransparency: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        flexibleSpace: ValueListenableBuilder<bool>(
-          valueListenable: _isScrolledNotifier,
-          builder: (context, isScrolled, child) {
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              color: isScrolled
-                  ? Theme.of(context).scaffoldBackgroundColor
-                  : Colors.transparent,
-            );
-          },
+        flexibleSpace: ValueListenableBuilder<double>(
+          valueListenable: _appBarOpacityNotifier,
+          builder: (context, opacity, _) => Opacity(
+            opacity: opacity,
+            child: Container(color: Theme.of(context).scaffoldBackgroundColor),
+          ),
         ),
         title: Text(l10n.appTitle),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: LayoutConstants.spacingMd),
             child: CardsWrapper(
+              focusNode: _firstActionFocusNode,
               onTap: () {
                 unawaited(
                   showSearch<void>(
@@ -133,100 +136,165 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
           ),
-        ],
-      ),
-      floatingActionButton: ValueListenableBuilder<bool>(
-        valueListenable: _isFabExtended,
-        builder: (context, isFabExtended, _) {
-          return Material(
-            elevation: 4,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Theme.of(context).dialogTheme.backgroundColor
-                : Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => _showProviderSelector(context, ref),
-              child: Container(
-                height: 56,
-                constraints: const BoxConstraints(minWidth: 56),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isFabExtended ? 16 : 0,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.extension,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: SizedBox(
-                        width: isFabExtended ? null : 0,
-                        child: isFabExtended
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 12),
-                                child: Builder(
-                                  builder: (context) {
-                                    final l10n = AppLocalizations.of(context)!;
-                                    final active = ref.watch(
-                                      activeProviderProvider,
-                                    );
-                                    final isDebug = active?.isDebug ?? false;
-                                    return Row(
-                                      children: [
-                                        Text(
-                                          active?.name ?? l10n.none,
-                                          style: TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.fade,
-                                          softWrap: false,
-                                        ),
-                                        if (isDebug) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red,
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              l10n.debug,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    );
-                                  },
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ],
+          if (!context.isMobile)
+            Padding(
+              padding: const EdgeInsets.only(right: LayoutConstants.spacingMd),
+              child: CardsWrapper(
+                onTap: () => ref.read(homeDataProvider.notifier).fetch(),
+                borderRadius: BorderRadius.circular(50),
+                child: CircleAvatar(
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.1),
+                  radius: 18,
+                  child: Icon(
+                    Icons.refresh,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    size: 18,
+                  ),
                 ),
               ),
             ),
-          );
-        },
+          if (isTv)
+            Padding(
+              padding: const EdgeInsets.only(right: LayoutConstants.spacingMd),
+              child: CardsWrapper(
+                onTap: () => _showProviderSelector(context, ref),
+                borderRadius: BorderRadius.circular(50),
+                child: Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.extension,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        ref.watch(activeProviderProvider)?.name ?? l10n.none,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
+      floatingActionButton: isTv
+          ? null
+          : ValueListenableBuilder<bool>(
+              valueListenable: _isFabExtended,
+              builder: (context, isFabExtended, _) {
+                return Material(
+                  elevation: 4,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).dialogTheme.backgroundColor
+                      : Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => _showProviderSelector(context, ref),
+                    child: Container(
+                      height: 56,
+                      constraints: const BoxConstraints(minWidth: 56),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isFabExtended ? 16 : 0,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.extension,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: SizedBox(
+                              width: isFabExtended ? null : 0,
+                              child: isFabExtended
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(left: 12),
+                                      child: Builder(
+                                        builder: (context) {
+                                          final l10n = AppLocalizations.of(
+                                            context,
+                                          )!;
+                                          final active = ref.watch(
+                                            activeProviderProvider,
+                                          );
+                                          final isDebug =
+                                              active?.isDebug ?? false;
+                                          return Row(
+                                            children: [
+                                              Text(
+                                                active?.name ?? l10n.none,
+                                                style: TextStyle(
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.fade,
+                                                softWrap: false,
+                                              ),
+                                              if (isDebug) ...[
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    l10n.debug,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
       body: _buildBody(
         context,
         homeDataAsync,
@@ -267,12 +335,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
-            // Carousel
             if (data.containsKey('Trending'))
               SliverToBoxAdapter(
                 child: ExploreCarousel(
                   movies: data['Trending']!.take(7).toList(),
                   scrollController: _scrollController,
+                  onNavigateUp: () => _firstActionFocusNode.requestFocus(),
                   onTap: (item) {
                     DetailsRoute(
                       $extra: DetailsRouteExtra(item: item),
@@ -285,6 +353,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 child: ExploreCarousel(
                   movies: data.values.first.take(7).toList(),
                   scrollController: _scrollController,
+                  onNavigateUp: () => _firstActionFocusNode.requestFocus(),
                   onTap: (item) {
                     DetailsRoute(
                       $extra: DetailsRouteExtra(item: item),
@@ -293,7 +362,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
 
-            // Continue Watching
             if (watchHistoryEnabled && history.isNotEmpty)
               SliverToBoxAdapter(
                 child: ContinueWatchingSection(
@@ -302,7 +370,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
 
-            // Category sections — lazily built
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
@@ -330,7 +397,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
 
-            // Bottom padding for FAB
             const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
           ],
         ),
@@ -460,7 +526,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               Icon(
                 Icons.extension_off_rounded,
                 size: 56,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.6),
               ),
               const SizedBox(height: 16),
               Text(
@@ -505,7 +573,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Filter Chips
                 Consumer(
                   builder: (context, ref, _) {
                     final currentFilter = ref.watch(homeFilterProvider);
@@ -590,6 +657,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               return ListTile(
                                 title: Text(l10n.none),
                                 leading: const Radio<String?>(value: null),
+                                autofocus: index == 0,
                                 onTap: () {
                                   ref
                                       .read(activeProviderProvider.notifier)
@@ -606,6 +674,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                     : index];
                             final isDebug = p.isDebug;
                             return ListTile(
+                              autofocus: index == 0 && filter != null,
                               title: Row(
                                 children: [
                                   Expanded(child: Text(p.name)),
@@ -651,7 +720,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ),
           actions: [
-            TextButton(
+            CustomButton(
               onPressed: () => Navigator.pop(context),
               child: Text(l10n.close),
             ),

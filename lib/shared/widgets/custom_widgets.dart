@@ -122,7 +122,9 @@ class _CustomSliderState extends State<CustomSlider> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          border: _isFocused
+          border: (_isFocused &&
+                  FocusManager.instance.highlightMode ==
+                      FocusHighlightMode.traditional)
               ? Border.all(
                   color: Theme.of(context).colorScheme.primary,
                   width: 2,
@@ -142,9 +144,12 @@ class _CustomSliderState extends State<CustomSlider> {
             onChanged: widget.onChanged,
             onChangeStart: widget.onChangeStart,
             onChangeEnd: widget.onChangeEnd,
-            activeColor:
-                widget.activeColor ??
-                (_isFocused ? Theme.of(context).colorScheme.primary : null),
+            activeColor: widget.activeColor ??
+                ((_isFocused &&
+                        FocusManager.instance.highlightMode ==
+                            FocusHighlightMode.traditional)
+                    ? Theme.of(context).colorScheme.primary
+                    : null),
             inactiveColor: widget.inactiveColor,
           ),
         ),
@@ -305,7 +310,6 @@ class CustomButton extends StatefulWidget {
   final bool isOutlined;
   final FocusNode? focusNode;
   final Color? backgroundColor;
-  final bool showFocusHighlight;
   final OutlinedBorder? shape;
 
   const CustomButton({
@@ -317,7 +321,6 @@ class CustomButton extends StatefulWidget {
     this.isOutlined = false,
     this.focusNode,
     this.backgroundColor,
-    this.showFocusHighlight = true,
     this.shape,
   });
 
@@ -349,7 +352,8 @@ class _CustomButtonState extends State<CustomButton> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final showHighlight = _isFocused && widget.showFocusHighlight;
+    final isTraditional = FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    final showHighlight = _isFocused && isTraditional;
 
     // Use Material 3 button with custom focus highlight
     if (widget.isPrimary) {

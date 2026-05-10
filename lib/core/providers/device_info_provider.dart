@@ -20,6 +20,8 @@ class DeviceProfile {
     this.isTablet = false,
     this.isDesktopOS = false,
   });
+
+  bool get isLargeScreen => isTv || isTablet || isDesktopOS;
 }
 
 @riverpod

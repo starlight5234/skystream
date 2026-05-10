@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
+
 import '../../../../core/providers/device_info_provider.dart';
 import '../../../core/models/tmdb_details.dart';
 import 'package:intl/intl.dart';
@@ -201,20 +201,7 @@ class _TmdbMovieDetailsScreenState
       body: content,
     );
 
-    return deviceProfileAsync.maybeWhen(
-      data: (profile) {
-        if (profile.isTv) {
-          return VirtualMouse(
-            visible: true,
-            velocity: 3,
-            pointerColor: Theme.of(context).colorScheme.primary,
-            child: scaffold,
-          );
-        }
-        return scaffold;
-      },
-      orElse: () => scaffold,
-    );
+    return scaffold;
   }
 
   Widget _buildDesktopLayout(TmdbDetails data, bool isHeavyLoading) {

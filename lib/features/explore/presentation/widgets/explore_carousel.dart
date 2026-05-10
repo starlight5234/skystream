@@ -1,31 +1,37 @@
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/router/app_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../../shared/widgets/cards_wrapper.dart';
+import '../../../../core/utils/responsive_breakpoints.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/device_info_provider.dart';
 
 import '../../../../shared/widgets/thumbnail_error_placeholder.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 
-class ExploreCarousel extends StatefulWidget {
+class ExploreCarousel extends ConsumerStatefulWidget {
   final List<MultimediaItem> movies;
   final ScrollController? scrollController;
   final void Function(MultimediaItem)? onTap;
+  final VoidCallback? onNavigateUp;
 
   const ExploreCarousel({
     super.key,
     required this.movies,
     this.scrollController,
     this.onTap,
+    this.onNavigateUp,
   });
 
   @override
-  State<ExploreCarousel> createState() => _ExploreCarouselState();
+  ConsumerState<ExploreCarousel> createState() => _ExploreCarouselState();
 }
 
-class _ExploreCarouselState extends State<ExploreCarousel> {
+class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
   final ValueNotifier<int> _currentIndexNotifier = ValueNotifier<int>(0);
   final CarouselSliderController _carouselController =
       CarouselSliderController();
@@ -59,12 +65,28 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
     final heroHeight = size.height * 0.60;
     final isDesktop =
         size.width > LayoutConstants.exploreCarouselDesktopBreakpoint;
+    
+    final profile = ref.watch(deviceProfileProvider).asData?.value;
+    final isTv = profile?.isTv ?? context.isTv;
 
-    return SizedBox(
-      height: heroHeight,
-      child: Stack(
-        children: [
-          CarouselSlider.builder(
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          widget.onNavigateUp?.call();
+          return widget.onNavigateUp != null
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: SizedBox(
+        height: heroHeight,
+        child: Stack(
+          children: [
+            CarouselSlider.builder(
             carouselController: _carouselController,
             itemCount: widget.movies.length,
             options: CarouselOptions(
@@ -74,6 +96,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
               autoPlayInterval: const Duration(seconds: 15),
               autoPlayAnimationDuration: const Duration(milliseconds: 1000),
               autoPlayCurve: Curves.fastOutSlowIn,
+              enableInfiniteScroll: !isTv,
               scrollPhysics: const BouncingScrollPhysics(),
               onPageChanged: (index, reason) {
                 _currentIndexNotifier.value = index;
@@ -81,7 +104,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
             ),
             itemBuilder: (context, index, realIndex) {
               final movie = widget.movies[index];
-              return _buildCarouselItem(context, movie, heroHeight);
+              return _buildCarouselItem(context, movie, heroHeight, index);
             },
           ),
 
@@ -116,7 +139,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
           ),
 
           // Left Navigation Button
-          if (isDesktop)
+          if (isDesktop && !isTv)
             AnimatedOpacity(
               opacity:
                   1.0, // Always visible on large screens for TV/desktop nav
@@ -148,7 +171,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
             ),
 
           // Right Navigation Button
-          if (isDesktop)
+          if (isDesktop && !isTv)
             AnimatedOpacity(
               opacity:
                   1.0, // Always visible on large screens for TV/desktop nav
@@ -180,6 +203,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
             ),
         ],
       ),
+      ),
     );
   }
 
@@ -198,6 +222,7 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
     BuildContext context,
     MultimediaItem movie,
     double height,
+    int index,
   ) {
     final imageUrl = movie.backdropImageUrl;
     final title = movie.title;
@@ -244,10 +269,12 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
         metadata,
         height,
         movie,
+        index,
       );
     }
 
     return CardsWrapper(
+      autoFocus: index == 0,
       onTap: () {
         if (widget.onTap != null) {
           widget.onTap!(movie);
@@ -408,8 +435,10 @@ class _ExploreCarouselState extends State<ExploreCarousel> {
     String metadata,
     double height,
     MultimediaItem movie,
+    int index,
   ) {
     return CardsWrapper(
+      autoFocus: index == 0,
       onTap: () {
         if (widget.onTap != null) {
           // Need to access widget.onTap but this method is in state, so it works.
