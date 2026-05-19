@@ -31,11 +31,29 @@ class ExploreCarousel extends ConsumerStatefulWidget {
   ConsumerState<ExploreCarousel> createState() => _ExploreCarouselState();
 }
 
+// Intents used by the carousel's keyboard shortcuts. Defined at file scope so
+// they're const-constructible and stable across rebuilds.
+class _CarouselPrevIntent extends Intent {
+  const _CarouselPrevIntent();
+}
+
+class _CarouselNextIntent extends Intent {
+  const _CarouselNextIntent();
+}
+
+class _CarouselUpIntent extends Intent {
+  const _CarouselUpIntent();
+}
+
 class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
   final ValueNotifier<int> _currentIndexNotifier = ValueNotifier<int>(0);
   final CarouselSliderController _carouselController =
       CarouselSliderController();
   final ValueNotifier<double> _scrollOffset = ValueNotifier(0.0);
+  // Single anchor focus node so the carousel acts as ONE focus target on TV/
+  // keyboard. Otherwise each slide is independently focusable and pages cause
+  // focus to drop into the next row when slides unmount.
+  final FocusNode _carouselFocusNode = FocusNode(debugLabel: 'carousel_anchor');
 
   @override
   void initState() {
@@ -49,11 +67,21 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
     }
   }
 
+  void _activateCurrent() {
+    final movie = widget.movies[_currentIndexNotifier.value];
+    if (widget.onTap != null) {
+      widget.onTap!(movie);
+    } else {
+      _navigateToDetails(context, movie);
+    }
+  }
+
   @override
   void dispose() {
     widget.scrollController?.removeListener(_onParentScroll);
     _scrollOffset.dispose();
     _currentIndexNotifier.dispose();
+    _carouselFocusNode.dispose();
     super.dispose();
   }
 
@@ -69,19 +97,62 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
     final profile = ref.watch(deviceProfileProvider).asData?.value;
     final isTv = profile?.isTv ?? context.isTv;
 
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          widget.onNavigateUp?.call();
-          return widget.onNavigateUp != null
-              ? KeyEventResult.handled
-              : KeyEventResult.ignored;
-        }
-        return KeyEventResult.ignored;
+    return FocusableActionDetector(
+      focusNode: _carouselFocusNode,
+      // Carousel is the landing focus target on Home for TV/keyboard. Without
+      // this the inner CardsWrapper(autoFocus:) is dead because slides are
+      // wrapped in ExcludeFocus, and the screen would mount with no focus.
+      autofocus: true,
+      mouseCursor: SystemMouseCursors.click,
+      // Arrow keys are wired as explicit Shortcuts/Actions at this level so
+      // they fire when _carouselFocusNode has focus. Using a nested
+      // Focus(onKeyEvent:) for arrows is unreliable here — that child Focus
+      // is a descendant of _carouselFocusNode, and key events only propagate
+      // UP from the focused node, so the child's handler never runs. Worse,
+      // unhandled arrow keys fall through to Flutter's default ScrollAction
+      // which then scrolls the outer vertical CustomScrollView — exactly the
+      // "Right pages carousel AND scrolls page vertically" bug we saw.
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowLeft): _CarouselPrevIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowRight): _CarouselNextIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): _CarouselUpIntent(),
       },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            _activateCurrent();
+            return null;
+          },
+        ),
+        _CarouselPrevIntent: CallbackAction<_CarouselPrevIntent>(
+          onInvoke: (_) {
+            _carouselController.previousPage(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOut,
+            );
+            return null;
+          },
+        ),
+        _CarouselNextIntent: CallbackAction<_CarouselNextIntent>(
+          onInvoke: (_) {
+            _carouselController.nextPage(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOut,
+            );
+            return null;
+          },
+        ),
+        _CarouselUpIntent: CallbackAction<_CarouselUpIntent>(
+          onInvoke: (_) {
+            widget.onNavigateUp?.call();
+            return null;
+          },
+        ),
+      },
+      onShowFocusHighlight: (_) => setState(() {}),
       child: SizedBox(
         height: heroHeight,
         child: Stack(
@@ -104,7 +175,10 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
             ),
             itemBuilder: (context, index, realIndex) {
               final movie = widget.movies[index];
-              return _buildCarouselItem(context, movie, heroHeight, index);
+              // Slides are visual only — the carousel anchor handles focus.
+              return ExcludeFocus(
+                child: _buildCarouselItem(context, movie, heroHeight, index),
+              );
             },
           ),
 
@@ -274,7 +348,8 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
     }
 
     return CardsWrapper(
-      autoFocus: index == 0,
+      // Slides are wrapped in ExcludeFocus above; the carousel anchor owns
+      // focus, so no autoFocus here.
       onTap: () {
         if (widget.onTap != null) {
           widget.onTap!(movie);
@@ -438,10 +513,10 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
     int index,
   ) {
     return CardsWrapper(
-      autoFocus: index == 0,
+      // Slides are wrapped in ExcludeFocus above; the carousel anchor owns
+      // focus, so no autoFocus here.
       onTap: () {
         if (widget.onTap != null) {
-          // Need to access widget.onTap but this method is in state, so it works.
           widget.onTap!(movie);
         } else {
           _navigateToDetails(context, movie);
