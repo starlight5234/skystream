@@ -143,35 +143,46 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 ],
               ),
             ),
-            leading: CustomButton(
-              shape: const CircleBorder(),
-              backgroundColor: Colors.black45,
-              onPressed: () => context.pop(),
-              child: const Icon(
-                Icons.arrow_back_rounded,
-                color: Colors.white,
+            // AppBar buttons are removed from D-pad / Tab traversal so they
+            // don't get picked as the nearest target from content in the body
+            // (otherwise pressing Up/Left/Right from an episode card can jump
+            // here unexpectedly). Users navigate back via the hardware Back
+            // key on TV remotes. They're still clickable with mouse / touch.
+            leading: Focus(
+              descendantsAreTraversable: false,
+              child: CustomButton(
+                shape: const CircleBorder(),
+                backgroundColor: Colors.black45,
+                onPressed: () => context.pop(),
+                child: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white,
+                ),
               ),
             ),
             actions: [
-              IconButton(
-                icon: Icon(
-                  isBookmarked
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: isBookmarked
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.white,
-                ),
-                onPressed: () {
-                  if (isBookmarked) {
-                    libraryNotifier.removeItem(item.url);
-                  } else {
-                    libraryNotifier.addItem(item);
-                  }
-                },
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black45,
-                  foregroundColor: Colors.white,
+              Focus(
+                descendantsAreTraversable: false,
+                child: IconButton(
+                  icon: Icon(
+                    isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    color: isBookmarked
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.white,
+                  ),
+                  onPressed: () {
+                    if (isBookmarked) {
+                      libraryNotifier.removeItem(item.url);
+                    } else {
+                      libraryNotifier.addItem(item);
+                    }
+                  },
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
