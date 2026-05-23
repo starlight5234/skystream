@@ -162,11 +162,61 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.addEarlyKeyEventHandler(_handleEarlyKeyEvent);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(downloadServiceProvider).init();
       _checkExtensionsUpdates();
       _checkAppUpdates();
     });
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleEarlyKeyEvent);
+    super.dispose();
+  }
+
+  KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus == null) {
+      return KeyEventResult.ignored;
+    }
+
+    final context = primaryFocus.context;
+    if (context == null || !context.mounted) {
+      return KeyEventResult.ignored;
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject == null) {
+      return KeyEventResult.ignored;
+    }
+
+    RenderObject? current = renderObject;
+    bool isLaidOut = true;
+    while (current != null) {
+      if (current is RenderBox && !current.hasSize) {
+        isLaidOut = false;
+        break;
+      }
+      final parent = current.parent;
+      if (parent is RenderObject) {
+        current = parent;
+      } else {
+        break;
+      }
+    }
+
+    if (!isLaidOut) {
+      if (kDebugMode) {
+        debugPrint(
+          '[FocusGuard] Consumed key event ${event.logicalKey.keyLabel} because primary focus context or its ancestor is not laid out.',
+        );
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Future<void> _checkAppUpdates() async {
