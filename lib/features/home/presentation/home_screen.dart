@@ -10,6 +10,8 @@ import '../../explore/presentation/widgets/explore_carousel.dart';
 import '../../explore/presentation/widgets/media_horizontal_list.dart';
 import '../../explore/presentation/view_all_screen.dart';
 import '../../../shared/widgets/desktop_scroll_wrapper.dart';
+import '../../extensions/providers/extensions_controller.dart';
+import '../../../core/extensions/models/extension_plugin.dart';
 
 import 'package:flutter/rendering.dart';
 import '../../../l10n/generated/app_localizations.dart';
@@ -360,6 +362,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ).push<void>(context);
                   },
                 ),
+              )
+            else
+              // No carousel — add top padding so content below doesn't
+              // overlap with the transparent app bar.
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + kToolbarHeight,
+                ),
               ),
 
             if (watchHistoryEnabled && history.isNotEmpty)
@@ -561,6 +571,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final scrollController = ScrollController();
     final chipsScrollController = ScrollController();
+    bool didInitialScroll = false;
 
     showDialog<void>(
       context: context,
@@ -626,11 +637,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   child: Consumer(
                     builder: (context, ref, _) {
                       final filter = ref.watch(homeFilterProvider);
+                      final extensionsState = ref.watch(
+                        extensionsControllerProvider,
+                      );
+                      final installedPlugins = extensionsState.installedPlugins;
+
                       final filteredProviders = filter == null
                           ? providers
                           : providers
                                 .where((p) => p.supportedTypes.contains(filter))
                                 .toList();
+
+                      // Auto-scroll to selected provider on initial show
+                      int targetIndex = -1;
+                      if (activeProvider == null) {
+                        if (filter == null) {
+                          targetIndex = 0;
+                        }
+                      } else {
+                        final idx = filteredProviders.indexWhere(
+                          (p) => p.packageName == activeProvider.packageName,
+                        );
+                        if (idx != -1) {
+                          targetIndex = filter == null ? idx + 1 : idx;
+                        }
+                      }
+
+                      if (!didInitialScroll && targetIndex != -1) {
+                        didInitialScroll = true;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (scrollController.hasClients) {
+                            final itemTop = targetIndex * 56.0;
+                            final viewportHeight =
+                                scrollController.position.viewportDimension;
+                            const itemHeight = 56.0;
+                            final offset =
+                                itemTop -
+                                (viewportHeight / 2) +
+                                (itemHeight / 2);
+                            final maxScroll =
+                                scrollController.position.maxScrollExtent;
+                            scrollController.jumpTo(
+                              offset.clamp(0.0, maxScroll),
+                            );
+                          }
+                        });
+                      }
 
                       return RadioGroup<String?>(
                         groupValue: activeProvider?.packageName,
@@ -649,22 +701,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         child: ListView.builder(
                           controller: scrollController,
                           shrinkWrap: true,
+                          padding: EdgeInsets.zero,
                           itemCount:
                               (filter == null ? 1 : 0) +
                               filteredProviders.length,
                           itemBuilder: (context, index) {
                             if (filter == null && index == 0) {
-                              return ListTile(
-                                title: Text(l10n.none),
-                                leading: const Radio<String?>(value: null),
-                                autofocus: index == 0,
-                                onTap: () {
-                                  ref
-                                      .read(activeProviderProvider.notifier)
-                                      .set(null);
-                                  Navigator.pop(context);
-                                  ref.invalidate(homeDataProvider);
-                                },
+                              return SizedBox(
+                                height: 56.0,
+                                child: Center(
+                                  child: ListTile(
+                                    title: Text(l10n.none),
+                                    leading: const Radio<String?>(value: null),
+                                    autofocus: index == 0,
+                                    onTap: () {
+                                      ref
+                                          .read(activeProviderProvider.notifier)
+                                          .set(null);
+                                      Navigator.pop(context);
+                                      ref.invalidate(homeDataProvider);
+                                    },
+                                  ),
+                                ),
                               );
                             }
 
@@ -673,42 +731,103 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                     ? index - 1
                                     : index];
                             final isDebug = p.isDebug;
-                            return ListTile(
-                              autofocus: index == 0 && filter != null,
-                              title: Row(
-                                children: [
-                                  Expanded(child: Text(p.name)),
-                                  if (isDebug) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        l10n.debug,
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
+                            final isSubprovider = p.packageName.contains('::');
+                            String pluginTag = '';
+                            if (isSubprovider) {
+                              final parentPackageName = p.packageName.substring(
+                                0,
+                                p.packageName.indexOf('::'),
+                              );
+                              final plugin = installedPlugins
+                                  .cast<ExtensionPlugin?>()
+                                  .firstWhere(
+                                    (pl) =>
+                                        pl?.packageName == parentPackageName,
+                                    orElse: () => null,
+                                  );
+                              pluginTag = plugin?.name ?? parentPackageName;
+                            }
+
+                            return SizedBox(
+                              height: 56.0,
+                              child: Center(
+                                child: ListTile(
+                                  autofocus: index == 0 && filter != null,
+                                  title: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          p.name,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ],
+                                      if (isSubprovider) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 120,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.secondaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            pluginTag,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSecondaryContainer,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                      if (isDebug) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            l10n.debug,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  leading: Radio<String?>(value: p.packageName),
+                                  onTap: () {
+                                    ref
+                                        .read(activeProviderProvider.notifier)
+                                        .set(p);
+                                    Navigator.pop(context);
+                                    ref.invalidate(homeDataProvider);
+                                  },
+                                ),
                               ),
-                              leading: Radio<String?>(value: p.packageName),
-                              onTap: () {
-                                ref
-                                    .read(activeProviderProvider.notifier)
-                                    .set(p);
-                                Navigator.pop(context);
-                                ref.invalidate(homeDataProvider);
-                              },
                             );
                           },
                         ),

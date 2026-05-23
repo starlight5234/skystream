@@ -90,6 +90,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (kDebugMode) {
         native.setProperty('msg-level', 'hls=v,lavf=v,ffmpeg/demuxer=v');
       }
+      // Disable native MPV subtitle rendering on the video surface.
+      // media_kit sets this at creation when libass=false, but MPV resets
+      // it when a new file is opened. We re-assert it here and in
+      // _applyPlaybackProperties / applySubtitleSettings as well.
+      native.setProperty('sub-visibility', 'no');
     }
     _videoController = VideoController(_player);
 
@@ -403,6 +408,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               subtitleViewConfiguration:
                                   const SubtitleViewConfiguration(
                                     visible: false,
+                                    style: TextStyle(
+                                      color: Colors.transparent,
+                                    ),
                                   ),
                               controls: (state) => const SizedBox.shrink(),
                             );
