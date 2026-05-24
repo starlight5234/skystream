@@ -6,6 +6,8 @@ import '../../settings/presentation/player_settings_provider.dart';
 
 part 'player_gesture_handler.g.dart';
 
+enum PlayerDragMode { none, vertical, horizontal }
+
 @immutable
 class PlayerGestureState {
   final PlayerGesture? currentGesture;
@@ -14,7 +16,10 @@ class PlayerGestureState {
   final double? osdValue;
   final String osdLabel;
   final Alignment osdAlignment;
+  final PlayerDragMode activeDragMode;
   final Duration? swipeSeekValue;
+  final Duration? swipeSeekStartValue;
+  final bool? swipeSeekForward;
 
   const PlayerGestureState({
     this.currentGesture,
@@ -23,7 +28,10 @@ class PlayerGestureState {
     this.osdValue,
     this.osdLabel = "",
     this.osdAlignment = Alignment.center,
+    this.activeDragMode = PlayerDragMode.none,
     this.swipeSeekValue,
+    this.swipeSeekStartValue,
+    this.swipeSeekForward,
   });
 
   static const Object _keep = Object();
@@ -35,16 +43,30 @@ class PlayerGestureState {
     Object? osdValue = _keep,
     String? osdLabel,
     Alignment? osdAlignment,
+    PlayerDragMode? activeDragMode,
     Object? swipeSeekValue = _keep,
+    Object? swipeSeekStartValue = _keep,
+    Object? swipeSeekForward = _keep,
   }) {
     return PlayerGestureState(
       currentGesture: currentGesture ?? this.currentGesture,
       showOSD: showOSD ?? this.showOSD,
       osdIcon: osdIcon ?? this.osdIcon,
-      osdValue: identical(osdValue, _keep) ? this.osdValue : osdValue as double?,
+      osdValue: identical(osdValue, _keep)
+          ? this.osdValue
+          : osdValue as double?,
       osdLabel: osdLabel ?? this.osdLabel,
       osdAlignment: osdAlignment ?? this.osdAlignment,
-      swipeSeekValue: identical(swipeSeekValue, _keep) ? this.swipeSeekValue : swipeSeekValue as Duration?,
+      activeDragMode: activeDragMode ?? this.activeDragMode,
+      swipeSeekValue: identical(swipeSeekValue, _keep)
+          ? this.swipeSeekValue
+          : swipeSeekValue as Duration?,
+      swipeSeekStartValue: identical(swipeSeekStartValue, _keep)
+          ? this.swipeSeekStartValue
+          : swipeSeekStartValue as Duration?,
+      swipeSeekForward: identical(swipeSeekForward, _keep)
+          ? this.swipeSeekForward
+          : swipeSeekForward as bool?,
     );
   }
 }
@@ -78,7 +100,8 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
   Timer? _osdTimer;
   PlayerSettings? _cachedSettings;
 
-  bool get supportsVolumeBoost => getMaxVolumeLevel?.call() != null && getMaxVolumeLevel!() > 1.0;
+  bool get supportsVolumeBoost =>
+      getMaxVolumeLevel?.call() != null && getMaxVolumeLevel!() > 1.0;
 
   @override
   PlayerGestureState build() {
@@ -161,6 +184,7 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     double screenHeight,
   ) async {
     if ((isTv ?? false) || (isDesktop ?? false)) return;
+    if (state.activeDragMode == PlayerDragMode.horizontal) return;
 
     final x = details.globalPosition.dx;
     final y = details.globalPosition.dy;
@@ -202,21 +226,30 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     }
 
     state = state.copyWith(
+      activeDragMode: PlayerDragMode.vertical,
       currentGesture: type,
       showOSD: true,
       osdIcon: _getIconForValue(type, startVal),
       osdValue: startVal,
       osdLabel: type == PlayerGesture.brightness ? "Brightness" : "Volume",
       osdAlignment: alignment,
+      swipeSeekValue: null,
+      swipeSeekStartValue: null,
+      swipeSeekForward: null,
     );
 
     _osdTimer?.cancel();
   }
 
   void handleDragUpdate(DragUpdateDetails details) {
-    if (state.currentGesture == null || state.currentGesture == PlayerGesture.none) return;
+    if (state.activeDragMode != PlayerDragMode.vertical) return;
+    if (state.currentGesture == null ||
+        state.currentGesture == PlayerGesture.none) {
+      return;
+    }
 
-    final delta = -details.primaryDelta! / 300;
+    final delta = -(details.primaryDelta ?? 0) / 300;
+    if (delta == 0) return;
 
     final double min = (state.currentGesture == PlayerGesture.brightness)
         ? -0.05
@@ -255,7 +288,11 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
   }
 
   void handleDragEnd(DragEndDetails details) {
-    state = state.copyWith(currentGesture: null);
+    if (state.activeDragMode != PlayerDragMode.vertical) return;
+    state = state.copyWith(
+      activeDragMode: PlayerDragMode.none,
+      currentGesture: null,
+    );
     _triggerOSDTimer();
   }
 
@@ -266,7 +303,13 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     double screenHeight,
     double bottomPadding,
   ) async {
-    if (getDuration == null || getDuration!() == Duration.zero || canSeek == null || !canSeek!()) return;
+    if (state.activeDragMode == PlayerDragMode.vertical) return;
+    if (getDuration == null ||
+        getDuration!() == Duration.zero ||
+        canSeek == null ||
+        !canSeek!()) {
+      return;
+    }
 
     final settings = await getSettings!();
     if (!settings.swipeSeekEnabled) return;
@@ -280,28 +323,48 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     }
 
     if (isControlsVisible) {
-      if (details.globalPosition.dy > (screenHeight - 100 - bottomPadding)) {
-        return; 
+      if (details.globalPosition.dy > (screenHeight - 56 - bottomPadding)) {
+        return;
       }
     }
 
-    state = state.copyWith(swipeSeekValue: getPosition?.call());
+    final startPosition = getPosition?.call() ?? Duration.zero;
+    state = state.copyWith(
+      activeDragMode: PlayerDragMode.horizontal,
+      currentGesture: null,
+      showOSD: false,
+      osdValue: null,
+      swipeSeekValue: startPosition,
+      swipeSeekStartValue: startPosition,
+      swipeSeekForward: null,
+    );
   }
 
   void handleHorizontalDragUpdate(DragUpdateDetails details) {
+    if (state.activeDragMode != PlayerDragMode.horizontal) return;
     if (state.swipeSeekValue == null) return;
 
     final delta = details.primaryDelta ?? 0;
-    final newMs = (state.swipeSeekValue!.inMilliseconds + (delta * 200)).toInt();
+    final newMs = (state.swipeSeekValue!.inMilliseconds + (delta * 200))
+        .toInt();
     final clamped = newMs.clamp(0, getDuration?.call().inMilliseconds ?? 0);
 
-    state = state.copyWith(swipeSeekValue: Duration(milliseconds: clamped));
+    state = state.copyWith(
+      swipeSeekValue: Duration(milliseconds: clamped),
+      swipeSeekForward: delta == 0 ? state.swipeSeekForward : delta > 0,
+    );
   }
 
   void handleHorizontalDragEnd(DragEndDetails details) {
+    if (state.activeDragMode != PlayerDragMode.horizontal) return;
     if (state.swipeSeekValue == null) return;
     final target = state.swipeSeekValue!;
-    state = state.copyWith(swipeSeekValue: null);
+    state = state.copyWith(
+      activeDragMode: PlayerDragMode.none,
+      swipeSeekValue: null,
+      swipeSeekStartValue: null,
+      swipeSeekForward: null,
+    );
     unawaited(onSeekTo?.call(target) ?? Future.value());
   }
 
@@ -317,9 +380,13 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     onDoubleTapAnimationStart?.call(isLeft, tapPosition, seconds);
 
     if (isLeft) {
-      unawaited(onSeekRelative?.call(Duration(seconds: -seconds)) ?? Future.value());
+      unawaited(
+        onSeekRelative?.call(Duration(seconds: -seconds)) ?? Future.value(),
+      );
     } else {
-      unawaited(onSeekRelative?.call(Duration(seconds: seconds)) ?? Future.value());
+      unawaited(
+        onSeekRelative?.call(Duration(seconds: seconds)) ?? Future.value(),
+      );
     }
   }
 
@@ -341,9 +408,11 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
 
   void _showVolumeOsd(double value) {
     _boostLevel = supportsVolumeBoost && value > 1.0 ? value : 1.0;
-    final double effectiveValue = (supportsVolumeBoost && _boostLevel > 1.0) ? _boostLevel : value;
+    final double effectiveValue = (supportsVolumeBoost && _boostLevel > 1.0)
+        ? _boostLevel
+        : value;
     final String label = "Volume ${(effectiveValue * 100).toInt()}%";
-    
+
     state = state.copyWith(
       showOSD: true,
       osdIcon: _getIconForValue(PlayerGesture.volume, value),

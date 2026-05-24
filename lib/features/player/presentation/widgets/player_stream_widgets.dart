@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:video_view/video_view.dart' as vv;
 import '../player_controller.dart';
 import '../../../../shared/widgets/custom_widgets.dart';
+import 'hotstar_player_style.dart';
 
 /// A self-contained progress bar widget that uses StreamBuilder to avoid
 /// rebuilding the parent widget on every position update.
@@ -77,6 +78,12 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
       return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatRemaining(Duration duration, Duration position) {
+    final remaining = duration - position;
+    final clamped = remaining.isNegative ? Duration.zero : remaining;
+    return '-${_formatDuration(clamped)}';
   }
 
   @override
@@ -166,7 +173,7 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
                           valueColor: AlwaysStoppedAnimation<Color>(
                             Colors.white.withValues(alpha: 0.25),
                           ),
-                          minHeight: 4,
+                          minHeight: 2,
                         ),
                       );
                     },
@@ -201,104 +208,164 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
     required void Function(double val) onSeekEnd,
     bool isLive = false,
   }) {
-    return Row(
-      children: [
-        const SizedBox(width: 12),
-        // Left Side: Current Position
-        SizedBox(
-          width: duration.inHours > 0 ? 70 : 50,
-          child: Text(
-            _formatDuration(displayDuration),
-            style: const TextStyle(
-              color: Colors.white,
-              fontFeatures: [FontFeature.tabularFigures()],
+    final isDragging = _dragValue != null;
+    final remainingText = isLive
+        ? ''
+        : _formatRemaining(duration, displayDuration);
+    return SizedBox(
+      height: 48,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(width: 18),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const tooltipWidth = 76.0;
+                final scrubPercent = durationMs > 0
+                    ? (displayValue / durationMs).clamp(0.0, 1.0).toDouble()
+                    : 0.0;
+                final maxTooltipLeft = constraints.maxWidth > tooltipWidth
+                    ? constraints.maxWidth - tooltipWidth
+                    : 0.0;
+                final tooltipLeft =
+                    (constraints.maxWidth * scrubPercent - tooltipWidth / 2)
+                        .clamp(0.0, maxTooltipLeft)
+                        .toDouble();
+
+                return Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (bufferWidget != null) bufferWidget,
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 2.5,
+                        thumbShape: RoundSliderThumbShape(
+                          enabledThumbRadius: isDragging ? 8 : 6,
+                        ),
+                        overlayShape: RoundSliderOverlayShape(
+                          overlayRadius: isDragging ? 16 : 10,
+                        ),
+                        activeTrackColor: HotstarPlayerStyle.accent,
+                        inactiveTrackColor: HotstarPlayerStyle.trackInactive,
+                        trackShape: const RoundedRectSliderTrackShape(),
+                        thumbColor: Colors.white,
+                        overlayColor: HotstarPlayerStyle.accent.withValues(
+                          alpha: 0.18,
+                        ),
+                      ),
+                      child: CustomSlider(
+                        value: displayValue.clamp(
+                          0,
+                          durationMs > 0 ? durationMs : 1.0,
+                        ),
+                        min: 0.0,
+                        max: durationMs > 0 ? durationMs : 1.0,
+                        step: 5000,
+                        onChanged: canSeek
+                            ? (val) => setState(() => _dragValue = val)
+                            : null,
+                        onChangeStart: canSeek
+                            ? (val) {
+                                widget.onSeekStart?.call();
+                                setState(() => _dragValue = val);
+                              }
+                            : null,
+                        onChangeEnd: canSeek
+                            ? (val) {
+                                onSeekEnd(val);
+                                widget.onSeekEnd?.call();
+                                setState(() => _dragValue = null);
+                              }
+                            : null,
+                      ),
+                    ),
+                    if (isDragging)
+                      Positioned(
+                        left: tooltipLeft,
+                        bottom: 42,
+                        child: IgnorePointer(
+                          child: SizedBox(
+                            width: tooltipWidth,
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.82),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  _formatDuration(displayDuration),
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
-            textAlign: TextAlign.right,
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              ?bufferWidget,
-              SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 4,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 8,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 16,
-                  ),
-                  activeTrackColor: Colors.white,
-                  inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
-                  trackShape: const RoundedRectSliderTrackShape(),
-                  thumbColor: Colors.white,
-                  overlayColor: Colors.white.withValues(alpha: 0.2),
+          const SizedBox(width: 18),
+          if (isLive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 50 / 255),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: Colors.red.withValues(alpha: 120 / 255),
+                  width: 1,
                 ),
-                child: CustomSlider(
-                  value: displayValue.clamp(
-                    0,
-                    durationMs > 0 ? durationMs : 1.0,
-                  ),
-                  min: 0.0,
-                  max: durationMs > 0 ? durationMs : 1.0,
-                  step: 5000,
-                  onChanged: canSeek
-                      ? (val) => setState(() => _dragValue = val)
-                      : null,
-                  onChangeStart: canSeek
-                      ? (val) {
-                          widget.onSeekStart?.call();
-                          setState(() => _dragValue = val);
-                        }
-                      : null,
-                  onChangeEnd: canSeek
-                      ? (val) {
-                          onSeekEnd(val);
-                          widget.onSeekEnd?.call();
-                          setState(() => _dragValue = null);
-                        }
-                      : null,
+              ),
+              child: const Text(
+                "🔴  LIVE",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  letterSpacing: 0.5,
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        if (isLive)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 50/255),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.red.withValues(alpha: 120/255), width: 1),
-            ),
-            child: const Text(
-              "🔴  LIVE",
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-                letterSpacing: 0.5,
+            )
+          else
+            SizedBox(
+              width: 86,
+              height: 24,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  remainingText,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: const TextStyle(
+                    color: HotstarPlayerStyle.primaryText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  textAlign: TextAlign.left,
+                ),
               ),
             ),
-          )
-        else
-          SizedBox(
-            width: duration.inHours > 0 ? 70 : 50,
-            child: Text(
-              _formatDuration(duration),
-              style: const TextStyle(
-                color: Colors.white,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        const SizedBox(width: 12),
-      ],
+          const SizedBox(width: 12),
+        ],
+      ),
     );
   }
 }
@@ -341,7 +408,7 @@ class PlayerPlayPauseButton extends StatelessWidget {
                   vv.VideoControllerPlaybackState.playing;
               return _buildButton(
                 isPlaying: isPlaying,
-                isSpinning: isBuffering || isLoading,
+                isSpinning: isBuffering,
               );
             },
           );
@@ -353,7 +420,7 @@ class PlayerPlayPauseButton extends StatelessWidget {
           builder: (context, snapshot) {
             return _buildButton(
               isPlaying: snapshot.data ?? false,
-              isSpinning: isBuffering || isLoading,
+              isSpinning: isBuffering,
             );
           },
         );
@@ -369,11 +436,9 @@ class PlayerPlayPauseButton extends StatelessWidget {
       onPressed: onPressed ?? () => player.playOrPause(),
       shape: const CircleBorder(),
       child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: const BoxDecoration(
-          color: Colors.black45,
-          shape: BoxShape.circle,
-        ),
+        width: 82,
+        height: 82,
+        alignment: Alignment.center,
         child: isSpinning
             ? const SizedBox(
                 width: 64,
@@ -387,9 +452,9 @@ class PlayerPlayPauseButton extends StatelessWidget {
                 ),
               )
             : Icon(
-                isPlaying ? Icons.pause : Icons.play_arrow,
+                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 color: Colors.white,
-                size: 64,
+                size: 72,
               ),
       ),
     );
@@ -417,7 +482,9 @@ class PlayerBufferingIndicator extends StatelessWidget {
 
         // If controls are visible, the play button already shows a spinner; skip.
         // If the user hasn't skipped and we are loading, the primary loading overlay is visible; skip.
-        if ((!isBuffering && !isLoading) || isVisible) return const SizedBox.shrink();
+        if ((!isBuffering && !isLoading) || isVisible) {
+          return const SizedBox.shrink();
+        }
         if (isLoading && !userSkippedOverlay) return const SizedBox.shrink();
 
         return Positioned.fill(
@@ -427,15 +494,14 @@ class PlayerBufferingIndicator extends StatelessWidget {
                 width: 80,
                 height: 80,
                 padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Colors.black45,
-                  shape: BoxShape.circle,
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 3.5,
+                child: const Center(
+                  child: SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3.5,
+                    ),
                   ),
                 ),
               ),

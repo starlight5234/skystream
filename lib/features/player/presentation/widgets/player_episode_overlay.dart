@@ -233,8 +233,9 @@ class _PlayerEpisodeOverlayState extends ConsumerState<PlayerEpisodeOverlay> {
                     items: _seasons.map<DropdownMenuItem<int>>((int value) {
                       return DropdownMenuItem<int>(
                         value: value,
-                        child: Text(AppLocalizations.of(context)!
-                            .seasonWithNumber(value)),
+                        child: Text(
+                          AppLocalizations.of(context)!.seasonWithNumber(value),
+                        ),
                       );
                     }).toList(),
                     onChanged: (int? newValue) {

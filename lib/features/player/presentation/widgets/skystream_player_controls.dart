@@ -18,6 +18,7 @@ import '../components/torrent_info_widget.dart';
 import '../../../settings/presentation/player_settings_provider.dart';
 import '../../../../core/providers/device_info_provider.dart';
 import '../../../../core/utils/responsive_breakpoints.dart';
+import '../../../../shared/widgets/custom_widgets.dart';
 import 'player_stream_widgets.dart';
 import 'player_control_components.dart';
 import 'next_episode_overlay.dart';
@@ -26,6 +27,7 @@ import 'player_bottom_sheets.dart';
 import 'player_loading_overlay.dart';
 import 'player_osd_overlay.dart';
 import 'player_episode_overlay.dart';
+import 'hotstar_player_style.dart';
 import '../player_platform_service.dart';
 import '../player_gesture_handler.dart';
 
@@ -94,6 +96,8 @@ class SkyStreamPlayerControlsState
   bool _isSeekingLeft = false;
 
   int _resizeMode = 0;
+  bool _touchHeldForSpeed = false;
+  double? _speedBeforeTouchHold;
 
   late bool _isPlaying;
   late Duration _position;
@@ -103,7 +107,7 @@ class SkyStreamPlayerControlsState
 
   late final PlayerPlatformService _platformService;
   Offset? _tapPosition;
-  Duration _animDuration = const Duration(milliseconds: 300);
+  Duration _animDuration = HotstarPlayerStyle.controlFadeDuration;
   bool _isFullscreen = false;
   late final FocusNode _playFocusNode;
 
@@ -115,51 +119,55 @@ class SkyStreamPlayerControlsState
     _isIpad = Platform.isIOS && (deviceProfile?.isTablet ?? false);
 
     _platformService = PlayerPlatformService();
-    ref.read(playerGestureHandlerProvider.notifier).init(
-      getSettings: () async => await ref.read(playerSettingsProvider.future),
-      isTv: _isTv,
-      isDesktop: Platform.isMacOS || Platform.isWindows || Platform.isLinux,
-      getDuration: () => _duration,
-      getPosition: () => _position,
-      canSeek: () => ref.read(playerControllerProvider).canSeek,
-      getMaxVolumeLevel:
-          () =>
-              ref.read(playerControllerProvider).supportsVolumeBoost ? 2.0 : 1.0,
-      onInteraction: () {
-        if (!_isVisible) {
-          setState(() => _isVisible = true);
-          widget.onVisibilityChanged?.call(true);
-        }
-        _startHideTimer();
-      },
-      onHideControls: () {
-        _cancelHideTimer();
-        if (_isVisible && mounted) {
-          setState(() => _isVisible = false);
-          widget.onVisibilityChanged?.call(false);
-        }
-      },
-      onSeekRelative: (amount) async {
-        _seekRelative(amount);
-      },
-      onSeekTo: (position) =>
-          ref.read(playerControllerProvider.notifier).seekTo(position),
-      getVolumeLevel: () =>
-          ref.read(playerControllerProvider.notifier).getVolumeLevel(),
-      setVolumeLevel: (value) =>
-          ref.read(playerControllerProvider.notifier).setVolumeLevel(value),
-      onVolumeChange: (step) =>
-          ref.read(playerControllerProvider.notifier).changeVolume(step),
-      toggleMuteLevel: () =>
-          ref.read(playerControllerProvider.notifier).toggleMute(),
-      onDoubleTapAnimationStart: (isLeft, tapPos, seconds) {
-        setState(() {
-          _tapPosition = tapPos;
-          _isSeekingLeft = isLeft;
-        });
-        _seekAnimController.forward(from: 0.0);
-      },
-    );
+    ref
+        .read(playerGestureHandlerProvider.notifier)
+        .init(
+          getSettings: () async =>
+              await ref.read(playerSettingsProvider.future),
+          isTv: _isTv,
+          isDesktop: Platform.isMacOS || Platform.isWindows || Platform.isLinux,
+          getDuration: () => _duration,
+          getPosition: () => _position,
+          canSeek: () => ref.read(playerControllerProvider).canSeek,
+          getMaxVolumeLevel: () =>
+              ref.read(playerControllerProvider).supportsVolumeBoost
+              ? 2.0
+              : 1.0,
+          onInteraction: () {
+            if (!_isVisible) {
+              setState(() => _isVisible = true);
+              widget.onVisibilityChanged?.call(true);
+            }
+            _startHideTimer();
+          },
+          onHideControls: () {
+            _cancelHideTimer();
+            if (_isVisible && mounted) {
+              setState(() => _isVisible = false);
+              widget.onVisibilityChanged?.call(false);
+            }
+          },
+          onSeekRelative: (amount) async {
+            _seekRelative(amount);
+          },
+          onSeekTo: (position) =>
+              ref.read(playerControllerProvider.notifier).seekTo(position),
+          getVolumeLevel: () =>
+              ref.read(playerControllerProvider.notifier).getVolumeLevel(),
+          setVolumeLevel: (value) =>
+              ref.read(playerControllerProvider.notifier).setVolumeLevel(value),
+          onVolumeChange: (step) =>
+              ref.read(playerControllerProvider.notifier).changeVolume(step),
+          toggleMuteLevel: () =>
+              ref.read(playerControllerProvider.notifier).toggleMute(),
+          onDoubleTapAnimationStart: (isLeft, tapPos, seconds) {
+            setState(() {
+              _tapPosition = tapPos;
+              _isSeekingLeft = isLeft;
+            });
+            _seekAnimController.forward(from: 0.0);
+          },
+        );
 
     _playFocusNode = FocusNode();
     try {
@@ -291,6 +299,14 @@ class SkyStreamPlayerControlsState
     widget.videoViewController?.mediaInfo.removeListener(_onVvMediaInfo);
     widget.videoViewController?.videoSize.removeListener(_updateOrientation);
     widget.videoViewController?.orientation.removeListener(_updateOrientation);
+    if (_touchHeldForSpeed) {
+      final previousSpeed = _speedBeforeTouchHold ?? 1.0;
+      unawaited(
+        ref
+            .read(playerControllerProvider.notifier)
+            .setPlaybackSpeed(previousSpeed),
+      );
+    }
     FocusManager.instance.removeListener(_onFocusChange);
     _playFocusNode.dispose();
     _backFocusNode.dispose();
@@ -381,11 +397,32 @@ class SkyStreamPlayerControlsState
 
     if (widget.isLoading || _duration == Duration.zero) return;
     if (_tapPosition != null) {
-      ref.read(playerGestureHandlerProvider.notifier).handleDoubleTap(
-        _tapPosition!,
-        MediaQuery.sizeOf(context).width,
-      );
+      ref
+          .read(playerGestureHandlerProvider.notifier)
+          .handleDoubleTap(_tapPosition!, MediaQuery.sizeOf(context).width);
     }
+  }
+
+  void _startTouchSpeedHold() {
+    if (_isLocked || _isTv || !(Platform.isAndroid || Platform.isIOS)) return;
+    if (_touchHeldForSpeed) return;
+    _touchHeldForSpeed = true;
+    _speedBeforeTouchHold = ref.read(playerControllerProvider).playbackSpeed;
+    unawaited(
+      ref.read(playerControllerProvider.notifier).setPlaybackSpeed(2.0),
+    );
+  }
+
+  void _endTouchSpeedHold() {
+    if (!_touchHeldForSpeed) return;
+    final previousSpeed = _speedBeforeTouchHold ?? 1.0;
+    _touchHeldForSpeed = false;
+    _speedBeforeTouchHold = null;
+    unawaited(
+      ref
+          .read(playerControllerProvider.notifier)
+          .setPlaybackSpeed(previousSpeed),
+    );
   }
 
   // ... (keeping other methods same)
@@ -559,14 +596,18 @@ class SkyStreamPlayerControlsState
       final labels = [l10n.fit, l10n.zoom, l10n.stretch];
 
       widget.onResize?.call(modes[_resizeMode]);
-      ref.read(playerGestureHandlerProvider.notifier).showToast(labels[_resizeMode], Icons.aspect_ratio);
+      ref
+          .read(playerGestureHandlerProvider.notifier)
+          .showToast(labels[_resizeMode], Icons.aspect_ratio);
     });
   }
 
   Future<void> _handleDragStart(DragStartDetails details) async {
     if (_isLocked) return;
     final size = MediaQuery.sizeOf(context);
-    await ref.read(playerGestureHandlerProvider.notifier).handleDragStart(details, size.width, size.height);
+    await ref
+        .read(playerGestureHandlerProvider.notifier)
+        .handleDragStart(details, size.width, size.height);
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
@@ -584,23 +625,29 @@ class SkyStreamPlayerControlsState
     if (_isLocked) return;
     final size = MediaQuery.sizeOf(context);
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom;
-    await ref.read(playerGestureHandlerProvider.notifier).handleHorizontalDragStart(
-      details,
-      _isVisible,
-      size.width,
-      size.height,
-      bottomPadding,
-    );
+    await ref
+        .read(playerGestureHandlerProvider.notifier)
+        .handleHorizontalDragStart(
+          details,
+          _isVisible,
+          size.width,
+          size.height,
+          bottomPadding,
+        );
   }
 
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
     if (_isLocked) return;
-    ref.read(playerGestureHandlerProvider.notifier).handleHorizontalDragUpdate(details);
+    ref
+        .read(playerGestureHandlerProvider.notifier)
+        .handleHorizontalDragUpdate(details);
   }
 
   void _handleHorizontalDragEnd(DragEndDetails details) {
     if (_isLocked) return;
-    ref.read(playerGestureHandlerProvider.notifier).handleHorizontalDragEnd(details);
+    ref
+        .read(playerGestureHandlerProvider.notifier)
+        .handleHorizontalDragEnd(details);
   }
 
   String _formatDuration(Duration duration) {
@@ -622,58 +669,38 @@ class SkyStreamPlayerControlsState
       opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(
           parent: _seekAnimController,
-          curve: Curves.fastOutSlowIn,
+          curve: Curves.easeOutCubic,
         ),
       ),
-      child: Container(
-        height: double.infinity,
-        width:
-            MediaQuery.sizeOf(context).height * 0.5, // Half-circle proportion
-        margin: EdgeInsets.zero,
-        decoration: BoxDecoration(
-          color: Colors.transparent, // Slightly lighter for full screen
-          borderRadius: BorderRadius.only(
-            topRight: _isSeekingLeft
-                ? Radius.circular(MediaQuery.sizeOf(context).height)
-                : Radius.zero,
-            bottomRight: _isSeekingLeft
-                ? Radius.circular(MediaQuery.sizeOf(context).height)
-                : Radius.zero,
-            topLeft: !_isSeekingLeft
-                ? Radius.circular(MediaQuery.sizeOf(context).height)
-                : Radius.zero,
-            bottomLeft: !_isSeekingLeft
-                ? Radius.circular(MediaQuery.sizeOf(context).height)
-                : Radius.zero,
-          ),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.94, end: 1.0).animate(
+          CurvedAnimation(parent: _seekAnimController, curve: Curves.easeOut),
         ),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.2).animate(
-            CurvedAnimation(
-              parent: _seekAnimController,
-              curve: Curves.elasticOut,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _isSeekingLeft ? Icons.fast_rewind : Icons.fast_forward,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isSeekingLeft)
+              const Icon(
+                Icons.keyboard_double_arrow_left_rounded,
                 color: Colors.white,
-                size: 64, // Larger icon
+                size: 34,
               ),
-              const SizedBox(height: 12),
-              Text(
-                "${seconds}s",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20, // Larger text
-                ),
+            Text(
+              "$seconds",
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 28,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
-            ],
-          ),
+            ),
+            if (!_isSeekingLeft)
+              const Icon(
+                Icons.keyboard_double_arrow_right_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+          ],
         ),
       ),
     );
@@ -710,6 +737,9 @@ class SkyStreamPlayerControlsState
     );
     final nextEpTitle = ref.watch(
       playerControllerProvider.select((s) => s.nextEpisodeTitle),
+    );
+    final resumePromptPosition = ref.watch(
+      playerControllerProvider.select((s) => s.resumePromptPosition),
     );
     final showEpisodeList = ref.watch(
       playerControllerProvider.select((s) => s.showEpisodeList),
@@ -771,6 +801,9 @@ class SkyStreamPlayerControlsState
         onHorizontalDragEnd: _handleHorizontalDragEnd,
         onDoubleTapDown: (d) => _tapPosition = d.globalPosition,
         onDoubleTap: _handleDoubleTap,
+        onLongPressStart: (_) => _startTouchSpeedHold(),
+        onLongPressEnd: (_) => _endTouchSpeedHold(),
+        onLongPressCancel: _endTouchSpeedHold,
         child: GestureDetector(
           onTap: () {
             final gestureState = ref.read(playerGestureHandlerProvider);
@@ -789,7 +822,7 @@ class SkyStreamPlayerControlsState
           child: Container(
             width: double.infinity,
             height: double.infinity,
-            color: _isVisible ? Colors.black54 : Colors.transparent,
+            color: Colors.transparent,
             child: Stack(
               children: [
                 // Locked state UI
@@ -821,11 +854,20 @@ class SkyStreamPlayerControlsState
                       return const SizedBox.shrink();
                     }
                     return Positioned.fill(
-                      child: Align(
-                        alignment: _isSeekingLeft
-                            ? Alignment.centerLeft
-                            : Alignment.centerRight,
-                        child: _buildKickAnimation(),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.maxWidth;
+                          return Stack(
+                            children: [
+                              Positioned(
+                                top: constraints.maxHeight * 0.45,
+                                left: _isSeekingLeft ? width * 0.08 : null,
+                                right: _isSeekingLeft ? null : width * 0.08,
+                                child: _buildKickAnimation(),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     );
                   },
@@ -837,29 +879,22 @@ class SkyStreamPlayerControlsState
                   formatDuration: _formatDuration,
                 ),
 
-                // Resume Prompt Overlay
-                Builder(
-                  builder: (context) {
-                    final resumePos = ref.watch(
-                      playerControllerProvider.select(
-                        (s) => s.resumePromptPosition,
-                      ),
-                    );
-                    if (resumePos == null) return const SizedBox.shrink();
-                    return ResumePromptOverlay(
-                      positionMs: resumePos,
-                      onResume: () => ref
-                          .read(playerControllerProvider.notifier)
-                          .confirmResume(),
-                      onStartOver: () => ref
-                          .read(playerControllerProvider.notifier)
-                          .dismissResumePrompt(),
-                    );
-                  },
-                ),
+                // Resume Prompt Button
+                if (resumePromptPosition != null)
+                  ResumePromptOverlay(
+                    positionMs: resumePromptPosition,
+                    onResume: () => ref
+                        .read(playerControllerProvider.notifier)
+                        .confirmResume(),
+                    onStartOver: () => ref
+                        .read(playerControllerProvider.notifier)
+                        .dismissResumePrompt(),
+                  ),
 
-                // Next Episode Overlay (Persistent when triggered)
-                if (showNextEpOverlay && nextEpTitle != null)
+                // Next Episode Button (Persistent when triggered)
+                if (resumePromptPosition == null &&
+                    showNextEpOverlay &&
+                    nextEpTitle != null)
                   NextEpisodeOverlay(
                     nextEpisodeTitle: nextEpTitle,
                     onPlayNext: () => ref
@@ -950,12 +985,34 @@ class SkyStreamPlayerControlsState
     );
   }
 
+  Widget _buildTopUtilityButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Tooltip(
+        message: tooltip,
+        child: CustomButton(
+          showFocusHighlight: _isTv,
+          onPressed: onTap,
+          child: SizedBox(
+            width: _isTv ? 52 : 44,
+            height: _isTv ? 52 : 44,
+            child: Icon(icon, color: Colors.white, size: _isTv ? 34 : 30),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLockedUI() {
     return IgnorePointer(
       ignoring: !_isVisible,
       child: AnimatedOpacity(
         opacity: _isVisible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 180),
         child: Center(
           child: _buildActionButton(
             icon: Icons.lock,
@@ -989,13 +1046,64 @@ class SkyStreamPlayerControlsState
         ignoring: !_isVisible,
         child: Stack(
           children: [
-            // Top overlay (back button, title) - Extracted to component
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 150 + MediaQuery.viewPaddingOf(context).top,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: HotstarPlayerStyle.topGradient,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 210 + MediaQuery.viewPaddingOf(context).bottom,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: HotstarPlayerStyle.bottomGradient,
+                  ),
+                ),
+              ),
+            ),
             PlayerTopBar(
               title: title,
               subtitle: subtitle,
               onBack: widget.onBackPointer ?? () => context.pop(),
               isTv: _isTv,
               backFocusNode: _backFocusNode,
+              trailingActions: [
+                if (Platform.isAndroid && !_isTv)
+                  _buildTopUtilityButton(
+                    icon: Icons.picture_in_picture_alt,
+                    tooltip: AppLocalizations.of(context)!.pip,
+                    onTap: _enterPip,
+                  ),
+                _buildTopUtilityButton(
+                  icon:
+                      Platform.isMacOS || Platform.isWindows || Platform.isLinux
+                      ? (_isFullscreen
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen)
+                      : Icons.aspect_ratio,
+                  tooltip:
+                      Platform.isMacOS || Platform.isWindows || Platform.isLinux
+                      ? (_isFullscreen
+                            ? AppLocalizations.of(context)!.windowed
+                            : AppLocalizations.of(context)!.fullscreen)
+                      : AppLocalizations.of(context)!.resize,
+                  onTap:
+                      Platform.isMacOS || Platform.isWindows || Platform.isLinux
+                      ? toggleFullscreen
+                      : cycleResize,
+                ),
+              ],
             ),
 
             // Torrent Info Overlay
@@ -1033,10 +1141,10 @@ class SkyStreamPlayerControlsState
                 onVerticalDragStart: (_) {},
                 child: Container(
                   padding: EdgeInsets.only(
-                    bottom: MediaQuery.viewPaddingOf(context).bottom + 16,
-                    left: 16,
-                    right: 16,
-                    top: 16,
+                    bottom: MediaQuery.viewPaddingOf(context).bottom + 14,
+                    left: 20,
+                    right: 20,
+                    top: 8,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1089,6 +1197,7 @@ class SkyStreamPlayerControlsState
                                         onTap: () =>
                                             PlayerBottomSheets.showSourceSelection(
                                               context: context,
+                                              ref: ref,
                                               streams: streams,
                                               currentStream: currentStream,
                                               onStreamSelected: (s) => ref
@@ -1114,6 +1223,8 @@ class SkyStreamPlayerControlsState
                                             PlayerBottomSheets.showTracksSelection(
                                               context: context,
                                               ref: ref,
+                                              streams: streams,
+                                              currentStream: currentStream,
                                             ),
                                       ),
                                     ),
@@ -1179,16 +1290,6 @@ class SkyStreamPlayerControlsState
                                           highlight: _showTorrentInfo,
                                         ),
                                       ),
-                                    FocusTraversalOrder(
-                                      order: const NumericFocusOrder(6),
-                                      child: _buildActionButton(
-                                        icon: Icons.aspect_ratio,
-                                        label: AppLocalizations.of(
-                                          context,
-                                        )!.resize,
-                                        onTap: cycleResize,
-                                      ),
-                                    ),
                                     if (isSeries)
                                       FocusTraversalOrder(
                                         order: const NumericFocusOrder(7),
@@ -1203,24 +1304,6 @@ class SkyStreamPlayerControlsState
                                                     .notifier,
                                               )
                                               .playNextEpisode(),
-                                        ),
-                                      ),
-                                    if (Platform.isAndroid &&
-                                        !Platform.isIOS &&
-                                        !(ref
-                                                .read(deviceProfileProvider)
-                                                .asData
-                                                ?.value
-                                                .isTv ??
-                                            false))
-                                      FocusTraversalOrder(
-                                        order: const NumericFocusOrder(8),
-                                        child: _buildActionButton(
-                                          icon: Icons.picture_in_picture_alt,
-                                          label: AppLocalizations.of(
-                                            context,
-                                          )!.pip,
-                                          onTap: _enterPip,
                                         ),
                                       ),
                                     if ((Platform.isAndroid ||
@@ -1239,25 +1322,6 @@ class SkyStreamPlayerControlsState
                                             context,
                                           )!.rotate,
                                           onTap: _toggleOrientation,
-                                        ),
-                                      ),
-                                    if (Platform.isMacOS ||
-                                        Platform.isWindows ||
-                                        Platform.isLinux)
-                                      FocusTraversalOrder(
-                                        order: const NumericFocusOrder(10),
-                                        child: _buildActionButton(
-                                          icon: _isFullscreen
-                                              ? Icons.fullscreen_exit
-                                              : Icons.fullscreen,
-                                          label: _isFullscreen
-                                              ? AppLocalizations.of(
-                                                  context,
-                                                )!.windowed
-                                              : AppLocalizations.of(
-                                                  context,
-                                                )!.fullscreen,
-                                          onTap: toggleFullscreen,
                                         ),
                                       ),
                                   ],

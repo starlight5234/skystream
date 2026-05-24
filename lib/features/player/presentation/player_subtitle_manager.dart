@@ -77,7 +77,10 @@ class PlayerSubtitleManager {
     final merged = <SubtitleFile>[];
     final seenUrls = <String>{};
 
-    for (final SubtitleFile sub in <SubtitleFile>[...(streamSubs ?? []), ...userSubs]) {
+    for (final SubtitleFile sub in <SubtitleFile>[
+      ...(streamSubs ?? []),
+      ...userSubs,
+    ]) {
       if (seenUrls.add(sub.url)) {
         merged.add(sub);
       }

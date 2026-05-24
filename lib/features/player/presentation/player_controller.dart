@@ -438,6 +438,7 @@ class PlayerController extends Notifier<PlayerState> {
   bool _selectNewestVideoViewSubtitleAfterReload = false;
   bool _hasConfirmedPlaybackFrame = false;
   bool _suppressNextEpisodeDetection = false;
+  bool _nextEpisodeOverlayDismissedForCurrentEnding = false;
   bool _manualSelectionPending = false;
   // Audio tracks that have already failed with decode errors for the current
   // stream. When one track fails, we try the next one before source-switching.
@@ -964,7 +965,13 @@ class PlayerController extends Notifier<PlayerState> {
       if (!_suppressNextEpisodeDetection &&
           _item.contentType == MultimediaContentType.series) {
         final remainingSecs = (durationMs - posMs) / 1000;
-        if (remainingSecs <= 15 &&
+        if (remainingSecs > 15) {
+          _nextEpisodeOverlayDismissedForCurrentEnding = false;
+          if (state.showNextEpisodeOverlay) {
+            state = state.copyWith(showNextEpisodeOverlay: false);
+          }
+        } else if (!_nextEpisodeOverlayDismissedForCurrentEnding &&
+            remainingSecs <= 15 &&
             remainingSecs > 0 &&
             !state.showNextEpisodeOverlay) {
           int? currentIndex;
@@ -987,8 +994,6 @@ class PlayerController extends Notifier<PlayerState> {
               nextEpisodeTitle: next.name,
             );
           }
-        } else if (remainingSecs > 15 && state.showNextEpisodeOverlay) {
-          state = state.copyWith(showNextEpisodeOverlay: false);
         }
       }
     });
@@ -1357,7 +1362,13 @@ class PlayerController extends Notifier<PlayerState> {
       if (!_suppressNextEpisodeDetection &&
           _item.contentType == MultimediaContentType.series) {
         final remaining = duration - pos;
-        if (remaining.inSeconds <= 15 &&
+        if (remaining.inSeconds > 15) {
+          _nextEpisodeOverlayDismissedForCurrentEnding = false;
+          if (state.showNextEpisodeOverlay) {
+            state = state.copyWith(showNextEpisodeOverlay: false);
+          }
+        } else if (!_nextEpisodeOverlayDismissedForCurrentEnding &&
+            remaining.inSeconds <= 15 &&
             remaining.inSeconds > 0 &&
             !state.showNextEpisodeOverlay) {
           // Use _episode if available, otherwise fallback to URL matching
@@ -1381,8 +1392,6 @@ class PlayerController extends Notifier<PlayerState> {
               nextEpisodeTitle: next.name,
             );
           }
-        } else if (remaining.inSeconds > 15 && state.showNextEpisodeOverlay) {
-          state = state.copyWith(showNextEpisodeOverlay: false);
         }
       }
     });
@@ -1883,12 +1892,16 @@ class PlayerController extends Notifier<PlayerState> {
     await _player.pause();
   }
 
-  Future<void> togglePlayPause() async {
-    final isPlaying = state.useExoPlayer && _videoViewController != null
-        ? _videoViewController!.playbackState.value ==
-              VideoControllerPlaybackState.playing
-        : _player.state.playing;
+  bool get isPlaying {
+    if (state.useExoPlayer && _videoViewController != null) {
+      return _videoViewController!.playbackState.value ==
+          VideoControllerPlaybackState.playing;
+    }
 
+    return _player.state.playing;
+  }
+
+  Future<void> togglePlayPause() async {
     if (isPlaying) {
       await pause();
     } else {
@@ -2603,6 +2616,7 @@ class PlayerController extends Notifier<PlayerState> {
 
       // NOW switch context to the next episode.
       _suppressNextEpisodeDetection = true;
+      _nextEpisodeOverlayDismissedForCurrentEnding = false;
       _hasConfirmedPlaybackFrame = false;
       _videoUrl = finalUrl;
       _episode = nextEpisode;
@@ -2620,6 +2634,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   void dismissNextEpisodeOverlay() {
+    _nextEpisodeOverlayDismissedForCurrentEnding = true;
     state = state.copyWith(showNextEpisodeOverlay: false);
   }
 
@@ -2653,6 +2668,7 @@ class PlayerController extends Notifier<PlayerState> {
     _videoUrl = finalUrl;
     _hasConfirmedPlaybackFrame = false;
     _suppressNextEpisodeDetection = true;
+    _nextEpisodeOverlayDismissedForCurrentEnding = false;
     _userAddedExternalSubtitles.clear();
 
     state = state.copyWith(
@@ -3169,7 +3185,9 @@ class PlayerController extends Notifier<PlayerState> {
         // its whitelist, causing audio-only playback when video segments use
         // non-standard extensions.
         demuxerLavfOpts.add('allowed_extensions=ALL');
-        demuxerLavfOpts.add('icy=0'); // suppress Icy-MetaData:1 on segment fetches too
+        demuxerLavfOpts.add(
+          'icy=0',
+        ); // suppress Icy-MetaData:1 on segment fetches too
 
         // HLS manifests declare codec/language via EXT-X-MEDIA and EXT-X-MAP
         // tags, so FFmpeg doesn't need deep probing to detect streams. The
