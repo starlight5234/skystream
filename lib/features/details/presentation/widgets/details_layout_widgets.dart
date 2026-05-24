@@ -10,8 +10,6 @@ import 'package:skystream/core/domain/entity/multimedia_item.dart';
 import 'package:skystream/core/storage/history_repository.dart';
 import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/shared/widgets/custom_widgets.dart';
-import '../../../library/presentation/library_provider.dart';
-import '../../../library/presentation/library_state.dart';
 import '../details_controller.dart';
 import 'package:skystream/core/extensions/extension_manager.dart';
 import 'package:skystream/core/services/download_service.dart';
@@ -357,47 +355,6 @@ class DetailsActionButtons extends HookConsumerWidget {
       );
     }
 
-    // Bookmark — gives D-pad users a focusable target. The AppBar's bookmark
-    // icon is excluded from traversal so content navigation doesn't escape
-    // upward; this is its replacement.
-    final isBookmarked = ref.watch(
-      libraryProvider.select(
-        (state) =>
-            state is LibrarySuccess &&
-            state.items.any((i) => i.url == item.url),
-      ),
-    );
-    final bookmarkBtn = CustomButton(
-      isPrimary: false,
-      isOutlined: true,
-      onPressed: () {
-        final notifier = ref.read(libraryProvider.notifier);
-        if (isBookmarked) {
-          notifier.removeItem(item.url);
-        } else {
-          notifier.addItem(details ?? item);
-        }
-      },
-      child: Padding(
-        padding: btnPadding,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isBookmarked
-                  ? Icons.bookmark_rounded
-                  : Icons.bookmark_border_rounded,
-              color: isBookmarked
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-            ),
-            const SizedBox(width: LayoutConstants.spacingXs),
-            Text(AppLocalizations.of(context)!.library),
-          ],
-        ),
-      ),
-    );
-
     if (vertical) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -408,8 +365,6 @@ class DetailsActionButtons extends HookConsumerWidget {
             const SizedBox(height: LayoutConstants.spacingSm),
             downloadBtn,
           ],
-          const SizedBox(height: LayoutConstants.spacingSm),
-          bookmarkBtn,
         ],
       );
     }
@@ -427,8 +382,6 @@ class DetailsActionButtons extends HookConsumerWidget {
                 const SizedBox(width: LayoutConstants.spacingSm),
                 Expanded(child: downloadBtn),
               ],
-              const SizedBox(width: LayoutConstants.spacingSm),
-              Expanded(child: bookmarkBtn),
             ],
           ),
         ),
@@ -838,14 +791,18 @@ class _LanguageButtonState extends State<_LanguageButton> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: widget.isSelected
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 40/255)
+                ? Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 40 / 255)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFocused
                   ? Colors.white
                   : (widget.isSelected
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 80/255)
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 80 / 255)
                         : Colors.transparent),
               width: _isFocused ? 2 : 1,
             ),
