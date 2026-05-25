@@ -371,9 +371,28 @@ class SettingsScreen extends ConsumerWidget {
                           dohState.customUrl,
                           l10n,
                         ),
-                        isLast: true,
                         onTap: () => showDohProviderDialog(context, ref),
                       ),
+                    SettingsTile(
+                      icon: Icons.alt_route_rounded,
+                      title: l10n.githubProxy,
+                      subtitle: l10n.githubProxySubtitle,
+                      trailing: Switch(
+                        value: generalSettings.githubProxyEnabled,
+                        onChanged: (val) {
+                          ref
+                              .read(generalSettingsProvider.notifier)
+                              .setGithubProxyEnabled(val);
+                        },
+                      ),
+                      onTap: () {
+                        ref
+                            .read(generalSettingsProvider.notifier)
+                            .setGithubProxyEnabled(
+                                !generalSettings.githubProxyEnabled);
+                      },
+                      isLast: true,
+                    ),
                   ],
                 );
               },

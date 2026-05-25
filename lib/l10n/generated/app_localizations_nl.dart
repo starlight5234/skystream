@@ -96,6 +96,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get dohProvider => 'DoH-provider';
 
   @override
+  String get githubProxy => 'GitHub Proxy';
+
+  @override
+  String get githubProxySubtitle =>
+      'Route extension downloads through jsDelivr to bypass ISP blocks.';
+
+  @override
   String get manageExtensions => 'Extensies beheren';
 
   @override

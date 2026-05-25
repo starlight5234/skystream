@@ -349,6 +349,18 @@ abstract class AppLocalizations {
   /// **'DoH Provider'**
   String get dohProvider;
 
+  /// No description provided for @githubProxy.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Proxy'**
+  String get githubProxy;
+
+  /// No description provided for @githubProxySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Route extension downloads through jsDelivr to bypass ISP blocks.'**
+  String get githubProxySubtitle;
+
   /// No description provided for @manageExtensions.
   ///
   /// In en, this message translates to:

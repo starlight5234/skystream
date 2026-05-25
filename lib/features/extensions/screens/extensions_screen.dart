@@ -93,6 +93,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
             _ => ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.only(bottom: 80), // Fab space
+              addAutomaticKeepAlives: false, // Fixes D-pad focus traversal crash when ExpansionTiles are cached off-screen
               itemCount: _calculateItemCount(state),
               itemBuilder: (context, index) {
                 final debugPlugins = state.installedPlugins
@@ -364,7 +365,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
           ),
         );
 
-    final isLoading = state is ExtensionsLoading;
+    final isRepoInstalling = plugins.any((p) => state.installingPlugins.contains(p.packageName));
 
     return Card(
       margin: const EdgeInsets.only(
@@ -422,7 +423,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                 ],
               ),
             ),
-            if (isLoading)
+            if (isRepoInstalling)
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: SizedBox(
@@ -433,30 +434,26 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
               )
             else ...[
               // Download-all / all-installed indicator.
-              Semantics(
-                button: true,
-                label: l10n.downloadAllProviders,
-                child: IconButton(
-                  focusColor: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.15),
-                  icon: Icon(
-                    allInstalled ? Icons.check_circle_outline : Icons.download,
-                    color: allInstalled
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                  ),
-                  onPressed: allInstalled || plugins.isEmpty
-                      ? null
-                      : () {
-                          ref
-                              .read(extensionsControllerProvider.notifier)
-                              .installPlugins(plugins);
-                        },
-                  tooltip: allInstalled
-                      ? 'All installed'
-                      : l10n.downloadAllProviders,
+              IconButton(
+                focusColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.15),
+                icon: Icon(
+                  allInstalled ? Icons.check_circle_outline : Icons.download,
+                  color: allInstalled
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
                 ),
+                onPressed: allInstalled || plugins.isEmpty
+                    ? null
+                    : () {
+                        ref
+                            .read(extensionsControllerProvider.notifier)
+                            .installPlugins(plugins);
+                      },
+                tooltip: allInstalled
+                    ? 'All installed'
+                    : l10n.downloadAllProviders,
               ),
               IconButton(
                 focusColor: Theme.of(
@@ -652,6 +649,8 @@ class _PluginTile extends ConsumerWidget {
     final isInstalled = installedPlugin != null;
     final updateAvailable = state.availableUpdates[plugin.packageName];
 
+    final isInstalling = state.installingPlugins.contains(plugin.packageName);
+
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(LayoutConstants.spacingXs),
@@ -671,63 +670,72 @@ class _PluginTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: _buildSubtitle(context, isInstalled, installedPlugin),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Update button
-          if (isInstalled && updateAvailable != null)
-            IconButton(
-              icon: const Icon(Icons.download, color: Colors.green),
-              tooltip: l10n.updateTo(updateAvailable.version.toString()),
-              onPressed: () {
-                ref
-                    .read(extensionsControllerProvider.notifier)
-                    .updatePlugin(updateAvailable);
-              },
-            ),
-
-          // Settings button (shown when plugin declares domains or providers)
-          if (isInstalled &&
-              ((installedPlugin.domains?.isNotEmpty ?? false) ||
-                  (installedPlugin.providers?.isNotEmpty ?? false)))
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: l10n.settings,
-              onPressed: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (context) =>
-                      PluginSettingsDialog(plugin: installedPlugin),
-                );
-              },
-            ),
-
-          // Install / delete button
-          if (isInstalled)
-            IconButton(
-              icon: Icon(
-                Icons.delete,
-                color: Theme.of(context).colorScheme.error,
+      trailing: isInstalling
+          ? const Padding(
+              padding: EdgeInsets.all(12),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              tooltip: l10n.delete,
-              onPressed: () {
-                ref
-                    .read(extensionsControllerProvider.notifier)
-                    .uninstallPlugin(installedPlugin);
-              },
             )
-          else
-            IconButton(
-              icon: const Icon(Icons.download),
-              tooltip: l10n.install,
-              onPressed: () {
-                ref
-                    .read(extensionsControllerProvider.notifier)
-                    .installPlugin(plugin);
-              },
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Update button
+                if (isInstalled && updateAvailable != null)
+                  IconButton(
+                    icon: const Icon(Icons.download, color: Colors.green),
+                    tooltip: l10n.updateTo(updateAvailable.version.toString()),
+                    onPressed: () {
+                      ref
+                          .read(extensionsControllerProvider.notifier)
+                          .updatePlugin(updateAvailable);
+                    },
+                  ),
+
+                // Settings button (shown when plugin declares domains or providers)
+                if (isInstalled &&
+                    ((installedPlugin.domains?.isNotEmpty ?? false) ||
+                        (installedPlugin.providers?.isNotEmpty ?? false)))
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    tooltip: l10n.settings,
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (context) =>
+                            PluginSettingsDialog(plugin: installedPlugin),
+                      );
+                    },
+                  ),
+
+                // Install / delete button
+                if (isInstalled)
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    tooltip: l10n.delete,
+                    onPressed: () {
+                      ref
+                          .read(extensionsControllerProvider.notifier)
+                          .uninstallPlugin(installedPlugin);
+                    },
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    tooltip: l10n.install,
+                    onPressed: () {
+                      ref
+                          .read(extensionsControllerProvider.notifier)
+                          .installPlugin(plugin);
+                    },
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 

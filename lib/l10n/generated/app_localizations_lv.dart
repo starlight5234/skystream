@@ -96,6 +96,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dohProvider => 'DoH pakalpojumu sniedzējs';
 
   @override
+  String get githubProxy => 'GitHub Proxy';
+
+  @override
+  String get githubProxySubtitle =>
+      'Route extension downloads through jsDelivr to bypass ISP blocks.';
+
+  @override
   String get manageExtensions => 'Pārvaldīt paplašinājumus';
 
   @override

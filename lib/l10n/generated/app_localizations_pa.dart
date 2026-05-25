@@ -96,6 +96,13 @@ class AppLocalizationsPa extends AppLocalizations {
   String get dohProvider => 'DoH ਪ੍ਰਦਾਤਾ';
 
   @override
+  String get githubProxy => 'GitHub Proxy';
+
+  @override
+  String get githubProxySubtitle =>
+      'Route extension downloads through jsDelivr to bypass ISP blocks.';
+
+  @override
   String get manageExtensions => 'ਐਕਸਟੈਂਸ਼ਨਾਂ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ';
 
   @override

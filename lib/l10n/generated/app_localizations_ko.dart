@@ -96,6 +96,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dohProvider => 'DoH 제공자';
 
   @override
+  String get githubProxy => 'GitHub Proxy';
+
+  @override
+  String get githubProxySubtitle =>
+      'Route extension downloads through jsDelivr to bypass ISP blocks.';
+
+  @override
   String get manageExtensions => '확장 프로그램 관리';
 
   @override

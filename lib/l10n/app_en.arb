@@ -29,6 +29,8 @@
   "network": "Network",
   "dnsOverHttps": "DNS over HTTPS",
   "dohProvider": "DoH Provider",
+  "githubProxy": "GitHub Proxy",
+  "githubProxySubtitle": "Route extension downloads through jsDelivr to bypass ISP blocks.",
   "manageExtensions": "Manage Extensions",
   "appData": "App Data",
   "resetDataKeepExtensions": "Reset Data (Keep Extensions)",

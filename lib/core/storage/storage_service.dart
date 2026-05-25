@@ -255,6 +255,17 @@ class StorageService {
         true;
   }
 
+  // --- Network Settings ---
+  Future<void> setGithubProxyEnabled(bool enabled) async {
+    await _settingsBox.put('github_proxy_enabled', enabled);
+  }
+
+  bool isGithubProxyEnabled() {
+    return (_settingsBox.get('github_proxy_enabled', defaultValue: false)
+            as bool?) ??
+        false;
+  }
+
   // --- Player Settings ---
   Future<void> setPlayerSetting(String key, dynamic value) async {
     await _settingsBox.put(key, value);

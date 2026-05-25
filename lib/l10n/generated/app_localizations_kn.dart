@@ -96,6 +96,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dohProvider => 'DoH ಪ್ರೊವೈಡರ್';
 
   @override
+  String get githubProxy => 'GitHub Proxy';
+
+  @override
+  String get githubProxySubtitle =>
+      'Route extension downloads through jsDelivr to bypass ISP blocks.';
+
+  @override
   String get manageExtensions => 'ವಿಸ್ತರಣೆಗಳನ್ನು ನಿರ್ವಹಿಸಿ';
 
   @override

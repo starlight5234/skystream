@@ -82,6 +82,14 @@ class SettingsRepository {
     return _storageService.isWatchHistoryEnabled();
   }
 
+  Future<void> setGithubProxyEnabled(bool enabled) async {
+    await _storageService.setGithubProxyEnabled(enabled);
+  }
+
+  bool isGithubProxyEnabled() {
+    return _storageService.isGithubProxyEnabled();
+  }
+
   Future<void> setPlayerSetting(String key, dynamic value) async {
     await _storageService.setPlayerSetting(key, value);
   }
