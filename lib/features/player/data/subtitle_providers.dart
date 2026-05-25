@@ -256,7 +256,9 @@ class OpenSubtitlesProvider extends SubtitleProvider {
             final files = attr['files'] as List;
             final file = files.isNotEmpty ? files.first : null;
             return OnlineSubtitle(
-              id: file != null ? file['file_id'].toString() : item['id'].toString(),
+              id: file != null
+                  ? file['file_id'].toString()
+                  : item['id'].toString(),
               name: (attr['release'] as String?) ?? query,
               language: (attr['language'] as String?) ?? langTag,
               source: name,
@@ -405,7 +407,10 @@ class SubDLProvider extends SubtitleProvider {
             : "";
         return OnlineSubtitle(
           id: item['id'].toString(),
-          name: (item['release_name'] as String?) ?? (item['fileName'] as String?) ?? query,
+          name:
+              (item['release_name'] as String?) ??
+              (item['fileName'] as String?) ??
+              query,
           language: (item['language'] as String?) ?? langCode,
           source: name,
           downloadUrl: fullUrl,
@@ -740,7 +745,8 @@ class SubSourceProvider extends SubtitleProvider {
         ),
       );
 
-      if (searchResponse.data == null || searchResponse.data?['success'] != true) {
+      if (searchResponse.data == null ||
+          searchResponse.data?['success'] != true) {
         return [];
       }
       final List<dynamic> found = searchResponse.data?['found'] as List? ?? [];
@@ -773,7 +779,8 @@ class SubSourceProvider extends SubtitleProvider {
         ),
       );
 
-      if (movieResponse.data == null || movieResponse.data?['success'] != true) {
+      if (movieResponse.data == null ||
+          movieResponse.data?['success'] != true) {
         return [];
       }
       final List<dynamic> subs = movieResponse.data?['subs'] as List? ?? [];
@@ -795,7 +802,10 @@ class SubSourceProvider extends SubtitleProvider {
         final subId = s['subId'] ?? s['id'];
         return OnlineSubtitle(
           id: subId.toString(),
-          name: (s['releaseName'] as String?) ?? (s['file_name'] as String?) ?? query,
+          name:
+              (s['releaseName'] as String?) ??
+              (s['file_name'] as String?) ??
+              query,
           language: (s['lang'] as String?) ?? "Unknown",
           source: name,
           downloadUrl: "", // Requires getDownloadUrl for keyless
@@ -851,7 +861,8 @@ class SubSourceProvider extends SubtitleProvider {
       );
 
       if (response.data != null && response.data?['sub'] != null) {
-        final String? token = response.data?['sub']?['downloadToken'] as String?;
+        final String? token =
+            response.data?['sub']?['downloadToken'] as String?;
         if (token != null) {
           return "$baseUrlKeyless/downloadSub/$token";
         }

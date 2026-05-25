@@ -133,7 +133,9 @@ class DownloadProgressDialog extends ConsumerWidget {
                         }
                       },
                       child: Text(
-                        data.status == TaskStatus.paused ? l10n.resume : l10n.pause,
+                        data.status == TaskStatus.paused
+                            ? l10n.resume
+                            : l10n.pause,
                       ),
                     ),
                     const SizedBox(width: 8),

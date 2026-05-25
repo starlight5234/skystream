@@ -84,7 +84,7 @@ class ExtensionsController extends _$ExtensionsController {
     try {
       final storageService = ref.read(pluginStorageServiceProvider);
       final repositoryService = ref.read(repositoryServiceProvider);
-      
+
       // 1. Load Installed Plugins
       final plugins = await storageService.listInstalledPlugins();
       if (ref.read(settingsRepositoryProvider).getDevLoadAssets()) {
@@ -208,8 +208,11 @@ class ExtensionsController extends _$ExtensionsController {
       final json = Map<String, dynamic>.from(jsonDecode(content));
 
       // Dart 3 Pattern Matching for manifest extraction
-      final (packageName, id) = (json['packageName'] as String?, json['id'] as String?);
-      
+      final (packageName, id) = (
+        json['packageName'] as String?,
+        json['id'] as String?,
+      );
+
       if (packageName == null && id == null) {
         json['packageName'] = "local.asset.${jsFilePath.split('/').last}";
       }
@@ -481,7 +484,7 @@ class ExtensionsController extends _$ExtensionsController {
     try {
       final repositoryService = ref.read(repositoryServiceProvider);
       final storageService = ref.read(pluginStorageServiceProvider);
-      
+
       for (final plugin in plugins) {
         File? savedFile;
 

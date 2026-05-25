@@ -27,7 +27,13 @@ Stream<SearchAggregateState> providerSearch(Ref ref, String query) {
   var cancelled = false;
   ref.onDispose(() => cancelled = true);
 
-  return searchAllProviders(ref, query, manager, filter: SearchFilter.content, isCancelled: () => cancelled);
+  return searchAllProviders(
+    ref,
+    query,
+    manager,
+    filter: SearchFilter.content,
+    isCancelled: () => cancelled,
+  );
 }
 
 class ProviderSearchSection extends ConsumerStatefulWidget {
@@ -158,8 +164,9 @@ class _ProviderSearchSectionState extends ConsumerState<ProviderSearchSection> {
                                 )
                               : item.contentType,
                         );
-                        DetailsRoute($extra: DetailsRouteExtra(item: enrichedItem))
-                            .push(context);
+                        DetailsRoute(
+                          $extra: DetailsRouteExtra(item: enrichedItem),
+                        ).push(context);
                       },
                       child: SizedBox(
                         width: 220,
@@ -269,7 +276,9 @@ class _ProviderSearchSectionState extends ConsumerState<ProviderSearchSection> {
         ),
         error: (err, _) => Padding(
           padding: const EdgeInsets.all(LayoutConstants.spacingMd),
-          child: Text(AppLocalizations.of(context)!.errorPrefix(err.toString())),
+          child: Text(
+            AppLocalizations.of(context)!.errorPrefix(err.toString()),
+          ),
         ),
       );
     }

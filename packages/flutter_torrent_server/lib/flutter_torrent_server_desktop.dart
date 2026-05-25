@@ -208,7 +208,9 @@ class FlutterTorrentServerDesktop extends FlutterTorrentServerPlatform {
       return isArm64 ? "TorrServer-linux-arm64" : "TorrServer-linux-amd64";
     }
     if (Platform.isWindows) {
-      return isArm64 ? "TorrServer-windows-arm64.exe" : "TorrServer-windows-amd64.exe";
+      return isArm64
+          ? "TorrServer-windows-arm64.exe"
+          : "TorrServer-windows-amd64.exe";
     }
     return null;
   }

@@ -32,12 +32,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           event.logicalKey == LogicalKeyboardKey.arrowDown) {
         final suggestionState = ref.read(searchSuggestionControllerProvider);
         final typedLongEnough = suggestionState.query.trim().length >= 2;
-        final hasSuggestionContent = suggestionState.isLoading ||
-            suggestionState.suggestions.isNotEmpty;
+        final hasSuggestionContent =
+            suggestionState.isLoading || suggestionState.suggestions.isNotEmpty;
 
         if (typedLongEnough && hasSuggestionContent) {
-          FocusManager.instance.primaryFocus
-              ?.focusInDirection(TraversalDirection.down);
+          FocusManager.instance.primaryFocus?.focusInDirection(
+            TraversalDirection.down,
+          );
           return KeyEventResult.handled;
         }
       }
@@ -74,7 +75,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       text: suggestion,
       selection: TextSelection.collapsed(offset: suggestion.length),
     );
-    ref.read(searchSuggestionControllerProvider.notifier).onQueryChanged(suggestion);
+    ref
+        .read(searchSuggestionControllerProvider.notifier)
+        .onQueryChanged(suggestion);
     _focusNode.requestFocus();
   }
 
@@ -140,8 +143,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       const SizedBox(width: 12),
                       const Expanded(child: Text('Non Livestreams')),
                       if (!isLive)
-                        Icon(Icons.check,
-                            size: 18, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.check,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -153,8 +159,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       const SizedBox(width: 12),
                       const Expanded(child: Text('Livestreams')),
                       if (isLive)
-                        Icon(Icons.check,
-                            size: 18, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.check,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -163,8 +172,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
@@ -208,7 +218,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     icon: const Icon(Icons.clear, size: 18),
                     onPressed: () {
                       _controller.clear();
-                      ref.read(searchSuggestionControllerProvider.notifier).clear();
+                      ref
+                          .read(searchSuggestionControllerProvider.notifier)
+                          .clear();
                       ref.read(searchQueryProvider.notifier).set('');
                     },
                   );
@@ -254,8 +266,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     fillColor: theme.colorScheme.surfaceContainerHighest
                         .withValues(alpha: 0.5),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 20),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                     hintStyle: TextStyle(
                       fontSize: 13,
                       color: theme.colorScheme.onSurfaceVariant,
@@ -294,7 +305,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ? _buildSuggestionsView(context, suggestionState)
         : searchResultsAsync.when(
             data: (state) {
-              final allResults = state.results.expand((e) => e.results).toList();
+              final allResults = state.results
+                  .expand((e) => e.results)
+                  .toList();
 
               if (allResults.isEmpty && !state.isLoading) {
                 return _buildEmptyState(context);
@@ -324,10 +337,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(l10n.errorPrefix(err.toString()))),
+            error: (err, stack) =>
+                Center(child: Text(l10n.errorPrefix(err.toString()))),
           );
   }
-
 
   Widget _buildSuggestionsView(
     BuildContext context,
@@ -368,7 +381,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 trailing: IconButton(
                   tooltip: 'Fill query',
                   icon: const Icon(Icons.north_west_rounded),
-                  focusNode: FocusNode(canRequestFocus: false), // Prevent stealing focus from D-pad
+                  focusNode: FocusNode(
+                    canRequestFocus: false,
+                  ), // Prevent stealing focus from D-pad
                   onPressed: () => _fillSuggestion(suggestion),
                 ),
               ),

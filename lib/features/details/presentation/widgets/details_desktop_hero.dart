@@ -53,7 +53,8 @@ class DetailsDesktopHero extends ConsumerWidget {
     final textSecondary = textColor.withValues(alpha: 0.7);
     final l10n = AppLocalizations.of(context)!;
 
-    final backdropUrl = AppImageFallbacks.optional(displayItem.bannerUrl) ??
+    final backdropUrl =
+        AppImageFallbacks.optional(displayItem.bannerUrl) ??
         AppImageFallbacks.poster(
           displayItem.posterUrl,
           label: displayItem.title,

@@ -10,6 +10,7 @@ import '../../../settings/presentation/player_settings_provider.dart';
 import '../player_controller.dart';
 import 'player_utils.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../../../shared/widgets/custom_widgets.dart';
 import '../../../../shared/widgets/desktop_scroll_wrapper.dart';
 import '../subtitle_search_provider.dart';
 import '../../domain/entity/subtitle_model.dart';
@@ -608,14 +609,14 @@ class PlayerBottomSheets {
                                   trackShape:
                                       const RoundedRectSliderTrackShape(),
                                 ),
-                                child: Slider(
+                                child: CustomSlider(
                                   value: selectedSpeed,
                                   min: 0.25,
                                   max: sliderMax,
+                                  step: 0.05,
                                   divisions: sliderDivisions > 0
                                       ? sliderDivisions
                                       : null,
-                                  label: _formatSpeed(selectedSpeed),
                                   onChanged: setSpeed,
                                 ),
                               ),
@@ -1145,10 +1146,11 @@ class PlayerBottomSheets {
                 padding: const EdgeInsets.all(20),
                 children: [
                   Text(l10n.fontSize, style: labelStyle),
-                  Slider(
+                  CustomSlider(
                     value: settings.subtitleSize,
                     min: 10,
                     max: 60,
+                    step: 1,
                     onChanged: (v) {
                       ref
                           .read(playerSettingsProvider.notifier)
@@ -1163,10 +1165,11 @@ class PlayerBottomSheets {
                     },
                   ),
                   Text(l10n.verticalPosition, style: labelStyle),
-                  Slider(
+                  CustomSlider(
                     value: settings.subtitlePosition,
                     min: 50,
                     max: 100,
+                    step: 1,
                     onChanged: (v) {
                       ref
                           .read(playerSettingsProvider.notifier)
@@ -1255,10 +1258,11 @@ class PlayerBottomSheets {
                   ),
                   const SizedBox(height: 16),
                   Text(l10n.backgroundOpacity, style: labelStyle),
-                  Slider(
+                  CustomSlider(
                     value: settings.subtitleBackgroundOpacity,
                     min: 0,
                     max: 1,
+                    step: 0.05,
                     onChanged: (v) {
                       ref
                           .read(playerSettingsProvider.notifier)

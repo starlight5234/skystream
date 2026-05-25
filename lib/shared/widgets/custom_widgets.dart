@@ -124,7 +124,8 @@ class _CustomSliderState extends State<CustomSlider> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          border: (_isFocused &&
+          border:
+              (_isFocused &&
                   FocusManager.instance.highlightMode ==
                       FocusHighlightMode.traditional)
               ? Border.all(
@@ -146,7 +147,8 @@ class _CustomSliderState extends State<CustomSlider> {
             onChanged: widget.onChanged,
             onChangeStart: widget.onChangeStart,
             onChangeEnd: widget.onChangeEnd,
-            activeColor: widget.activeColor ??
+            activeColor:
+                widget.activeColor ??
                 ((_isFocused &&
                         FocusManager.instance.highlightMode ==
                             FocusHighlightMode.traditional)
@@ -334,7 +336,8 @@ class _CustomButtonState extends State<CustomButton> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final isTraditional = FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    final isTraditional =
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final showHighlight =
         widget.showFocusHighlight && _isFocused && isTraditional;
 

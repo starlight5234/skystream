@@ -273,8 +273,8 @@ class JSValue {
   JSTypedArrayType getTypedArrayType({
     JSValuePointer? exception,
   }) {
-    final int typeCode = JSValueRef.jSValueGetTypedArrayType(context.pointer, pointer,
-        (exception ?? JSValuePointer(nullptr)).pointer);
+    final int typeCode = JSValueRef.jSValueGetTypedArrayType(context.pointer,
+        pointer, (exception ?? JSValuePointer(nullptr)).pointer);
     return cEnumToJSTypedArrayType(typeCode);
   }
 

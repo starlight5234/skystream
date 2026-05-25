@@ -108,14 +108,16 @@ class ContinueWatchingCard extends ConsumerWidget {
         if (item.contentType == MultimediaContentType.livestream) {
           bool dialogDismissed = false;
           bool canceled = false;
-          unawaited(LoadingDialog.show(
-            context,
-            message: AppLocalizations.of(context)!.refreshingLiveStream,
-            onCancel: () {
-              canceled = true;
-              dialogDismissed = true;
-            },
-          ));
+          unawaited(
+            LoadingDialog.show(
+              context,
+              message: AppLocalizations.of(context)!.refreshingLiveStream,
+              onCancel: () {
+                canceled = true;
+                dialogDismissed = true;
+              },
+            ),
+          );
           final refreshedItem = await _resolveFreshLiveItem(ref, item);
           if (!context.mounted || canceled) return;
 
@@ -127,12 +129,22 @@ class ContinueWatchingCard extends ConsumerWidget {
           final liveItem = refreshedItem ?? item;
           if (!context.mounted || canceled) return;
 
-          unawaited(PlayerRoute($extra: PlayerRouteExtra(item: liveItem, videoUrl: liveItem.url)).push<void>(context));
-          unawaited(ref.read(watchHistoryProvider.notifier).removeFromHistory(item.url));
+          unawaited(
+            PlayerRoute(
+              $extra: PlayerRouteExtra(item: liveItem, videoUrl: liveItem.url),
+            ).push<void>(context),
+          );
+          unawaited(
+            ref.read(watchHistoryProvider.notifier).removeFromHistory(item.url),
+          );
           return;
         }
 
-        unawaited(DetailsRoute($extra: DetailsRouteExtra(item: item, autoPlay: true)).push<void>(context));
+        unawaited(
+          DetailsRoute(
+            $extra: DetailsRouteExtra(item: item, autoPlay: true),
+          ).push<void>(context),
+        );
       },
       onLongPress: () {
         showModalBottomSheet<void>(
@@ -150,7 +162,11 @@ class ContinueWatchingCard extends ConsumerWidget {
                   title: Text(AppLocalizations.of(context)!.viewDetails),
                   onTap: () {
                     Navigator.pop(context);
-                    unawaited(DetailsRoute($extra: DetailsRouteExtra(item: item)).push<void>(context));
+                    unawaited(
+                      DetailsRoute(
+                        $extra: DetailsRouteExtra(item: item),
+                      ).push<void>(context),
+                    );
                   },
                 ),
                 ListTile(
@@ -169,9 +185,12 @@ class ContinueWatchingCard extends ConsumerWidget {
                         .read(watchHistoryProvider.notifier)
                         .removeFromHistory(item.url);
                     Navigator.pop(context);
-                    ref.read(notificationServiceProvider).showSuccess(
-                          AppLocalizations.of(context)!
-                              .removedFromHistory(item.title),
+                    ref
+                        .read(notificationServiceProvider)
+                        .showSuccess(
+                          AppLocalizations.of(
+                            context,
+                          )!.removedFromHistory(item.title),
                         );
                   },
                 ),
@@ -368,8 +387,9 @@ class ContinueWatchingCard extends ConsumerWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            AppLocalizations.of(context)!
-                                .percentWatched(percentage),
+                            AppLocalizations.of(
+                              context,
+                            )!.percentWatched(percentage),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.outline,
                               fontSize: 11,
@@ -396,9 +416,12 @@ class ContinueWatchingCard extends ConsumerWidget {
                   ref
                       .read(watchHistoryProvider.notifier)
                       .removeFromHistory(item.url);
-                  ref.read(notificationServiceProvider).showSuccess(
-                        AppLocalizations.of(context)!
-                            .removedFromHistory(item.title),
+                  ref
+                      .read(notificationServiceProvider)
+                      .showSuccess(
+                        AppLocalizations.of(
+                          context,
+                        )!.removedFromHistory(item.title),
                       );
                 },
                 child: const Padding(

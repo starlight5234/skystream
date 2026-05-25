@@ -79,8 +79,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     Text(
                       AppLocalizations.of(context)!.library,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const Spacer(),
                     // Tab chips
@@ -179,8 +179,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         decoration: BoxDecoration(
           color: selected
               ? theme.colorScheme.primary.withValues(alpha: 0.15)
-              : theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.3),
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
           borderRadius: BorderRadius.circular(LayoutConstants.radiusPill),
           border: selected
               ? Border.all(

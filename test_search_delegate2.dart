@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 class MySearchDelegate extends SearchDelegate<void> {
   MySearchDelegate() : super();
   @override

@@ -107,11 +107,12 @@ class QuickJsRuntime extends JavascriptRuntime {
   static final JSEvalWrapper _jsEvalWrapper = qjsDynamicLibrary
       .lookupFunction<JSEvalWrapperNative, JSEvalWrapper>('JSEvalWrapper');
 
-  static final JS_NewRuntimeDartBridge _jsNewRuntimeDartBridge = qjsDynamicLibrary
-      .lookup<NativeFunction<JS_NewRuntimeDartBridge>>(
-        'JS_NewRuntimeDartBridge',
-      )
-      .asFunction();
+  static final JS_NewRuntimeDartBridge _jsNewRuntimeDartBridge =
+      qjsDynamicLibrary
+          .lookup<NativeFunction<JS_NewRuntimeDartBridge>>(
+            'JS_NewRuntimeDartBridge',
+          )
+          .asFunction();
   static final JS_NewContextFn _jsNewContext = qjsDynamicLibrary
       .lookup<NativeFunction<JS_NewContextFn>>('JS_NewContextDartBridge')
       .asFunction();
@@ -243,7 +244,8 @@ class QuickJsRuntime extends JavascriptRuntime {
         return null;
       case Object:
         final Pointer<JSValueConst> stringifiedValue = calloc<JSValueConst>();
-        final Pointer<Pointer<Utf8NullTerminated>> stringResultPointer = calloc();
+        final Pointer<Pointer<Utf8NullTerminated>> stringResultPointer =
+            calloc();
 
         _jSJSONStringify(
           context,

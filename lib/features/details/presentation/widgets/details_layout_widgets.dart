@@ -999,21 +999,29 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final double crossAxisExtent = constraints.maxWidth;
-            final int crossAxisCount =
-                (crossAxisExtent / 480).ceil().clamp(1, 5);
-            final int rowCount =
-                (displayedEpisodes.length / crossAxisCount).ceil();
+            final int crossAxisCount = (crossAxisExtent / 480).ceil().clamp(
+              1,
+              5,
+            );
+            final int rowCount = (displayedEpisodes.length / crossAxisCount)
+                .ceil();
 
             return Column(
               children: List.generate(rowCount, (rowIndex) {
                 final int startIndex = rowIndex * crossAxisCount;
-                final int endIndex = (startIndex + crossAxisCount)
-                    .clamp(0, displayedEpisodes.length);
-                final rowEpisodes =
-                    displayedEpisodes.sublist(startIndex, endIndex);
+                final int endIndex = (startIndex + crossAxisCount).clamp(
+                  0,
+                  displayedEpisodes.length,
+                );
+                final rowEpisodes = displayedEpisodes.sublist(
+                  startIndex,
+                  endIndex,
+                );
 
                 return Padding(
-                  padding: EdgeInsets.only(bottom: rowIndex < rowCount - 1 ? 16 : 0),
+                  padding: EdgeInsets.only(
+                    bottom: rowIndex < rowCount - 1 ? 16 : 0,
+                  ),
                   child: IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1027,9 +1035,10 @@ class DetailsDesktopEpisodeColumn extends ConsumerWidget {
                               ),
                               child: i < rowEpisodes.length
                                   ? EpisodeCard(
-                                      episode: rowEpisodes[i],
-                                      parentItem: parentItem,
-                                    ) as Widget
+                                          episode: rowEpisodes[i],
+                                          parentItem: parentItem,
+                                        )
+                                        as Widget
                                   : const SizedBox.shrink(),
                             ),
                           ),

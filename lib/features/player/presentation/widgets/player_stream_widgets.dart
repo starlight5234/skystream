@@ -430,7 +430,6 @@ class PlayerPlayPauseButton extends StatelessWidget {
 
   Widget _buildButton({required bool isPlaying, required bool isSpinning}) {
     return CustomButton(
-
       autofocus: true,
       focusNode: focusNode,
       onPressed: onPressed ?? () => player.playOrPause(),

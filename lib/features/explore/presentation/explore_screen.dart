@@ -130,10 +130,12 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                 ),
                 child: CardsWrapper(
                   onTap: () {
-                    unawaited(showDialog<void>(
-                      context: context,
-                      builder: (context) => const UnifiedFilterDialog(),
-                    ));
+                    unawaited(
+                      showDialog<void>(
+                        context: context,
+                        builder: (context) => const UnifiedFilterDialog(),
+                      ),
+                    );
                   },
                   borderRadius: BorderRadius.circular(50),
                   child: Consumer(
@@ -171,12 +173,14 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                 ),
                 child: CardsWrapper(
                   onTap: () {
-                    unawaited(showSearch<void>(
-                      context: context,
-                      delegate: ExploreSearchDelegate(),
-                      useRootNavigator: false,
-                      maintainState: true,
-                    ));
+                    unawaited(
+                      showSearch<void>(
+                        context: context,
+                        delegate: ExploreSearchDelegate(),
+                        useRootNavigator: false,
+                        maintainState: true,
+                      ),
+                    );
                   },
                   borderRadius: BorderRadius.circular(50),
                   child: CircleAvatar(
@@ -247,69 +251,68 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       SliverToBoxAdapter(
         child: Consumer(
           builder: (context, ref, _) {
-            final heroMoviesAsync = ref.watch(
-              exploreHeroMovieProvider,
-            );
+            final heroMoviesAsync = ref.watch(exploreHeroMovieProvider);
             return switch (heroMoviesAsync) {
-              AsyncData(:final value) => value.isEmpty
-                  ? const SizedBox.shrink()
-                  : ExploreCarousel(
-                      movies: value,
-                      scrollController: _scrollController,
-                      onNavigateUp: () => _firstActionFocusNode.requestFocus(),
-                      onControllerReady: (c) =>
-                          setState(() => _carouselController = c),
-                    ),
+              AsyncData(:final value) =>
+                value.isEmpty
+                    ? const SizedBox.shrink()
+                    : ExploreCarousel(
+                        movies: value,
+                        scrollController: _scrollController,
+                        onNavigateUp: () =>
+                            _firstActionFocusNode.requestFocus(),
+                        onControllerReady: (c) =>
+                            setState(() => _carouselController = c),
+                      ),
               AsyncLoading() => Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: LayoutConstants.spacingLg,
-                  ),
-                  child: SizedBox(
-                    height: 500,
-                    width: double.infinity,
-                    child: ShimmerPlaceholder(borderRadius: 12),
-                  ),
+                padding: const EdgeInsets.only(
+                  bottom: LayoutConstants.spacingLg,
                 ),
-              AsyncError() => Container(
+                child: SizedBox(
                   height: 500,
-                  margin: const EdgeInsets.only(
-                    bottom: LayoutConstants.spacingLg,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.error,
+                  width: double.infinity,
+                  child: ShimmerPlaceholder(borderRadius: 12),
+                ),
+              ),
+              AsyncError() => Container(
+                height: 500,
+                margin: const EdgeInsets.only(
+                  bottom: LayoutConstants.spacingLg,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        AppLocalizations.of(context)!.couldNotLoadTrending,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          AppLocalizations.of(context)!.couldNotLoadTrending,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: () =>
-                              ref.invalidate(exploreHeroMovieProvider),
-                          icon: const Icon(Icons.refresh),
-                          label: Text(AppLocalizations.of(context)!.retry),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: () =>
+                            ref.invalidate(exploreHeroMovieProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: Text(AppLocalizations.of(context)!.retry),
+                      ),
+                    ],
                   ),
                 ),
+              ),
             };
           },
         ),
@@ -387,59 +390,60 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     ViewAllCategory category,
   ) {
     return switch (asyncValue) {
-      AsyncData(:final value) => value.isEmpty
-          ? const SizedBox.shrink()
-          : MediaHorizontalList(
-              title: title,
-              mediaList: value,
-              category: category,
-              heroTagPrefix: 'explore',
-            ),
+      AsyncData(:final value) =>
+        value.isEmpty
+            ? const SizedBox.shrink()
+            : MediaHorizontalList(
+                title: title,
+                mediaList: value,
+                category: category,
+                heroTagPrefix: 'explore',
+              ),
       AsyncLoading() => Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: LayoutConstants.spacingMd,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title Placeholder
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: LayoutConstants.spacingMd,
-                ),
-                child: ShimmerPlaceholder.rectangular(
-                  width: 150,
-                  height: 24,
-                  borderRadius: 4,
-                ),
-              ),
-              const SizedBox(height: LayoutConstants.spacingMd),
-              // List Placeholder
-              SizedBox(
-                height: 250,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 5,
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(width: LayoutConstants.spacingSm),
-                  itemBuilder: (context, index) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ShimmerPlaceholder.rectangular(
-                          width: 130, // mobile width
-                          height: 195,
-                          borderRadius: 12,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+        padding: const EdgeInsets.symmetric(
+          vertical: LayoutConstants.spacingMd,
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title Placeholder
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: LayoutConstants.spacingMd,
+              ),
+              child: ShimmerPlaceholder.rectangular(
+                width: 150,
+                height: 24,
+                borderRadius: 4,
+              ),
+            ),
+            const SizedBox(height: LayoutConstants.spacingMd),
+            // List Placeholder
+            SizedBox(
+              height: 250,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: 5,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(width: LayoutConstants.spacingSm),
+                itemBuilder: (context, index) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ShimmerPlaceholder.rectangular(
+                        width: 130, // mobile width
+                        height: 195,
+                        borderRadius: 12,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
       AsyncError() => const SizedBox.shrink(),
     };
   }
@@ -457,12 +461,16 @@ class _ExploreHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => LayoutConstants.dashboardHeaderHeight + 8;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     // We add a subtle background so content doesn't collide when scrolling behind it
     return ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor.withValues(
-            alpha: shrinkOffset > 0 ? 0.9 : 1.0,
-          ),
+      color: Theme.of(
+        context,
+      ).scaffoldBackgroundColor.withValues(alpha: shrinkOffset > 0 ? 0.9 : 1.0),
       child: child,
     );
   }

@@ -172,7 +172,10 @@ List<StreamResult> sortStreamsByQuality(
   final indexed = streams
       .asMap()
       .entries
-      .map((e) => (index: e.key, stream: e.value, tier: _detectTier(e.value.source)))
+      .map(
+        (e) =>
+            (index: e.key, stream: e.value, tier: _detectTier(e.value.source)),
+      )
       .toList();
 
   indexed.sort((a, b) {

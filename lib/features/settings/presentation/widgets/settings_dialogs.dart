@@ -90,7 +90,9 @@ void showDefaultHomeScreenDialog(
                 title: Text(opt['label']!),
                 leading: Radio<String>(value: opt['route']!),
                 onTap: () {
-                  ref.read(generalSettingsProvider.notifier).setDefaultHomeScreen(opt['route']!);
+                  ref
+                      .read(generalSettingsProvider.notifier)
+                      .setDefaultHomeScreen(opt['route']!);
                   Navigator.pop<void>(context);
                 },
               );
@@ -193,7 +195,9 @@ void showGestureDialog(
                   if (isLeft) {
                     ref.read(playerSettingsProvider.notifier).setLeftGesture(g);
                   } else {
-                    ref.read(playerSettingsProvider.notifier).setRightGesture(g);
+                    ref
+                        .read(playerSettingsProvider.notifier)
+                        .setRightGesture(g);
                   }
                   Navigator.pop<void>(context);
                 },
@@ -231,7 +235,9 @@ void showDurationDialog(BuildContext context, WidgetRef ref, int current) {
                 title: Text(formatSeekDuration(sec, l10n)),
                 leading: Radio<int>(value: sec),
                 onTap: () {
-                  ref.read(playerSettingsProvider.notifier).setSeekDuration(sec);
+                  ref
+                      .read(playerSettingsProvider.notifier)
+                      .setSeekDuration(sec);
                   Navigator.pop<void>(context);
                 },
               );
@@ -271,7 +277,9 @@ void showResizeDialog(BuildContext context, WidgetRef ref, String current) {
                 title: Text(e['label']!),
                 leading: Radio<String>(value: e['value']!),
                 onTap: () {
-                  ref.read(playerSettingsProvider.notifier).setDefaultResizeMode(e['value']!);
+                  ref
+                      .read(playerSettingsProvider.notifier)
+                      .setDefaultResizeMode(e['value']!);
                   Navigator.pop<void>(ctx);
                 },
               );
@@ -309,7 +317,9 @@ void showReadaheadDialog(BuildContext context, WidgetRef ref, int current) {
                 title: Text(formatReadahead(sec, l10n)),
                 leading: Radio<int>(value: sec),
                 onTap: () {
-                  ref.read(playerSettingsProvider.notifier).setReadaheadSeconds(sec);
+                  ref
+                      .read(playerSettingsProvider.notifier)
+                      .setReadaheadSeconds(sec);
                   Navigator.pop<void>(context);
                 },
               );
@@ -419,7 +429,9 @@ void showDefaultPlayerDialog(
                 leading: Radio<String?>(value: null),
                 trailing: const Icon(Icons.play_circle_filled_rounded),
                 onTap: () {
-                  ref.read(playerSettingsProvider.notifier).setPreferredPlayer(null);
+                  ref
+                      .read(playerSettingsProvider.notifier)
+                      .setPreferredPlayer(null);
                   Navigator.pop<void>(context);
                 },
               ),
@@ -430,7 +442,9 @@ void showDefaultPlayerDialog(
                   leading: Radio<String?>(value: player.id),
                   trailing: Icon(player.icon),
                   onTap: () {
-                    ref.read(playerSettingsProvider.notifier).setPreferredPlayer(player.id);
+                    ref
+                        .read(playerSettingsProvider.notifier)
+                        .setPreferredPlayer(player.id);
                     Navigator.pop<void>(context);
                   },
                 );
@@ -497,7 +511,9 @@ void showDohProviderDialog(BuildContext context, WidgetRef ref) {
                     ListTile(
                       title: Text(l10n.cloudflare),
                       subtitle: const Text('1.1.1.1'),
-                      leading: Radio<DohProvider>(value: DohProvider.cloudflare),
+                      leading: Radio<DohProvider>(
+                        value: DohProvider.cloudflare,
+                      ),
                       onTap: () => saveAndClose(DohProvider.cloudflare),
                     ),
                     ListTile(
@@ -533,14 +549,17 @@ void showDohProviderDialog(BuildContext context, WidgetRef ref) {
                     ListTile(
                       title: Text(l10n.canadianShield),
                       subtitle: const Text('private.canadianshield.cira.ca'),
-                      leading: Radio<DohProvider>(value: DohProvider.canadianShield),
+                      leading: Radio<DohProvider>(
+                        value: DohProvider.canadianShield,
+                      ),
                       onTap: () => saveAndClose(DohProvider.canadianShield),
                     ),
                     ListTile(
                       title: Text(l10n.custom),
                       subtitle: Text(l10n.enterCustomDohUrl),
                       leading: Radio<DohProvider>(value: DohProvider.custom),
-                      onTap: () => setState(() => currentProvider = DohProvider.custom),
+                      onTap: () =>
+                          setState(() => currentProvider = DohProvider.custom),
                     ),
                     if (currentProvider == DohProvider.custom)
                       Padding(
@@ -554,7 +573,10 @@ void showDohProviderDialog(BuildContext context, WidgetRef ref) {
                           decoration: InputDecoration(
                             labelText: l10n.customDohUrlLabel,
                             hintText: 'https://...',
-                            prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                            prefixIcon: const Icon(
+                              Icons.link_rounded,
+                              size: 20,
+                            ),
                           ),
                           keyboardType: TextInputType.url,
                         ),
@@ -616,15 +638,21 @@ void showThemeDialog(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildThemeOption(l10n.system, ThemeMode.system, () {
-                ref.read(appThemeModeProvider.notifier).setThemeMode(ThemeMode.system);
+                ref
+                    .read(appThemeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.system);
                 Navigator.pop<void>(context);
               }),
               _buildThemeOption(l10n.dark, ThemeMode.dark, () {
-                ref.read(appThemeModeProvider.notifier).setThemeMode(ThemeMode.dark);
+                ref
+                    .read(appThemeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.dark);
                 Navigator.pop<void>(context);
               }),
               _buildThemeOption(l10n.light, ThemeMode.light, () {
-                ref.read(appThemeModeProvider.notifier).setThemeMode(ThemeMode.light);
+                ref
+                    .read(appThemeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.light);
                 Navigator.pop<void>(context);
               }),
             ],

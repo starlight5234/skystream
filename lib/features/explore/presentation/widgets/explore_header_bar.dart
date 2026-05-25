@@ -101,8 +101,12 @@ class ExploreHeaderBar extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: 500),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(LayoutConstants.radiusPill),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    LayoutConstants.radiusPill,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -133,16 +137,19 @@ class ExploreHeaderBar extends ConsumerWidget {
           CardsWrapper(
             scaleFactor: 1.01,
             onTap: () {
-              unawaited(showDialog<void>(
-                context: context,
-                builder: (context) => const UnifiedFilterDialog(),
-              ));
+              unawaited(
+                showDialog<void>(
+                  context: context,
+                  builder: (context) => const UnifiedFilterDialog(),
+                ),
+              );
             },
             borderRadius: BorderRadius.circular(50),
             child: Consumer(
               builder: (context, ref, _) {
                 final filters = ref.watch(exploreFilterProvider);
-                final hasActiveFilter = filters.selectedGenre != null ||
+                final hasActiveFilter =
+                    filters.selectedGenre != null ||
                     filters.selectedYear != null ||
                     filters.minRating != null;
 
@@ -154,8 +161,9 @@ class ExploreHeaderBar extends ConsumerWidget {
                     shape: BoxShape.circle,
                     color: hasActiveFilter
                         ? theme.colorScheme.primary
-                        : theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
+                        : theme.colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.3,
+                          ),
                   ),
                   child: Icon(
                     Icons.tune,

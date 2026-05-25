@@ -282,7 +282,9 @@ class LocalProxyService {
         final rangeHeader = req.headers.value('range');
         if (rangeHeader != null) {
           debugPrint('[PROXY] Range request: $rangeHeader → $targetUrl');
-          debugPrint('[PROXY] accept-encoding: ${req.headers.value('accept-encoding')}');
+          debugPrint(
+            '[PROXY] accept-encoding: ${req.headers.value('accept-encoding')}',
+          );
         }
       }
       final response = await _fetchWithRedirects(
@@ -294,7 +296,9 @@ class LocalProxyService {
       if (kDebugMode) {
         final rangeHeader = req.headers.value('range');
         if (rangeHeader != null) {
-          debugPrint('[PROXY] CDN responded: ${response.statusCode}, content-range: ${response.headers.value('content-range')}');
+          debugPrint(
+            '[PROXY] CDN responded: ${response.statusCode}, content-range: ${response.headers.value('content-range')}',
+          );
         }
         debugPrint(
           "[PROXY] Response Status: ${response.statusCode}, Content-Type: ${response.headers.contentType}",
@@ -324,16 +328,16 @@ class LocalProxyService {
       // and decoder errors. Diagnostic: 206 + chunked + content-range without
       // content-length. In that case the response is effectively the full
       // file, so convert to 200 and drop the misleading content-range.
-      final hasChunkedEncoding = response.headers
+      final hasChunkedEncoding =
+          response.headers
               .value('transfer-encoding')
               ?.toLowerCase()
               .contains('chunked') ==
           true;
-      final hasContentRange =
-          response.headers.value('content-range') != null;
-      final hasContentLength =
-          response.headers.value('content-length') != null;
-      final misleadingContentRange = !isResponseM3u8 &&
+      final hasContentRange = response.headers.value('content-range') != null;
+      final hasContentLength = response.headers.value('content-length') != null;
+      final misleadingContentRange =
+          !isResponseM3u8 &&
           response.statusCode == 206 &&
           hasChunkedEncoding &&
           hasContentRange &&
@@ -363,7 +367,8 @@ class LocalProxyService {
       // must forward content-length as-is: mpv relies on it to build the
       // byte-offset table for seeking. Stripping it makes mpv treat the stream
       // as "linear" and refuse backward seeks.
-      final wasGzip = response.headers
+      final wasGzip =
+          response.headers
               .value('content-encoding')
               ?.toLowerCase()
               .contains('gzip') ==
@@ -374,7 +379,8 @@ class LocalProxyService {
         if (lowerName == 'transfer-encoding') return;
         // Strip content-length when gzip (size changed after decompress) or M3U8
         // (body will be rewritten). Keep it for binary content so mpv can seek.
-        if (lowerName == 'content-length' && (wasGzip || isResponseM3u8)) return;
+        if (lowerName == 'content-length' && (wasGzip || isResponseM3u8))
+          return;
         // Strip content-encoding only when we actually decompressed gzip.
         // Forwarding "Content-Encoding: gzip" with a plain body causes mpv to
         // attempt decompression and corrupt the data.

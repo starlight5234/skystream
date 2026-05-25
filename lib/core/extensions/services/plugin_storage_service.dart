@@ -186,5 +186,4 @@ class PluginStorageService {
     final jsFile = File(p.join(rootDir.path, plugin.packageName, 'plugin.js'));
     return jsFile.path;
   }
-
 }

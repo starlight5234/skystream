@@ -18,7 +18,6 @@ import '../../../core/providers/locale_provider.dart';
 import '../../../core/network/doh_service.dart';
 import '../../../core/router/app_router.dart';
 
-
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -44,9 +43,9 @@ class SettingsScreen extends ConsumerWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   AppLocalizations.of(context)!.settings,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -90,9 +89,7 @@ class SettingsScreen extends ConsumerWidget {
                   title: l10n.appTheme,
                   subtitle: themeMode == ThemeMode.system
                       ? l10n.system
-                      : (themeMode == ThemeMode.dark
-                            ? l10n.dark
-                            : l10n.light),
+                      : (themeMode == ThemeMode.dark ? l10n.dark : l10n.light),
                   onTap: () => showThemeDialog(context, ref, themeMode),
                 ),
                 SettingsTile(
@@ -170,10 +167,7 @@ class SettingsScreen extends ConsumerWidget {
                 SettingsTile(
                   icon: Icons.swipe_vertical_rounded,
                   title: l10n.rightGesture,
-                  subtitle: getGestureLabel(
-                    playerSettings.rightGesture,
-                    l10n,
-                  ),
+                  subtitle: getGestureLabel(playerSettings.rightGesture, l10n),
                   onTap: () => showGestureDialog(
                     context,
                     ref,
@@ -315,11 +309,8 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: playerSettings.osUsername.isNotEmpty
                       ? l10n.loggedInAs(playerSettings.osUsername)
                       : l10n.notLoggedIn,
-                  onTap: () => showOpenSubtitlesAuthDialog(
-                    context,
-                    ref,
-                    playerSettings,
-                  ),
+                  onTap: () =>
+                      showOpenSubtitlesAuthDialog(context, ref, playerSettings),
                 ),
                 SettingsTile(
                   icon: Icons.vpn_key_rounded,

@@ -46,7 +46,8 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
   @override
   void didUpdateWidget(MediaHorizontalList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.mediaList.isNotEmpty && oldWidget.mediaList != widget.mediaList) {
+    if (widget.mediaList.isNotEmpty &&
+        oldWidget.mediaList != widget.mediaList) {
       _checkAspectRatio();
     }
   }
@@ -55,7 +56,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     if (widget.mediaList.isEmpty) return;
     final url = widget.mediaList.first.posterImageUrl;
     if (url == null || url.isEmpty) return;
-    
+
     final isPortrait = await ImageUtils.isImagePortrait(url);
     if (mounted && _isPortrait != isPortrait) {
       setState(() {
@@ -72,8 +73,10 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
 
   void _scrollBy(double delta) {
     if (!_scrollController.hasClients) return;
-    final target = (_scrollController.offset + delta)
-        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    final target = (_scrollController.offset + delta).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
     _scrollController.animateTo(
       target,
       duration: const Duration(milliseconds: 300),
@@ -87,7 +90,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     final l10n = AppLocalizations.of(context)!;
 
     final isDesktop = context.isDesktop;
-    
+
     final double cardWidth = isDesktop
         ? (_isPortrait ? 200.0 : 300.0)
         : (_isPortrait ? 130.0 : 200.0);
@@ -101,9 +104,13 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
         // Header Row
         Padding(
           padding: EdgeInsets.fromLTRB(
-            isDesktop ? LayoutConstants.dashboardContentPadding : LayoutConstants.spacingMd,
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
             LayoutConstants.spacingLg,
-            isDesktop ? LayoutConstants.dashboardContentPadding : LayoutConstants.spacingMd,
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
             LayoutConstants.spacingSm,
           ),
           child: Row(
@@ -158,12 +165,14 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
               if (widget.showViewAll)
                 CardsWrapper(
                   onTap: () {
-                    ViewAllRoute($extra: ViewAllRouteExtra(
-                      title: widget.title,
-                      initialMediaList: widget.mediaList,
-                      category: widget.category,
-                      onTap: widget.onTap,
-                    )).push(context);
+                    ViewAllRoute(
+                      $extra: ViewAllRouteExtra(
+                        title: widget.title,
+                        initialMediaList: widget.mediaList,
+                        category: widget.category,
+                        onTap: widget.onTap,
+                      ),
+                    ).push(context);
                   },
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
@@ -269,10 +278,7 @@ class _HeaderArrowButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _HeaderArrowButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _HeaderArrowButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -286,14 +292,12 @@ class _HeaderArrowButton extends StatelessWidget {
         height: 28,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.4,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
-          icon,
-          size: 12,
-          color: theme.colorScheme.onSurface,
-        ),
+        child: Icon(icon, size: 12, color: theme.colorScheme.onSurface),
       ),
     );
   }

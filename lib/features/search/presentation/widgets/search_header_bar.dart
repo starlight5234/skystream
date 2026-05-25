@@ -118,8 +118,9 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                       fillColor: theme.colorScheme.surfaceContainerHighest
                           .withValues(alpha: 0.5),
                       isDense: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 20),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
                       hintStyle: TextStyle(
                         fontSize: 13,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -162,8 +163,11 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                       const SizedBox(width: 12),
                       const Expanded(child: Text('Non Livestreams')),
                       if (!isLive)
-                        Icon(Icons.check,
-                            size: 18, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.check,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -175,8 +179,11 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                       const SizedBox(width: 12),
                       const Expanded(child: Text('Livestreams')),
                       if (isLive)
-                        Icon(Icons.check,
-                            size: 18, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.check,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
                     ],
                   ),
                 ),
@@ -187,8 +194,9 @@ class _SearchHeaderBarState extends ConsumerState<SearchHeaderBar> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                 ),
                 child: Text(
                   isLive ? '📺' : '🍿',

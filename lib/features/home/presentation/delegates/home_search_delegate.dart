@@ -245,7 +245,7 @@ class _HomeSearchResultsState extends ConsumerState<_HomeSearchResults> {
 
     final isLarge = MediaQuery.of(context).size.width > 600;
     final maxExtent = isLarge ? 200.0 : 130.0;
-    
+
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -261,13 +261,12 @@ class _HomeSearchResultsState extends ConsumerState<_HomeSearchResults> {
 
         return MultimediaCard(
           key: ValueKey(item.url),
-          imageUrl: AppImageFallbacks.poster(
-            item.posterUrl,
-            label: item.title,
-          ),
+          imageUrl: AppImageFallbacks.poster(item.posterUrl, label: item.title),
           title: item.title,
           heroTag: uniqueTag,
-          onTap: () => DetailsRoute($extra: DetailsRouteExtra(item: item)).push<void>(context),
+          onTap: () => DetailsRoute(
+            $extra: DetailsRouteExtra(item: item),
+          ).push<void>(context),
         );
       },
     );

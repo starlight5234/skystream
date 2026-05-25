@@ -1097,7 +1097,8 @@ Uint8List? jsCompileToBytes(
   final utf8filename = filename.toNativeUtf8();
   final outLen = calloc<IntPtr>();
   try {
-    final buf = _jsCompileToBytes(ctx, utf8input, utf8input.length, utf8filename, outLen);
+    final buf = _jsCompileToBytes(
+        ctx, utf8input, utf8input.length, utf8filename, outLen);
     if (buf.address == 0) return null;
     final len = outLen.value;
     final result = Uint8List.fromList(buf.asTypedList(len));

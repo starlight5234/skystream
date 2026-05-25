@@ -73,8 +73,9 @@ class ThumbnailErrorPlaceholder extends StatelessWidget {
         }
 
         // Just icon in the center. Scale down icon size if height is extremely small.
-        final smallIconSize =
-            maxHeight < size ? (maxHeight > 10 ? maxHeight * 0.8 : 10.0) : size;
+        final smallIconSize = maxHeight < size
+            ? (maxHeight > 10 ? maxHeight * 0.8 : 10.0)
+            : size;
 
         return Container(
           color: bg,
@@ -82,8 +83,8 @@ class ThumbnailErrorPlaceholder extends StatelessWidget {
             child: Icon(
               label != null && label!.isNotEmpty
                   ? (isBackdrop
-                      ? Icons.movie_outlined
-                      : Icons.image_not_supported_outlined)
+                        ? Icons.movie_outlined
+                        : Icons.image_not_supported_outlined)
                   : Icons.broken_image,
               size: smallIconSize,
               color: fg,

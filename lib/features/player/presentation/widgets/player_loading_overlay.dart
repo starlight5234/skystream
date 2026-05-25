@@ -68,7 +68,6 @@ class PlayerLoadingOverlay extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: CustomButton(
-
                   onPressed: onBack,
                   child: const Padding(
                     padding: EdgeInsets.all(8),

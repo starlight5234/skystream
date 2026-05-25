@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:video_view/video_view.dart' as vv;
@@ -196,7 +197,7 @@ class _RoundedPlaybackButton extends StatelessWidget {
 }
 
 /// A reusable action button for the player controls bottom bar.
-class PlayerActionButton extends StatelessWidget {
+class PlayerActionButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -217,56 +218,101 @@ class PlayerActionButton extends StatelessWidget {
   });
 
   @override
+  State<PlayerActionButton> createState() => _PlayerActionButtonState();
+}
+
+class _PlayerActionButtonState extends State<PlayerActionButton> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isActive = widget.highlight || _hovered || _focused || _pressed;
+
     return FocusTraversalOrder(
-      order: NumericFocusOrder(focusOrder.toDouble()),
-      child: CustomButton(
-        showFocusHighlight: isTv,
-        onPressed: onTap,
-        child: AnimatedContainer(
-          duration: HotstarPlayerStyle.fastMotionDuration,
-          height: 40,
-          decoration: BoxDecoration(
-            color: highlight
-                ? HotstarPlayerStyle.accent.withValues(alpha: 0.16)
-                : Colors.transparent,
+      order: NumericFocusOrder(widget.focusOrder.toDouble()),
+      child: Focus(
+        onFocusChange: (value) => setState(() => _focused = value),
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.space) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
+          child: Material(
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: rotate ? 0.5 : 0.0),
-                  duration: const Duration(milliseconds: 180),
-                  builder: (context, value, child) {
-                    return Transform.rotate(
-                      angle: value * 3.14159,
-                      child: Icon(
-                        icon,
-                        color: highlight
+            child: InkWell(
+              onTap: widget.onTap,
+              onHighlightChanged: _setPressed,
+              borderRadius: BorderRadius.circular(6),
+              hoverColor: Colors.transparent,
+              focusColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              child: AnimatedContainer(
+                duration: HotstarPlayerStyle.fastMotionDuration,
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 9),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? HotstarPlayerStyle.accent.withValues(alpha: 0.16)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: widget.rotate ? 0.5 : 0.0),
+                      duration: const Duration(milliseconds: 180),
+                      builder: (context, value, child) {
+                        return Transform.rotate(
+                          angle: value * 3.14159,
+                          child: Icon(
+                            widget.icon,
+                            color: isActive
+                                ? HotstarPlayerStyle.accent
+                                : Colors.white,
+                            size: 20,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: isActive
                             ? HotstarPlayerStyle.accent
-                            : Colors.white,
-                        size: 20,
+                            : HotstarPlayerStyle.primaryText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
-                    );
-                  },
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: highlight
-                        ? HotstarPlayerStyle.accent
-                        : HotstarPlayerStyle.primaryText,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              ),
             ),
           ),
         ),

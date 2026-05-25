@@ -112,8 +112,11 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                         final count = s.episodeCount;
                         return DropdownMenuItem(
                           value: num,
-                          child: Text(AppLocalizations.of(context)!
-                              .seasonWithEpisodes(num, count)),
+                          child: Text(
+                            AppLocalizations.of(
+                              context,
+                            )!.seasonWithEpisodes(num, count),
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -230,8 +233,9 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                               ),
                             ),
                             Text(
-                              AppLocalizations.of(context)!
-                                  .episodeCountOnly(season.episodeCount),
+                              AppLocalizations.of(
+                                context,
+                              )!.episodeCountOnly(season.episodeCount),
                               style: TextStyle(
                                 color: widget.textColor?.withValues(alpha: 0.7),
                                 fontSize: 12,
@@ -307,7 +311,9 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
 
                     return CardsWrapper(
                       onTap: () {
-                        ref.read(notificationServiceProvider).showInfo(
+                        ref
+                            .read(notificationServiceProvider)
+                            .showInfo(
                               AppLocalizations.of(context)!.selectSourceToPlay,
                             );
                       },
@@ -470,7 +476,10 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                     ),
                     if (batchCount > 1)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surfaceContainer,
                           borderRadius: BorderRadius.circular(8),
@@ -478,18 +487,25 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<int>(
                             value: _selectedRangeIndex,
-                            dropdownColor: Theme.of(context).colorScheme.surfaceContainer,
+                            dropdownColor: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainer,
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurface,
                               fontWeight: FontWeight.bold,
                             ),
                             icon: Icon(
                               Icons.keyboard_arrow_down_rounded,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                             items: List.generate(batchCount, (index) {
                               final rangeStart = index * batchSize + 1;
-                              final rangeEnd = ((index + 1) * batchSize).clamp(1, totalEpisodes);
+                              final rangeEnd = ((index + 1) * batchSize).clamp(
+                                1,
+                                totalEpisodes,
+                              );
                               return DropdownMenuItem(
                                 value: index,
                                 child: Text("$rangeStart-$rangeEnd"),
@@ -531,7 +547,9 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
 
                     return CardsWrapper(
                       onTap: () {
-                        ref.read(notificationServiceProvider).showInfo(
+                        ref
+                            .read(notificationServiceProvider)
+                            .showInfo(
                               AppLocalizations.of(context)!.selectSourceToPlay,
                             );
                       },

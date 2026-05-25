@@ -140,7 +140,8 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
           },
         ),
       },
-      onShowFocusHighlight: (show) => setState(() => _isFocusHighlighted = show),
+      onShowFocusHighlight: (show) =>
+          setState(() => _isFocusHighlighted = show),
       child: isDesktop
           ? MouseRegion(
               onEnter: (_) => setState(() => _isCarouselHovered = true),
@@ -169,87 +170,90 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
                       borderRadius: BorderRadius.circular(18),
                       child: SizedBox(
                         height: heroHeight,
-                      child: Stack(
-                        children: [
-                          CarouselSlider.builder(
-                            carouselController: _carouselController,
-                            itemCount: widget.movies.length,
-                            options: CarouselOptions(
-                              height: heroHeight,
-                              viewportFraction: 1.0,
-                              autoPlay: true,
-                              autoPlayInterval: const Duration(seconds: 15),
-                              autoPlayAnimationDuration: const Duration(
-                                milliseconds: 1000,
-                              ),
-                              autoPlayCurve: Curves.fastOutSlowIn,
-                              enableInfiniteScroll: !isTv,
-                              scrollPhysics: const BouncingScrollPhysics(),
-                              onPageChanged: (index, reason) {
-                                _currentIndexNotifier.value = index;
-                              },
-                            ),
-                            itemBuilder: (context, index, realIndex) {
-                              final movie = widget.movies[index];
-                              // Slides are visual only — the carousel anchor handles focus.
-                              return ExcludeFocus(
-                                child: _buildCarouselItem(
-                                  context,
-                                  movie,
-                                  heroHeight,
-                                  index,
-                                  isDesktop: isDesktop,
+                        child: Stack(
+                          children: [
+                            CarouselSlider.builder(
+                              carouselController: _carouselController,
+                              itemCount: widget.movies.length,
+                              options: CarouselOptions(
+                                height: heroHeight,
+                                viewportFraction: 1.0,
+                                autoPlay: true,
+                                autoPlayInterval: const Duration(seconds: 15),
+                                autoPlayAnimationDuration: const Duration(
+                                  milliseconds: 1000,
                                 ),
-                              );
-                            },
-                          ),
-
-                          // Animated Pagination Dots
-                          Positioned(
-                            bottom: 20,
-                            left: 0,
-                            right: 0,
-                            child: ValueListenableBuilder<int>(
-                              valueListenable: _currentIndexNotifier,
-                              builder: (context, currentIndex, _) {
-                                return Wrap(
-                                  alignment: WrapAlignment.center,
-                                  children: widget.movies.asMap().entries.map((
-                                    entry,
-                                  ) {
-                                    return AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 300,
-                                      ),
-                                      width: currentIndex == entry.key
-                                          ? 24.0
-                                          : 8.0,
-                                      height: 8.0,
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 4.0,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(4),
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(
-                                              alpha: currentIndex == entry.key
-                                                  ? 0.9
-                                                  : 0.3,
-                                            ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                autoPlayCurve: Curves.fastOutSlowIn,
+                                enableInfiniteScroll: !isTv,
+                                scrollPhysics: const BouncingScrollPhysics(),
+                                onPageChanged: (index, reason) {
+                                  _currentIndexNotifier.value = index;
+                                },
+                              ),
+                              itemBuilder: (context, index, realIndex) {
+                                final movie = widget.movies[index];
+                                // Slides are visual only — the carousel anchor handles focus.
+                                return ExcludeFocus(
+                                  child: _buildCarouselItem(
+                                    context,
+                                    movie,
+                                    heroHeight,
+                                    index,
+                                    isDesktop: isDesktop,
+                                  ),
                                 );
                               },
                             ),
-                          ),
 
-                          // Desktop left/right nav buttons removed.
-                          // Navigation is driven by the header bar arrows.
-                        ],
-                      ),
+                            // Animated Pagination Dots
+                            Positioned(
+                              bottom: 20,
+                              left: 0,
+                              right: 0,
+                              child: ValueListenableBuilder<int>(
+                                valueListenable: _currentIndexNotifier,
+                                builder: (context, currentIndex, _) {
+                                  return Wrap(
+                                    alignment: WrapAlignment.center,
+                                    children: widget.movies.asMap().entries.map(
+                                      (entry) {
+                                        return AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 300,
+                                          ),
+                                          width: currentIndex == entry.key
+                                              ? 24.0
+                                              : 8.0,
+                                          height: 8.0,
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withValues(
+                                                  alpha:
+                                                      currentIndex == entry.key
+                                                      ? 0.9
+                                                      : 0.3,
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ).toList(),
+                                  );
+                                },
+                              ),
+                            ),
+
+                            // Desktop left/right nav buttons removed.
+                            // Navigation is driven by the header bar arrows.
+                          ],
+                        ),
                       ), // SizedBox
                     ), // ClipRRect
                   ), // AnimatedContainer
@@ -271,74 +275,76 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
                 ),
                 child: SizedBox(
                   height: heroHeight,
-                child: Stack(
-                  children: [
-                    CarouselSlider.builder(
-                      carouselController: _carouselController,
-                      itemCount: widget.movies.length,
-                      options: CarouselOptions(
-                        height: heroHeight,
-                        viewportFraction: 1.0,
-                        autoPlay: true,
-                        autoPlayInterval: const Duration(seconds: 15),
-                        autoPlayAnimationDuration: const Duration(
-                          milliseconds: 1000,
-                        ),
-                        autoPlayCurve: Curves.fastOutSlowIn,
-                        enableInfiniteScroll: !isTv,
-                        scrollPhysics: const BouncingScrollPhysics(),
-                        onPageChanged: (index, reason) {
-                          _currentIndexNotifier.value = index;
-                        },
-                      ),
-                      itemBuilder: (context, index, realIndex) {
-                        final movie = widget.movies[index];
-                        return ExcludeFocus(
-                          child: _buildCarouselItem(
-                            context,
-                            movie,
-                            heroHeight,
-                            index,
+                  child: Stack(
+                    children: [
+                      CarouselSlider.builder(
+                        carouselController: _carouselController,
+                        itemCount: widget.movies.length,
+                        options: CarouselOptions(
+                          height: heroHeight,
+                          viewportFraction: 1.0,
+                          autoPlay: true,
+                          autoPlayInterval: const Duration(seconds: 15),
+                          autoPlayAnimationDuration: const Duration(
+                            milliseconds: 1000,
                           ),
-                        );
-                      },
-                    ),
-                    // Animated Pagination Dots
-                    Positioned(
-                      bottom: 20,
-                      left: 0,
-                      right: 0,
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: _currentIndexNotifier,
-                        builder: (context, currentIndex, _) {
-                          return Wrap(
-                            alignment: WrapAlignment.center,
-                            children: widget.movies.asMap().entries.map((
-                              entry,
-                            ) {
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                width: currentIndex == entry.key ? 24.0 : 8.0,
-                                height: 8.0,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 4.0,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
-                                  color: Theme.of(context).colorScheme.onSurface
-                                      .withValues(
-                                        alpha: currentIndex == entry.key
-                                            ? 0.9
-                                            : 0.3,
-                                      ),
-                                ),
-                              );
-                            }).toList(),
+                          autoPlayCurve: Curves.fastOutSlowIn,
+                          enableInfiniteScroll: !isTv,
+                          scrollPhysics: const BouncingScrollPhysics(),
+                          onPageChanged: (index, reason) {
+                            _currentIndexNotifier.value = index;
+                          },
+                        ),
+                        itemBuilder: (context, index, realIndex) {
+                          final movie = widget.movies[index];
+                          return ExcludeFocus(
+                            child: _buildCarouselItem(
+                              context,
+                              movie,
+                              heroHeight,
+                              index,
+                            ),
                           );
                         },
                       ),
-                    ),
-                  ],
+                      // Animated Pagination Dots
+                      Positioned(
+                        bottom: 20,
+                        left: 0,
+                        right: 0,
+                        child: ValueListenableBuilder<int>(
+                          valueListenable: _currentIndexNotifier,
+                          builder: (context, currentIndex, _) {
+                            return Wrap(
+                              alignment: WrapAlignment.center,
+                              children: widget.movies.asMap().entries.map((
+                                entry,
+                              ) {
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  width: currentIndex == entry.key ? 24.0 : 8.0,
+                                  height: 8.0,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 4.0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(4),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(
+                                          alpha: currentIndex == entry.key
+                                              ? 0.9
+                                              : 0.3,
+                                        ),
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ), // AnimatedContainer
@@ -540,9 +546,7 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white.withValues(
-                                      alpha: 0.7,
-                                    ),
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
                               ],
@@ -553,14 +557,19 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
                                     Icon(
                                       Icons.calendar_today_rounded,
                                       size: 10,
-                                      color: Colors.white.withValues(alpha: 0.6),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       year,
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: Colors.white.withValues(alpha: 0.7),
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.7,
+                                            ),
+                                          ),
                                     ),
                                   ],
                                 ),

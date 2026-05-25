@@ -124,7 +124,8 @@ class CloudflareBypass {
     // 2. Try reusing a cached solved session (free — no spawn slot needed).
     final cachedView = _hostWebViews[host];
     if (cachedView != null) {
-      if (kDebugMode) debugPrint('$_tag Reusing cached WebView for $host → $url');
+      if (kDebugMode)
+        debugPrint('$_tag Reusing cached WebView for $host → $url');
       try {
         final html = await cachedView.navigate(url);
         if (html != null &&
@@ -132,7 +133,8 @@ class CloudflareBypass {
             !html.contains('Just a moment')) {
           return CfResult(body: html, statusCode: 200, finalUrl: url);
         }
-        if (kDebugMode) debugPrint('$_tag Cached session stale for $host, disposing');
+        if (kDebugMode)
+          debugPrint('$_tag Cached session stale for $host, disposing');
         await _disposeHostSession(host);
       } catch (e) {
         if (kDebugMode) debugPrint('$_tag Cached WebView error: $e');
@@ -200,7 +202,8 @@ class CloudflareBypass {
       try {
         // Cheap check: one tiny JS call, no DOM serialization.
         // Returns '1' when the CF challenge is gone, '0' while it's active.
-        final isClear = await controller.evaluateJavascript(source: '''
+        final isClear = await controller.evaluateJavascript(
+          source: '''
           (function(){
             var t = document.title || '';
             var hasChallenge =
@@ -212,7 +215,8 @@ class CloudflareBypass {
                 typeof window._cf_chl_opt !== 'undefined';
             return hasChallenge ? '0' : '1';
           })()
-        ''');
+        ''',
+        );
 
         if (isClear != '1') return;
 
@@ -249,7 +253,8 @@ class CloudflareBypass {
         if (p == 100) checkSolved(c, null);
       },
       onReceivedError: (c, r, e) {
-        final isCancel = e.type == WebResourceErrorType.CANCELLED ||
+        final isCancel =
+            e.type == WebResourceErrorType.CANCELLED ||
             e.description.contains('-999') ||
             e.description.toLowerCase().contains('cancel');
         if (isCancel) {
@@ -378,7 +383,8 @@ class _HostWebView {
     if (_pending != null && !_pending!.isCompleted) {
       if (kDebugMode) {
         debugPrint(
-            '${CloudflareBypass._tag} $host: Cancelling active navigation and disposing');
+          '${CloudflareBypass._tag} $host: Cancelling active navigation and disposing',
+        );
       }
       _pending!.complete(null);
     }
@@ -401,7 +407,8 @@ class _HostWebView {
   Future<void> silenceConsole() async {
     if (_disposed || _controller == null) return;
     try {
-      await _controller.evaluateJavascript(source: '''
+      await _controller.evaluateJavascript(
+        source: '''
         (function() {
           var noop = function(){};
           var methods = ['log','info','debug','warn','error','dir','table',
@@ -417,7 +424,8 @@ class _HostWebView {
             } catch(_) {}
           });
         })();
-      ''');
+      ''',
+      );
     } catch (_) {}
   }
 }

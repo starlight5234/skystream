@@ -16,7 +16,7 @@ class HomeData extends _$HomeData {
     if (activeProvider == null) {
       return const HomeNoProvider();
     }
-    
+
     // Start initial fetch
     Future.microtask(() => fetch());
     return const HomeLoading();
@@ -33,9 +33,9 @@ class HomeData extends _$HomeData {
 
     // Fast connectivity check
     try {
-      final result = await InternetAddress.lookup('dns.google').timeout(
-        const Duration(seconds: 2),
-      );
+      final result = await InternetAddress.lookup(
+        'dns.google',
+      ).timeout(const Duration(seconds: 2));
       if (result.isEmpty || result[0].rawAddress.isEmpty) {
         state = const HomeOffline();
         return;

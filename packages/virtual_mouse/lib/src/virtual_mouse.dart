@@ -202,7 +202,8 @@ class _VirtualMouseState extends State<VirtualMouse> {
 
   @override
   Widget build(BuildContext context) {
-    final pointer = widget.pointer ??
+    final pointer =
+        widget.pointer ??
         CursorPainter(color: widget.pointerColor, angle: widget.angle);
 
     return FocusScope(

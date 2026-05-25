@@ -19,7 +19,11 @@ Map<String, List<MultimediaItem>> _parseHomeResults(dynamic result) {
     result.forEach((key, value) {
       if (value is List) {
         map[key.toString()] = value
-            .map((e) => MultimediaItem.fromJson(Map<String, dynamic>.from(e as Map<dynamic, dynamic>)))
+            .map(
+              (e) => MultimediaItem.fromJson(
+                Map<String, dynamic>.from(e as Map<dynamic, dynamic>),
+              ),
+            )
             .toList();
       }
     });
@@ -31,7 +35,11 @@ Map<String, List<MultimediaItem>> _parseHomeResults(dynamic result) {
 List<MultimediaItem> _parseSearchResults(dynamic result) {
   if (result is List) {
     return result
-        .map((e) => MultimediaItem.fromJson(Map<String, dynamic>.from(e as Map<dynamic, dynamic>)))
+        .map(
+          (e) => MultimediaItem.fromJson(
+            Map<String, dynamic>.from(e as Map<dynamic, dynamic>),
+          ),
+        )
         .toList();
   }
   return [];
@@ -107,7 +115,10 @@ class JsBasedProvider extends SkyStreamProvider {
   String? get _qbcPath {
     if (_scriptPath.startsWith('assets/')) return null;
     final dir = _scriptPath.substring(0, _scriptPath.lastIndexOf('/') + 1);
-    final safeId = (_namespace ?? _packageName).replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    final safeId = (_namespace ?? _packageName).replaceAll(
+      RegExp(r'[^a-zA-Z0-9_]'),
+      '_',
+    );
     return '$dir$safeId.qbc';
   }
 
@@ -185,13 +196,15 @@ class JsBasedProvider extends SkyStreamProvider {
       if (qbc != null && !JsBytecodeCompiler.isStale(_scriptPath, qbc)) {
         final bytes = await File(qbc).readAsBytes();
         await _jsEngine.loadBytes(bytes, tag: _packageName);
-        if (kDebugMode) talker.debug("JsBasedProvider: Loaded bytecode for $_packageName");
+        if (kDebugMode)
+          talker.debug("JsBasedProvider: Loaded bytecode for $_packageName");
         return;
       }
 
       // Slow path: text eval, then compile bytecode in the background.
       await _jsEngine.loadScript(script, tag: _packageName);
-      if (kDebugMode) talker.debug("JsBasedProvider: Loaded script for $_packageName");
+      if (kDebugMode)
+        talker.debug("JsBasedProvider: Loaded script for $_packageName");
 
       if (qbc != null) {
         // Fire-and-forget: compile bytecode for next launch.
@@ -205,7 +218,10 @@ class JsBasedProvider extends SkyStreamProvider {
       return;
     } catch (e) {
       _error = "Eval: $e";
-      if (kDebugMode) debugPrint("JsBasedProvider: CRITICAL - Eval failed for $_packageName: $e");
+      if (kDebugMode)
+        debugPrint(
+          "JsBasedProvider: CRITICAL - Eval failed for $_packageName: $e",
+        );
     }
   }
 
@@ -242,7 +258,8 @@ class JsBasedProvider extends SkyStreamProvider {
 
   // ... (rest of simple getters)
   @override
-  String get mainUrl => _customBaseUrl ?? (_manifest['baseUrl'] as String?) ?? "";
+  String get mainUrl =>
+      _customBaseUrl ?? (_manifest['baseUrl'] as String?) ?? "";
 
   @override
   String get version => (_manifest['version'] ?? 0).toString();
@@ -323,14 +340,20 @@ class JsBasedProvider extends SkyStreamProvider {
       if (result is List) {
         return result
             .whereType<Map<dynamic, dynamic>>()
-            .map((e) => PluginSubProvider.fromJson(Map<String, dynamic>.from(e)))
+            .map(
+              (e) => PluginSubProvider.fromJson(Map<String, dynamic>.from(e)),
+            )
             .where((p) => p.id.isNotEmpty)
             .toList();
       }
-      if (kDebugMode) debugPrint('JsBasedProvider: getProviders returned unexpected type: ${result.runtimeType}');
+      if (kDebugMode)
+        debugPrint(
+          'JsBasedProvider: getProviders returned unexpected type: ${result.runtimeType}',
+        );
       return [];
     } catch (e) {
-      if (kDebugMode) debugPrint('JsBasedProvider: getProviders error for $_packageName: $e');
+      if (kDebugMode)
+        debugPrint('JsBasedProvider: getProviders error for $_packageName: $e');
       return [];
     }
   }
@@ -358,11 +381,16 @@ class JsBasedProvider extends SkyStreamProvider {
   }
 
   @override
-  Future<List<MultimediaItem>> search(String query, {CancelToken? cancelToken}) async {
+  Future<List<MultimediaItem>> search(
+    String query, {
+    CancelToken? cancelToken,
+  }) async {
     await _ensureReady();
     if (_error != null) throw JsPluginException("INIT_ERROR", _error!);
     try {
-      final result = await _jsEngine.invokeAsync(_fn('search'), [query], cancelToken);
+      final result = await _jsEngine.invokeAsync(_fn('search'), [
+        query,
+      ], cancelToken);
       if (result is List) {
         return await compute(_parseSearchResults, result);
       }
@@ -458,7 +486,8 @@ class JsBasedProvider extends SkyStreamProvider {
                 final b64Json = finalUrl.substring("MAGIC_PROXY_v2".length);
                 final jsonBytes = base64Decode(b64Json);
                 final decodedJson = utf8.decode(jsonBytes);
-                final Map<String, dynamic> config = jsonDecode(decodedJson) as Map<String, dynamic>;
+                final Map<String, dynamic> config =
+                    jsonDecode(decodedJson) as Map<String, dynamic>;
 
                 final String realUrl = config['url'] as String;
                 final Map<String, String>? sticky = config['headers'] != null
@@ -469,7 +498,9 @@ class JsBasedProvider extends SkyStreamProvider {
 
                 ProxyOptions? options;
                 if (config['options'] != null) {
-                  options = ProxyOptions.fromJson(config['options'] as Map<String, dynamic>);
+                  options = ProxyOptions.fromJson(
+                    config['options'] as Map<String, dynamic>,
+                  );
                 }
 
                 finalUrl = LocalProxyService.instance.getProxyUrl(

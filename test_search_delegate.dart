@@ -8,7 +8,7 @@ class MySearchDelegate extends SearchDelegate<void> {
   Widget buildResults(BuildContext context) => Container();
   @override
   Widget buildSuggestions(BuildContext context) => Container();
-  
+
   void test() {
     print(query);
   }

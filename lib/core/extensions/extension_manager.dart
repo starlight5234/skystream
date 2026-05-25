@@ -50,120 +50,126 @@ class ExtensionManager extends _$ExtensionManager {
     try {
       await prevLock;
 
-    final activePackageName = ref
-        .read(settingsRepositoryProvider)
-        .getActiveProviderId();
+      final activePackageName = ref
+          .read(settingsRepositoryProvider)
+          .getActiveProviderId();
 
-    // For subproviders the stored ID is "parentPkg::SubId"; extract the parent
-    // package name so sorting and priority loading target the right plugin.
-    final String? activeParentPackageName = activePackageName == null
-        ? null
-        : (activePackageName.contains('::')
-            ? activePackageName.substring(0, activePackageName.indexOf('::'))
-            : activePackageName);
+      // For subproviders the stored ID is "parentPkg::SubId"; extract the parent
+      // package name so sorting and priority loading target the right plugin.
+      final String? activeParentPackageName = activePackageName == null
+          ? null
+          : (activePackageName.contains('::')
+                ? activePackageName.substring(
+                    0,
+                    activePackageName.indexOf('::'),
+                  )
+                : activePackageName);
 
-    // Sort plugins: Active first
-    final sortedPlugins = List<ExtensionPlugin>.from(installed);
-    if (activeParentPackageName != null) {
-      sortedPlugins.sort((a, b) {
-        if (a.packageName == activeParentPackageName) return -1;
-        if (b.packageName == activeParentPackageName) return 1;
-        return 0;
-      });
-    }
+      // Sort plugins: Active first
+      final sortedPlugins = List<ExtensionPlugin>.from(installed);
+      if (activeParentPackageName != null) {
+        sortedPlugins.sort((a, b) {
+          if (a.packageName == activeParentPackageName) return -1;
+          if (b.packageName == activeParentPackageName) return 1;
+          return 0;
+        });
+      }
 
-    // 1. Priority Load: Active Provider (if needs loading)
-    if (activeParentPackageName != null) {
-      try {
-        final activePlugin = sortedPlugins.firstWhere(
-          (p) => p.packageName == activeParentPackageName,
-        );
-        final existing = _hasLoadedProviders(activeParentPackageName);
-        if (!existing) {
-          final loaded = await _loadPlugin(activePlugin);
-          // Insert all subproviders in one state update so the ActiveProvider
-          // listener sees them all at once — adding one-at-a-time would fire
-          // the listener before the target subprovider is present.
-          if (loaded.isNotEmpty) {
-            final newState = [...state];
-            for (final p in loaded) {
-              if (!newState.any((e) => e.packageName == p.packageName)) {
-                newState.add(p);
+      // 1. Priority Load: Active Provider (if needs loading)
+      if (activeParentPackageName != null) {
+        try {
+          final activePlugin = sortedPlugins.firstWhere(
+            (p) => p.packageName == activeParentPackageName,
+          );
+          final existing = _hasLoadedProviders(activeParentPackageName);
+          if (!existing) {
+            final loaded = await _loadPlugin(activePlugin);
+            // Insert all subproviders in one state update so the ActiveProvider
+            // listener sees them all at once — adding one-at-a-time would fire
+            // the listener before the target subprovider is present.
+            if (loaded.isNotEmpty) {
+              final newState = [...state];
+              for (final p in loaded) {
+                if (!newState.any((e) => e.packageName == p.packageName)) {
+                  newState.add(p);
+                }
               }
+              state = newState;
             }
-            state = newState;
+          }
+        } catch (_) {
+          // Active plugin not found in installed list, ignore
+        }
+      }
+
+      // 2. Process background providers in manageable batches (Pool of 3)
+      const batchSize = 3;
+
+      for (int i = 0; i < sortedPlugins.length; i += batchSize) {
+        final batch = sortedPlugins.skip(i).take(batchSize);
+        final batchLoads = <Future<List<SkyStreamProvider>>>[];
+
+        for (final plugin in batch) {
+          final alreadyLoaded = _hasLoadedProviders(plugin.packageName);
+
+          bool needsLoad = !alreadyLoaded;
+          if (alreadyLoaded) {
+            final existing = _firstLoadedProvider(plugin.packageName);
+            if (existing != null &&
+                plugin.version.toString() != existing.version) {
+              _removeProvidersForPackage(plugin.packageName);
+              needsLoad = true;
+            }
+          }
+
+          if (needsLoad && plugin.packageName != activeParentPackageName) {
+            batchLoads.add(_loadPlugin(plugin));
           }
         }
-      } catch (_) {
-        // Active plugin not found in installed list, ignore
-      }
-    }
 
-    // 2. Process background providers in manageable batches (Pool of 3)
-    const batchSize = 3;
-
-    for (int i = 0; i < sortedPlugins.length; i += batchSize) {
-      final batch = sortedPlugins.skip(i).take(batchSize);
-      final batchLoads = <Future<List<SkyStreamProvider>>>[];
-
-      for (final plugin in batch) {
-        final alreadyLoaded = _hasLoadedProviders(plugin.packageName);
-
-        bool needsLoad = !alreadyLoaded;
-        if (alreadyLoaded) {
-          final existing = _firstLoadedProvider(plugin.packageName);
-          if (existing != null && plugin.version.toString() != existing.version) {
-            _removeProvidersForPackage(plugin.packageName);
-            needsLoad = true;
+        if (batchLoads.isNotEmpty) {
+          final results = await Future.wait(batchLoads);
+          final loadedInBatch = results.expand((l) => l).toList();
+          if (loadedInBatch.isNotEmpty) {
+            state = [...state, ...loadedInBatch];
           }
         }
+      }
 
-        if (needsLoad && plugin.packageName != activeParentPackageName) {
-          batchLoads.add(_loadPlugin(plugin));
+      // Unload Removed Plugins
+      final installedPackageNames = installed.map((e) => e.packageName).toSet();
+
+      final providersToRemove = <SkyStreamProvider>[];
+
+      for (final provider in state) {
+        if (!_belongsToInstalled(provider.packageName, installedPackageNames)) {
+          providersToRemove.add(provider);
         }
       }
 
-      if (batchLoads.isNotEmpty) {
-        final results = await Future.wait(batchLoads);
-        final loadedInBatch = results.expand((l) => l).toList();
-        if (loadedInBatch.isNotEmpty) {
-          state = [...state, ...loadedInBatch];
-        }
-      }
-    }
-
-    // Unload Removed Plugins
-    final installedPackageNames = installed.map((e) => e.packageName).toSet();
-
-    final providersToRemove = <SkyStreamProvider>[];
-
-    for (final provider in state) {
-      if (!_belongsToInstalled(provider.packageName, installedPackageNames)) {
-        providersToRemove.add(provider);
-      }
-    }
-
-    if (providersToRemove.isNotEmpty) {
-      if (kDebugMode) {
-        debugPrint(
-          "ExtensionManager: Unloading ${providersToRemove.length} providers",
-        );
-      }
-      final newState = List<SkyStreamProvider>.from(state);
-      for (final p in providersToRemove) {
+      if (providersToRemove.isNotEmpty) {
         if (kDebugMode) {
-          debugPrint("ExtensionManager: Removing ${p.packageName} (${p.name})");
+          debugPrint(
+            "ExtensionManager: Unloading ${providersToRemove.length} providers",
+          );
         }
-        newState.remove(p);
-        if (p is JsBasedProvider) {
-          // _engine?.unload(p.namespace);
+        final newState = List<SkyStreamProvider>.from(state);
+        for (final p in providersToRemove) {
+          if (kDebugMode) {
+            debugPrint(
+              "ExtensionManager: Removing ${p.packageName} (${p.name})",
+            );
+          }
+          newState.remove(p);
+          if (p is JsBasedProvider) {
+            // _engine?.unload(p.namespace);
+          }
         }
+        state = newState;
       }
-      state = newState;
-    }
 
-    // Signal that plugin sync is complete
-    ref.read(pluginSyncCompleteProvider.notifier).set(true);
+      // Signal that plugin sync is complete
+      ref.read(pluginSyncCompleteProvider.notifier).set(true);
     } finally {
       if (!completer.isCompleted) completer.complete();
       if (_syncLock == completer.future) _syncLock = null;
@@ -193,7 +199,10 @@ class ExtensionManager extends _$ExtensionManager {
   /// Returns true if the user has enabled this sub-provider (default: true).
   bool _isSubProviderEnabled(String packageName, String providerId) {
     final storage = ref.read(extensionRepositoryProvider);
-    return storage.getExtensionData('$packageName:_provider_enabled_$providerId') != 'false';
+    return storage.getExtensionData(
+          '$packageName:_provider_enabled_$providerId',
+        ) !=
+        'false';
   }
 
   /// Registers shell providers for a plugin. JS is NOT evaluated here — it is
@@ -208,12 +217,14 @@ class ExtensionManager extends _$ExtensionManager {
     if (_engine == null || _storageService == null) return [];
     try {
       final path = await _storageService!.getPluginJsPath(plugin);
-      if (kDebugMode) debugPrint("ExtensionManager: Registering lazy shells from: $path");
+      if (kDebugMode)
+        debugPrint("ExtensionManager: Registering lazy shells from: $path");
       talker.debug("ExtensionManager: Registering lazy shells from: $path");
 
       if (!path.startsWith('assets/')) {
         if (!await File(path).exists()) {
-          if (kDebugMode) debugPrint("ExtensionManager: JS File does NOT exist at $path");
+          if (kDebugMode)
+            debugPrint("ExtensionManager: JS File does NOT exist at $path");
           return [];
         }
       }
@@ -236,7 +247,10 @@ class ExtensionManager extends _$ExtensionManager {
         });
       }
 
-      final baseNamespace = plugin.packageName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final baseNamespace = plugin.packageName.replaceAll(
+        RegExp(r'[^a-zA-Z0-9]'),
+        '_',
+      );
 
       // ── Dynamic provider mode ─────────────────────────────────────────────
       // Triggered when plugin.json has "providers": [] (empty array).
@@ -245,8 +259,13 @@ class ExtensionManager extends _$ExtensionManager {
       // The bootstrap and all sub-providers share the same .qbc bytecode, so
       // there is NO extra JS evaluation vs a static provider list.
       if (plugin.providers != null && plugin.providers!.isEmpty) {
-        if (kDebugMode) debugPrint("ExtensionManager: Dynamic providers mode for ${plugin.packageName}");
-        talker.debug("ExtensionManager: Dynamic providers mode for ${plugin.packageName}");
+        if (kDebugMode)
+          debugPrint(
+            "ExtensionManager: Dynamic providers mode for ${plugin.packageName}",
+          );
+        talker.debug(
+          "ExtensionManager: Dynamic providers mode for ${plugin.packageName}",
+        );
 
         // Bootstrap shell — uses the plugin's own namespace so the bytecode
         // path is stable and shared with all sub-providers below.
@@ -267,33 +286,48 @@ class ExtensionManager extends _$ExtensionManager {
         final dynamicProviders = await bootstrap.getProviders();
 
         if (dynamicProviders.isEmpty) {
-          if (kDebugMode) debugPrint("ExtensionManager: getProviders() returned empty list for ${plugin.packageName}");
-          talker.warning("ExtensionManager: getProviders() returned empty list for ${plugin.packageName}");
+          if (kDebugMode)
+            debugPrint(
+              "ExtensionManager: getProviders() returned empty list for ${plugin.packageName}",
+            );
+          talker.warning(
+            "ExtensionManager: getProviders() returned empty list for ${plugin.packageName}",
+          );
           return [];
         }
 
-        if (kDebugMode) debugPrint("ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}");
-        talker.debug("ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}");
+        if (kDebugMode)
+          debugPrint(
+            "ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}",
+          );
+        talker.debug(
+          "ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}",
+        );
 
         // Fan-out — identical structure to the static path below.
         final results = <SkyStreamProvider>[];
         for (final sub in dynamicProviders) {
           if (!_isSubProviderEnabled(plugin.packageName, sub.id)) continue;
           final subId = sub.id.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-          results.add(JsBasedProvider(
-            _engine!,
-            path,
-            packageName: '${plugin.packageName}::${sub.id}',
-            jsPackageName: plugin.packageName,
-            namespace: '${baseNamespace}__$subId',
-            forcedName: sub.name,
-            manifest: plugin.manifest,
-            customBaseUrl: sub.baseUrl,
-            providerId: sub.baseUrl == null ? sub.id : null,
-            scriptLoader: sharedScriptLoader,
-          ));
+          results.add(
+            JsBasedProvider(
+              _engine!,
+              path,
+              packageName: '${plugin.packageName}::${sub.id}',
+              jsPackageName: plugin.packageName,
+              namespace: '${baseNamespace}__$subId',
+              forcedName: sub.name,
+              manifest: plugin.manifest,
+              customBaseUrl: sub.baseUrl,
+              providerId: sub.baseUrl == null ? sub.id : null,
+              scriptLoader: sharedScriptLoader,
+            ),
+          );
         }
-        if (kDebugMode) debugPrint("ExtensionManager: Registered ${results.length} dynamic sub-providers for ${plugin.packageName}");
+        if (kDebugMode)
+          debugPrint(
+            "ExtensionManager: Registered ${results.length} dynamic sub-providers for ${plugin.packageName}",
+          );
         // No-ops since bootstrap already compiled the .qbc for this path.
         for (final p in results) {
           if (p is JsBasedProvider) p.precompile().ignore();
@@ -307,20 +341,25 @@ class ExtensionManager extends _$ExtensionManager {
         for (final sub in plugin.providers!) {
           if (!_isSubProviderEnabled(plugin.packageName, sub.id)) continue;
           final subId = sub.id.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-          results.add(JsBasedProvider(
-            _engine!,
-            path,
-            packageName: '${plugin.packageName}::${sub.id}',
-            jsPackageName: plugin.packageName,
-            namespace: '${baseNamespace}__$subId',
-            forcedName: sub.name,
-            manifest: plugin.manifest,
-            customBaseUrl: sub.baseUrl,
-            providerId: sub.baseUrl == null ? sub.id : null,
-            scriptLoader: sharedScriptLoader,
-          ));
+          results.add(
+            JsBasedProvider(
+              _engine!,
+              path,
+              packageName: '${plugin.packageName}::${sub.id}',
+              jsPackageName: plugin.packageName,
+              namespace: '${baseNamespace}__$subId',
+              forcedName: sub.name,
+              manifest: plugin.manifest,
+              customBaseUrl: sub.baseUrl,
+              providerId: sub.baseUrl == null ? sub.id : null,
+              scriptLoader: sharedScriptLoader,
+            ),
+          );
         }
-        if (kDebugMode) debugPrint("ExtensionManager: Registered ${results.length} lazy sub-providers for ${plugin.packageName}");
+        if (kDebugMode)
+          debugPrint(
+            "ExtensionManager: Registered ${results.length} lazy sub-providers for ${plugin.packageName}",
+          );
         // Pre-compile bytecode for each sub-provider (no-ops if already fresh).
         for (final p in results) {
           if (p is JsBasedProvider) p.precompile().ignore();
@@ -341,14 +380,19 @@ class ExtensionManager extends _$ExtensionManager {
         scriptLoader: sharedScriptLoader,
       );
       if (kDebugMode) {
-        debugPrint("ExtensionManager: Registered lazy shell for ${plugin.packageName}");
-        talker.debug("ExtensionManager: Registered lazy shell for ${plugin.packageName}");
+        debugPrint(
+          "ExtensionManager: Registered lazy shell for ${plugin.packageName}",
+        );
+        talker.debug(
+          "ExtensionManager: Registered lazy shell for ${plugin.packageName}",
+        );
       }
       // Pre-compile bytecode (no-op if already fresh).
       provider.precompile().ignore();
       return [provider];
     } catch (e) {
-      if (kDebugMode) debugPrint("Failed to register plugin ${plugin.name}: $e");
+      if (kDebugMode)
+        debugPrint("Failed to register plugin ${plugin.name}: $e");
       talker.error("Failed to register plugin ${plugin.name}: $e");
       return [];
     }
@@ -358,17 +402,21 @@ class ExtensionManager extends _$ExtensionManager {
 
   /// True if any loaded provider belongs to [packageName] (direct or sub-provider).
   bool _hasLoadedProviders(String packageName) {
-    return state.any((p) =>
-        p.packageName == packageName ||
-        p.packageName.startsWith('$packageName::'));
+    return state.any(
+      (p) =>
+          p.packageName == packageName ||
+          p.packageName.startsWith('$packageName::'),
+    );
   }
 
   /// First loaded provider belonging to [packageName], or null.
   SkyStreamProvider? _firstLoadedProvider(String packageName) {
     try {
-      return state.firstWhere((p) =>
-          p.packageName == packageName ||
-          p.packageName.startsWith('$packageName::'));
+      return state.firstWhere(
+        (p) =>
+            p.packageName == packageName ||
+            p.packageName.startsWith('$packageName::'),
+      );
     } catch (_) {
       return null;
     }
@@ -377,19 +425,26 @@ class ExtensionManager extends _$ExtensionManager {
   /// Removes all loaded providers belonging to [packageName] from state.
   void _removeProvidersForPackage(String packageName) {
     state = state
-        .where((p) =>
-            p.packageName != packageName &&
-            !p.packageName.startsWith('$packageName::'))
+        .where(
+          (p) =>
+              p.packageName != packageName &&
+              !p.packageName.startsWith('$packageName::'),
+        )
         .toList();
   }
 
   /// True if [providerPackageName] belongs to one of the installed packages.
   /// Handles synthetic sub-provider names (`parentPkg::subId`).
-  bool _belongsToInstalled(String providerPackageName, Set<String> installedPackageNames) {
+  bool _belongsToInstalled(
+    String providerPackageName,
+    Set<String> installedPackageNames,
+  ) {
     if (installedPackageNames.contains(providerPackageName)) return true;
     final sep = providerPackageName.lastIndexOf('::');
     if (sep > 0) {
-      return installedPackageNames.contains(providerPackageName.substring(0, sep));
+      return installedPackageNames.contains(
+        providerPackageName.substring(0, sep),
+      );
     }
     return false;
   }

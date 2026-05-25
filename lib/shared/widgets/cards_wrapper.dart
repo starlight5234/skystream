@@ -71,8 +71,8 @@ class _CardsWrapperState extends State<CardsWrapper>
   void _updateAnimation() {
     // In D-pad/keyboard mode the border+glow is the focus indicator; skip scale
     // to prevent edge items from overflowing the viewport.
-    final isDpad = FocusManager.instance.highlightMode ==
-        FocusHighlightMode.traditional;
+    final isDpad =
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final shouldScale = _isHovered || (_isFocused && !isDpad);
     if (shouldScale) {
       _controller.forward();
@@ -97,9 +97,15 @@ class _CardsWrapperState extends State<CardsWrapper>
         // Horizontal: always center the focused card inside its row so the
         // active card stays in the middle of the screen as the user walks
         // along the row.
-        Scrollable.maybeOf(context, axis: Axis.horizontal)
-            ?.position
-            .ensureVisible(ro, alignment: 0.5, duration: duration, curve: curve);
+        Scrollable.maybeOf(
+          context,
+          axis: Axis.horizontal,
+        )?.position.ensureVisible(
+          ro,
+          alignment: 0.5,
+          duration: duration,
+          curve: curve,
+        );
 
         // Vertical: only scroll if the card is actually clipped. Moving
         // Left/Right within a row would otherwise re-center the row
@@ -158,7 +164,10 @@ class _CardsWrapperState extends State<CardsWrapper>
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: widget.borderRadius ?? BorderRadius.circular(12),
-                border: (_isFocused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional)
+                border:
+                    (_isFocused &&
+                        FocusManager.instance.highlightMode ==
+                            FocusHighlightMode.traditional)
                     ? Border.all(
                         color: Theme.of(context).colorScheme.primary,
                         width: 2,

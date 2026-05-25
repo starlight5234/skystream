@@ -12,7 +12,10 @@ class GeneralSettings {
     this.defaultHomeScreen = '/home',
   });
 
-  GeneralSettings copyWith({bool? watchHistoryEnabled, String? defaultHomeScreen}) {
+  GeneralSettings copyWith({
+    bool? watchHistoryEnabled,
+    String? defaultHomeScreen,
+  }) {
     return GeneralSettings(
       watchHistoryEnabled: watchHistoryEnabled ?? this.watchHistoryEnabled,
       defaultHomeScreen: defaultHomeScreen ?? this.defaultHomeScreen,

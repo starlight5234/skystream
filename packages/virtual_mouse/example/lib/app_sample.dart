@@ -30,9 +30,7 @@ class _AppWidgetState extends State<AppWidget> {
           Container(
             width: 200,
             padding: const EdgeInsets.all(10.0),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-            ),
+            decoration: BoxDecoration(color: Colors.grey.shade300),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 10.0,
@@ -137,7 +135,7 @@ class _AppWidgetState extends State<AppWidget> {
                         ],
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -155,11 +153,7 @@ class _AppWidgetState extends State<AppWidget> {
           bgColor = color;
         });
       },
-      child: Container(
-        color: color,
-        width: size.width,
-        height: size.height,
-      ),
+      child: Container(color: color, width: size.width, height: size.height),
     );
   }
 }

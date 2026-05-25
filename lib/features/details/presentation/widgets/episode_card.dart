@@ -61,7 +61,9 @@ class EpisodeCard extends HookConsumerWidget {
     String? statusBadge;
 
     if (progress > 0.02) {
-      statusBadge = progress > 0.98 ? l10n.watched.toUpperCase() : l10n.watching.toUpperCase();
+      statusBadge = progress > 0.98
+          ? l10n.watched.toUpperCase()
+          : l10n.watching.toUpperCase();
     }
 
     if (historyItem != null && statusBadge == null) {
@@ -140,11 +142,11 @@ class EpisodeCard extends HookConsumerWidget {
             final ro = ctx?.findRenderObject();
             if (ctx != null && ctx.mounted && ro != null) {
               Scrollable.maybeOf(ctx)?.position.ensureVisible(
-                    ro,
-                    alignment: 0.5,
-                    duration: const Duration(milliseconds: 380),
-                    curve: Curves.fastOutSlowIn,
-                  );
+                ro,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 380),
+                curve: Curves.fastOutSlowIn,
+              );
             }
           });
         }
@@ -155,7 +157,8 @@ class EpisodeCard extends HookConsumerWidget {
       //   • Right arrow (when body is focused) → focus the download icon
       // OK / Enter / Space still play the episode (via the InkWell).
       onKeyEvent: (node, event) {
-        final isMenu = event.logicalKey == LogicalKeyboardKey.contextMenu ||
+        final isMenu =
+            event.logicalKey == LogicalKeyboardKey.contextMenu ||
             event.logicalKey == LogicalKeyboardKey.f10;
         if (event is KeyDownEvent && isMenu) {
           triggerDownload();
@@ -170,100 +173,100 @@ class EpisodeCard extends HookConsumerWidget {
         return KeyEventResult.ignored;
       },
       child: InkWell(
-          focusNode: bodyFocusNode,
-          onTap: () => ref
-              .read(detailsControllerProvider(parentItem.url).notifier)
-              .handlePlayPress(context, parentItem, specificEpisode: episode),
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: width,
-            decoration: BoxDecoration(
+        focusNode: bodyFocusNode,
+        onTap: () => ref
+            .read(detailsControllerProvider(parentItem.url).notifier)
+            .handlePlayPress(context, parentItem, specificEpisode: episode),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: width,
+          decoration: BoxDecoration(
+            color: isFocused.value
+                ? primary.withValues(alpha: 0.18)
+                : Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
               color: isFocused.value
-                  ? primary.withValues(alpha: 0.18)
-                  : Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12.0),
-              border: Border.all(
-                color: isFocused.value
-                    ? primary
-                    : Theme.of(context).dividerColor.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark
-                            ? 0.1
-                            : 0.5,
-                      ),
-                width: isFocused.value ? 2 : 1,
-              ),
-              boxShadow: isFocused.value
-                  ? [
-                      BoxShadow(
-                        color: primary.withValues(alpha: 0.45),
-                        blurRadius: 14,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : null,
+                  ? primary
+                  : Theme.of(context).dividerColor.withValues(
+                      alpha: Theme.of(context).brightness == Brightness.dark
+                          ? 0.1
+                          : 0.5,
+                    ),
+              width: isFocused.value ? 2 : 1,
             ),
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.all(LayoutConstants.spacingSm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildThumbnail(context, progress, statusBadge),
-                    const SizedBox(width: LayoutConstants.spacingMd),
-                    Expanded(
-                      child: Text(
-                        "${episode.episode}. ${episode.name.toUpperCase()}",
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+            boxShadow: isFocused.value
+                ? [
+                    BoxShadow(
+                      color: primary.withValues(alpha: 0.45),
+                      blurRadius: 14,
+                      spreadRadius: 1,
                     ),
-                    const SizedBox(width: LayoutConstants.spacingXs),
-                    // Download icon — uses an explicit FocusNode so the parent
-                    // onKeyEvent can force focus here from the body. Left from
-                    // the icon returns focus to the body via this widget's own
-                    // onKeyEvent.
-                    _buildActionButtons(
-                      context,
-                      ref,
-                      downloadedFile,
-                      isDownloading,
-                      downloadProgress,
-                      downloadProgressData,
-                      details,
-                      downloadFocusNode,
-                      bodyFocusNode,
-                    ),
-                  ],
-                ),
-                if (episode.description != null &&
-                    episode.description!.isNotEmpty) ...[
-                  const SizedBox(height: LayoutConstants.spacingSm),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  ]
+                : null,
+          ),
+          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.all(LayoutConstants.spacingSm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildThumbnail(context, progress, statusBadge),
+                  const SizedBox(width: LayoutConstants.spacingMd),
+                  Expanded(
                     child: Text(
-                      episode.description!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                        height: 1.4,
+                      "${episode.episode}. ${episode.name.toUpperCase()}",
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: LayoutConstants.spacingXs),
+                  // Download icon — uses an explicit FocusNode so the parent
+                  // onKeyEvent can force focus here from the body. Left from
+                  // the icon returns focus to the body via this widget's own
+                  // onKeyEvent.
+                  _buildActionButtons(
+                    context,
+                    ref,
+                    downloadedFile,
+                    isDownloading,
+                    downloadProgress,
+                    downloadProgressData,
+                    details,
+                    downloadFocusNode,
+                    bodyFocusNode,
+                  ),
                 ],
+              ),
+              if (episode.description != null &&
+                  episode.description!.isNotEmpty) ...[
+                const SizedBox(height: LayoutConstants.spacingSm),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Text(
+                    episode.description!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                      height: 1.4,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
+        ),
       ),
     );
   }

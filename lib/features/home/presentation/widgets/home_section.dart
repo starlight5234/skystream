@@ -85,7 +85,9 @@ class _HomeSectionState extends ConsumerState<HomeSection> {
                             '',
                         title: item.title,
                         heroTag: 'home_${item.url}_$index',
-                        onTap: () => DetailsRoute($extra: DetailsRouteExtra(item: item)).push(context),
+                        onTap: () => DetailsRoute(
+                          $extra: DetailsRouteExtra(item: item),
+                        ).push(context),
                       ),
                     );
                   },

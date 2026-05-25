@@ -48,8 +48,8 @@ class _FocusableItemState extends State<FocusableItem>
   void _updateState() {
     // In D-pad/keyboard mode the border+glow is the focus indicator; skip scale
     // to prevent edge items from overflowing the viewport.
-    final isDpad = FocusManager.instance.highlightMode ==
-        FocusHighlightMode.traditional;
+    final isDpad =
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final shouldScale = _isHovered || (_isFocused && !isDpad);
     if (shouldScale) {
       _ctrl.forward();
@@ -70,8 +70,7 @@ class _FocusableItemState extends State<FocusableItem>
       const duration = Duration(milliseconds: 380);
       const curve = Curves.fastOutSlowIn;
 
-      Scrollable.maybeOf(context, axis: Axis.horizontal)
-          ?.position
+      Scrollable.maybeOf(context, axis: Axis.horizontal)?.position
           .ensureVisible(ro, alignment: 0.5, duration: duration, curve: curve);
 
       final vScroll = Scrollable.maybeOf(context, axis: Axis.vertical);

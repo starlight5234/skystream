@@ -214,10 +214,9 @@ Future<List<MultimediaItem>> exploreHeroMovie(Ref ref) async {
 
         String? genresStr;
         if (details['genres'] != null) {
-          genresStr = List<Map<String, dynamic>>.from(details['genres'])
-              .take(3)
-              .map((g) => g['name'])
-              .join(' • ');
+          genresStr = List<Map<String, dynamic>>.from(
+            details['genres'],
+          ).take(3).map((g) => g['name']).join(' • ');
         }
 
         return movie.copyWith(

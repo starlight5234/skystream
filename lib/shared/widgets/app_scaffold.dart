@@ -121,7 +121,8 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
                     policy: WidgetOrderTraversalPolicy(),
                     child: AppSidebar(
                       currentIndex: widget.navigationShell.currentIndex,
-                      onItemTapped: (int index) => _onItemTapped(index, context),
+                      onItemTapped: (int index) =>
+                          _onItemTapped(index, context),
                       focusNodes: _sidebarNodes,
                     ),
                   ),
@@ -163,9 +164,12 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (err, stack) => Scaffold(
-          body: Center(
-              child: Text(
-                  AppLocalizations.of(context)!.errorPrefix(err.toString())))),
+        body: Center(
+          child: Text(
+            AppLocalizations.of(context)!.errorPrefix(err.toString()),
+          ),
+        ),
+      ),
     );
   }
 }

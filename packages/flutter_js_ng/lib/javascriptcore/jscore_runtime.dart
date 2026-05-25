@@ -6,8 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:ffi/ffi.dart';
 import '../javascript_runtime.dart';
-import './binding/js_object_ref.dart'
-    as jsObject;
+import './binding/js_object_ref.dart' as jsObject;
 import './flutter_jscore.dart';
 import './jscore_bindings.dart';
 import '../js_eval_result.dart';
@@ -75,7 +74,7 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
         exception.pointer);
     calloc.free(scriptCString);
     if (sourceUrlCString != null) {
-        calloc.free(sourceUrlCString as Pointer<NativeType>);
+      calloc.free(sourceUrlCString as Pointer<NativeType>);
     }
 
     String result;
@@ -206,7 +205,9 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
 
   Pointer<NativeType> _constructPromiseFor(Future future) {
     final id = future.hashCode;
-    final Pointer<Utf8> scriptCString = ('var __JSC_promise_result$id = {};' 'new Promise(function(resolve, reject) { __JSC_promise_result$id.resolve = resolve;' ' __JSC_promise_result$id.reject = reject;});')
+    final Pointer<Utf8> scriptCString = ('var __JSC_promise_result$id = {};'
+            'new Promise(function(resolve, reject) { __JSC_promise_result$id.resolve = resolve;'
+            ' __JSC_promise_result$id.reject = reject;});')
         .toNativeUtf8();
 
     final jsValueRef = jSEvaluateScript(
@@ -288,7 +289,8 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
       }
     } else if (jSValueIsObject(_globalContext, jsValue.rawResult) == 1 ||
         jSValueIsArray(_globalContext, jsValue.rawResult) == 1) {
-      final JSValue objValue = JSValuePointer(jsValue.rawResult).getValue(context);
+      final JSValue objValue =
+          JSValuePointer(jsValue.rawResult).getValue(context);
       final String serialized = objValue.createJSONString().string!;
       return jsonDecode(serialized);
     } else {
@@ -298,7 +300,8 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
 
   @override
   String jsonStringify(JsEvalResult jsValue) {
-    final JSValue objValue = JSValuePointer(jsValue.rawResult).getValue(context);
+    final JSValue objValue =
+        JSValuePointer(jsValue.rawResult).getValue(context);
     return objValue.createJSONString().string!;
   }
 

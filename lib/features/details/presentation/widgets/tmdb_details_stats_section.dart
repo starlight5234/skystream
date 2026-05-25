@@ -74,16 +74,18 @@ class TmdbDetailsStatsSection extends StatelessWidget {
             if (budget > 0)
               _DetailItem(
                 AppLocalizations.of(context)!.budgetLabel,
-                NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(
-                  budget,
-                ),
+                NumberFormat.currency(
+                  symbol: '\$',
+                  decimalDigits: 0,
+                ).format(budget),
               ),
             if (revenue > 0)
               _DetailItem(
                 AppLocalizations.of(context)!.revenueLabel,
-                NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(
-                  revenue,
-                ),
+                NumberFormat.currency(
+                  symbol: '\$',
+                  decimalDigits: 0,
+                ).format(revenue),
               ),
           ],
         ),

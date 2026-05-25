@@ -120,8 +120,9 @@ class _SearchResultSectionState extends ConsumerState<SearchResultSection> {
                         ),
                         title: item.title,
                         heroTag: uniqueTag,
-                        onTap: () => DetailsRoute($extra: DetailsRouteExtra(item: item))
-                            .push<void>(context),
+                        onTap: () => DetailsRoute(
+                          $extra: DetailsRouteExtra(item: item),
+                        ).push<void>(context),
                       ),
                     );
                   },

@@ -518,10 +518,8 @@ class JSObject {
       String name,
       Pointer<NativeFunction<JSObjectRef.JSObjectCallAsFunctionCallback>>?
           callAsFunction)
-      : pointer = JSObjectRef.jSObjectMakeFunctionWithCallback(
-            context.pointer,
-            JSString.fromString(name).pointer,
-            callAsFunction ?? nullptr);
+      : pointer = JSObjectRef.jSObjectMakeFunctionWithCallback(context.pointer,
+            JSString.fromString(name).pointer, callAsFunction ?? nullptr);
 
   /// Convenience method for creating a JavaScript constructor.
   /// The default object constructor takes no arguments and constructs an object of class jsClass with no private data.
@@ -544,11 +542,8 @@ class JSObject {
     this.context,
     JSValuePointer arguments, {
     JSValuePointer? exception,
-  }) : pointer = JSObjectRef.jSObjectMakeArray(
-            context.pointer,
-            arguments.count,
-            arguments.pointer,
-            (exception ?? JSValuePointer(nullptr)).pointer);
+  }) : pointer = JSObjectRef.jSObjectMakeArray(context.pointer, arguments.count,
+            arguments.pointer, (exception ?? JSValuePointer(nullptr)).pointer);
 
   /// Creates a JavaScript Date object, as if by invoking the built-in Date constructor.
   /// [arguments] A JSValue array of arguments to pass to the Date Constructor. Pass NULL if argumentCount is 0.
@@ -557,11 +552,8 @@ class JSObject {
     this.context,
     JSValuePointer arguments, {
     JSValuePointer? exception,
-  }) : pointer = JSObjectRef.jSObjectMakeDate(
-            context.pointer,
-            arguments.count,
-            arguments.pointer,
-            (exception ?? JSValuePointer(nullptr)).pointer);
+  }) : pointer = JSObjectRef.jSObjectMakeDate(context.pointer, arguments.count,
+            arguments.pointer, (exception ?? JSValuePointer(nullptr)).pointer);
 
   /// Creates a JavaScript Error object, as if by invoking the built-in Error constructor.
   /// [arguments] (JSValueRef[]) A JSValue array of arguments to pass to the Error Constructor. Pass NULL if argumentCount is 0.
@@ -570,11 +562,8 @@ class JSObject {
     this.context,
     JSValuePointer arguments, {
     JSValuePointer? exception,
-  }) : pointer = JSObjectRef.jSObjectMakeError(
-            context.pointer,
-            arguments.count,
-            arguments.pointer,
-            (exception ?? JSValuePointer(nullptr)).pointer);
+  }) : pointer = JSObjectRef.jSObjectMakeError(context.pointer, arguments.count,
+            arguments.pointer, (exception ?? JSValuePointer(nullptr)).pointer);
 
   /// Creates a JavaScript RegExp object, as if by invoking the built-in RegExp constructor.
   /// [arguments] (JSValueRef[]) A JSValue array of arguments to pass to the RegExp Constructor. Pass NULL if argumentCount is 0.
@@ -698,14 +687,13 @@ class JSObject {
     int byteOffset,
     int length, {
     JSValuePointer? exception,
-  }) : pointer =
-            JSTypedArray.jSObjectMakeTypedArrayWithArrayBufferAndOffset(
-                context.pointer,
-                JSValue.jSTypedArrayTypeToCEnum(arrayType),
-                buffer.pointer,
-                byteOffset,
-                length,
-                (exception ?? JSValuePointer(nullptr)).pointer);
+  }) : pointer = JSTypedArray.jSObjectMakeTypedArrayWithArrayBufferAndOffset(
+            context.pointer,
+            JSValue.jSTypedArrayTypeToCEnum(arrayType),
+            buffer.pointer,
+            byteOffset,
+            length,
+            (exception ?? JSValuePointer(nullptr)).pointer);
 
   /// Creates a JavaScript Array Buffer object from an existing pointer.
   /// If an exception is thrown during this function the bytesDeallocator will always be called.

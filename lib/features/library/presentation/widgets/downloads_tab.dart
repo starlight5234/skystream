@@ -89,7 +89,8 @@ class DownloadsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(child: Text(l10n.errorPrefix(err.toString()))),
+      error: (err, stack) =>
+          Center(child: Text(l10n.errorPrefix(err.toString()))),
     );
   }
 }
@@ -479,7 +480,11 @@ class _DownloadItemTile extends ConsumerWidget {
     }
   }
 
-  Future<void> _playLocalFile(BuildContext context, WidgetRef ref, AppLocalizations l10n) async {
+  Future<void> _playLocalFile(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) async {
     final downloadService = ref.read(downloadServiceProvider);
     final File? file = await downloadService.getDownloadedFile(
       item.item,
@@ -488,7 +493,9 @@ class _DownloadItemTile extends ConsumerWidget {
 
     if (file == null || !await file.exists()) {
       if (context.mounted) {
-        ref.read(notificationServiceProvider).showError(l10n.fileNotFoundRemoving);
+        ref
+            .read(notificationServiceProvider)
+            .showError(l10n.fileNotFoundRemoving);
       }
       // Self-delete from DB
       await ref.read(downloadsProvider.notifier).removeDownload(item);
@@ -502,7 +509,11 @@ class _DownloadItemTile extends ConsumerWidget {
     }
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, AppLocalizations l10n) {
+  void _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -53,7 +53,10 @@ class StorageService {
       // Attempt to salvage any readable entries before wiping the box.
       final Map<dynamic, dynamic> salvaged = {};
       try {
-        final recoveryBox = await Hive.openBox<dynamic>(boxName, crashRecovery: true);
+        final recoveryBox = await Hive.openBox<dynamic>(
+          boxName,
+          crashRecovery: true,
+        );
         for (var i = 0; i < recoveryBox.length; i++) {
           final key = recoveryBox.keyAt(i);
           salvaged[key] = recoveryBox.get(key);

@@ -265,7 +265,8 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
       if (!hasPendingXhrCalls()) return;
 
       // collect the pending calls into a local variable making copies
-      final List<dynamic> pendingCalls = List<dynamic>.from(getPendingXhrCalls()!);
+      final List<dynamic> pendingCalls =
+          List<dynamic>.from(getPendingXhrCalls()!);
       // clear the global pending calls list
       clearXhrPendingCalls();
 

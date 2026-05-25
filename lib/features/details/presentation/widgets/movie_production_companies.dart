@@ -40,7 +40,9 @@ class _MovieProductionCompaniesState extends State<MovieProductionCompanies> {
     }
 
     final isDesktop = context.isDesktop;
-    final displayCount = widget.isLoading ? 4 : widget.productionCompanies.length;
+    final displayCount = widget.isLoading
+        ? 4
+        : widget.productionCompanies.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

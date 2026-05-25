@@ -52,10 +52,7 @@ class ViewAllController extends _$ViewAllController {
     if (state.items.isEmpty && state.page == 1) {
       // Provider content has no TMDB pagination — show only the initial items.
       final noMore = category == ViewAllCategory.providerContent;
-      state = state.copyWith(
-        items: List.from(initialItems),
-        hasMore: !noMore,
-      );
+      state = state.copyWith(items: List.from(initialItems), hasMore: !noMore);
     }
   }
 

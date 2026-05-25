@@ -29,7 +29,8 @@ class DesktopScrollWrapper extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<DesktopScrollWrapper> createState() => _DesktopScrollWrapperState();
+  ConsumerState<DesktopScrollWrapper> createState() =>
+      _DesktopScrollWrapperState();
 }
 
 class _DesktopScrollWrapperState extends ConsumerState<DesktopScrollWrapper> {

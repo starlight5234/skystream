@@ -132,7 +132,9 @@ class AppTheme {
 
       // Bottom Navigation
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: const Color(0xFF000000), // Pure Black matches background
+        backgroundColor: const Color(
+          0xFF000000,
+        ), // Pure Black matches background
         selectedItemColor: colorScheme.primary,
         unselectedItemColor: colorScheme.onSurfaceVariant,
         type: BottomNavigationBarType.fixed,

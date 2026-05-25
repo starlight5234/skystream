@@ -69,11 +69,13 @@ class PlaybackLauncher {
         }
       });
     } else {
-      await PlayerRoute($extra: PlayerRouteExtra(
-        item: detailedItem ?? baseItem,
-        videoUrl: finalUrl,
-        episode: episode,
-      )).push(context);
+      await PlayerRoute(
+        $extra: PlayerRouteExtra(
+          item: detailedItem ?? baseItem,
+          videoUrl: finalUrl,
+          episode: episode,
+        ),
+      ).push(context);
     }
   }
 
@@ -131,11 +133,14 @@ class PlaybackLauncher {
                 .getPlayerById(playerId)
                 ?.displayName ??
             playerId;
-        _ref.read(notificationServiceProvider).showError(
+        _ref
+            .read(notificationServiceProvider)
+            .showError(
               AppLocalizations.of(context)!.playerNotDetected(playerName),
             );
-        PlayerRoute($extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl))
-            .push<void>(context);
+        PlayerRoute(
+          $extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl),
+        ).push<void>(context);
         return;
       }
 
@@ -161,11 +166,16 @@ class PlaybackLauncher {
         Navigator.of(context).pop(); // Dismiss if still there
         dialogDismissed = true;
       }
-      _ref.read(notificationServiceProvider).showError(
-            AppLocalizations.of(context)!.usingInternalPlayerError(e.toString()),
+      _ref
+          .read(notificationServiceProvider)
+          .showError(
+            AppLocalizations.of(
+              context,
+            )!.usingInternalPlayerError(e.toString()),
           );
-      PlayerRoute($extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl))
-          .push<void>(context);
+      PlayerRoute(
+        $extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl),
+      ).push<void>(context);
     }
   }
 
@@ -199,11 +209,14 @@ class PlaybackLauncher {
       final playerName =
           ExternalPlayerService.instance.getPlayerById(playerId)?.displayName ??
           playerId;
-      _ref.read(notificationServiceProvider).showError(
+      _ref
+          .read(notificationServiceProvider)
+          .showError(
             AppLocalizations.of(context)!.playerNotDetected(playerName),
           );
-      PlayerRoute($extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl))
-          .push<void>(context);
+      PlayerRoute(
+        $extra: PlayerRouteExtra(item: item, videoUrl: episodeDataUrl),
+      ).push<void>(context);
     }
   }
 
@@ -232,7 +245,9 @@ class PlaybackLauncher {
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
-                  AppLocalizations.of(context)!.selectSourceForPlayer(playerName),
+                  AppLocalizations.of(
+                    context,
+                  )!.selectSourceForPlayer(playerName),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -276,4 +291,3 @@ class PlaybackLauncher {
     );
   }
 }
-

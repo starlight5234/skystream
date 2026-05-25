@@ -149,7 +149,9 @@ class TmdbDetails extends MultimediaItem {
         : <TmdbSeason>[];
 
     final credits = json['credits'] ?? <String, dynamic>{};
-        final castList = List<Map<String, dynamic>>.from(credits['cast'] ?? <dynamic>[]);
+    final castList = List<Map<String, dynamic>>.from(
+      credits['cast'] ?? <dynamic>[],
+    );
     final cast = castList.map((c) => TmdbCast.fromJson(c)).toList();
 
     // Find Director / Creator
@@ -204,7 +206,8 @@ class TmdbDetails extends MultimediaItem {
       releaseDate: date,
       voteAverage: voteAvg,
       overview: overview,
-      logoUrl: json['logo_url'] as String?, // Might be populated before/after this
+      logoUrl:
+          json['logo_url'] as String?, // Might be populated before/after this
       genresStr: genresStr,
       runtime: (runtime as num).toInt(),
       certification: certification,
@@ -243,7 +246,9 @@ class TmdbSeason {
   factory TmdbSeason.fromJson(Map<String, dynamic> json) {
     return TmdbSeason(
       seasonNumber: (json['season_number'] as int?) ?? 0,
-      name: json['name'] != null ? _unescape.convert(json['name'] as String) : '',
+      name: json['name'] != null
+          ? _unescape.convert(json['name'] as String)
+          : '',
       posterPath: json['poster_path'] as String?,
       episodeCount: (json['episode_count'] as int?) ?? 0,
       airDate: json['air_date'] as String?,
@@ -263,7 +268,9 @@ class TmdbCast {
 
   factory TmdbCast.fromJson(Map<String, dynamic> json) {
     return TmdbCast(
-      name: json['name'] != null ? _unescape.convert(json['name'] as String) : 'Unknown',
+      name: json['name'] != null
+          ? _unescape.convert(json['name'] as String)
+          : 'Unknown',
       character: json['character'] != null
           ? _unescape.convert(json['character'] as String)
           : '',

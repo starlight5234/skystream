@@ -24,27 +24,29 @@ class BookmarksTab extends ConsumerWidget {
       LibraryError(message: final msg) => Center(child: Text(msg)),
       LibraryEmpty() => _buildEmpty(context),
       LibrarySuccess(items: final items) => GridView.builder(
-          padding: const EdgeInsets.all(LayoutConstants.spacingMd),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: totalHeight,
-            childAspectRatio: 2 / 3.4,
-            crossAxisSpacing: LayoutConstants.spacingMd,
-            mainAxisSpacing: LayoutConstants.spacingMd,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return MultimediaCard(
-              key: ValueKey(item.url),
-              imageUrl:
-                  AppImageFallbacks.poster(item.posterUrl, label: item.title) ??
-                  '',
-              title: item.title,
-              heroTag: 'lib_bookmark_${item.url}_$index',
-              onTap: () => DetailsRoute($extra: DetailsRouteExtra(item: item)).push(context),
-            );
-          },
+        padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: totalHeight,
+          childAspectRatio: 2 / 3.4,
+          crossAxisSpacing: LayoutConstants.spacingMd,
+          mainAxisSpacing: LayoutConstants.spacingMd,
         ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return MultimediaCard(
+            key: ValueKey(item.url),
+            imageUrl:
+                AppImageFallbacks.poster(item.posterUrl, label: item.title) ??
+                '',
+            title: item.title,
+            heroTag: 'lib_bookmark_${item.url}_$index',
+            onTap: () => DetailsRoute(
+              $extra: DetailsRouteExtra(item: item),
+            ).push(context),
+          );
+        },
+      ),
     };
   }
 

@@ -38,7 +38,9 @@ class HistoryItem {
         bannerUrl: map['bannerUrl'] as String?,
         description: map['description'] as String?,
         contentType: MultimediaItem.parseContentType(
-          (map['type'] as String?) ?? (map['contentType'] as String?) ?? 'movie',
+          (map['type'] as String?) ??
+              (map['contentType'] as String?) ??
+              'movie',
         ),
         provider: map['provider'] as String?,
       ),

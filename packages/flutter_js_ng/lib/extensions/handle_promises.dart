@@ -7,7 +7,7 @@ const REGISTER_PROMISE_FUNCTION = 'FLUTTER_NATIVEJS_REGISTER_PROMISE';
 
 extension HandlePromises on JavascriptRuntime {
   void enableHandlePromises() {
-    final fnRegisterPromise = evaluate(""" 
+    final fnRegisterPromise = evaluate("""
      var FLUTTER_NATIVEJS_PENDING_PROMISES = {};
       var FLUTTER_NATIVEJS_PENDING_PROMISES_COUNT = -1;
 
@@ -109,8 +109,8 @@ extension HandlePromises on JavascriptRuntime {
       fnEvaluatePromise = () async {
         executePendingJob();
         if (!completed) {
-          await Future.delayed(
-              const Duration(milliseconds: 20), () => fnEvaluatePromise!.call());
+          await Future.delayed(const Duration(milliseconds: 20),
+              () => fnEvaluatePromise!.call());
         } else {
           if (JavascriptRuntime.debugEnabled) {
             print('Promise completed');

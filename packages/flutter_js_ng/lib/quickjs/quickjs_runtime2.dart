@@ -171,7 +171,6 @@ class QuickJsRuntime2 extends JavascriptRuntime {
     if (_rt != null) jsRunGC(_rt!);
   }
 
-
   void _executePendingJob() {
     final rt = _rt;
     final ctx = _ctx;

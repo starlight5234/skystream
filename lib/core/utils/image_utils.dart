@@ -7,10 +7,12 @@ class ImageUtils {
   /// Returns `true` by default if the URL is empty or the image fails to load.
   static Future<bool> isImagePortrait(String url) {
     if (url.isEmpty) return Future.value(true);
-    
+
     final completer = Completer<bool>();
-    final stream = CachedNetworkImageProvider(url).resolve(const ImageConfiguration());
-    
+    final stream = CachedNetworkImageProvider(
+      url,
+    ).resolve(const ImageConfiguration());
+
     late final ImageStreamListener listener;
     listener = ImageStreamListener(
       (ImageInfo info, bool _) {
@@ -27,7 +29,7 @@ class ImageUtils {
         stream.removeListener(listener);
       },
     );
-    
+
     stream.addListener(listener);
     return completer.future;
   }

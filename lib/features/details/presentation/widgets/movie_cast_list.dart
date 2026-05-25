@@ -36,7 +36,8 @@ class _MovieCastListState extends State<MovieCastList> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isLoading && widget.cast.isEmpty) return const SizedBox.shrink();
+    if (!widget.isLoading && widget.cast.isEmpty)
+      return const SizedBox.shrink();
 
     final isDesktop = context.isDesktop;
     final displayCount = widget.isLoading ? 6 : widget.cast.length;

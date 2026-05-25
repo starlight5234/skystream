@@ -356,7 +356,13 @@ Stream<SearchAggregateState> searchResults(Ref ref) {
     cancelled = true;
   });
 
-  return searchAllProviders(ref, query, manager, filter: filter, isCancelled: () => cancelled);
+  return searchAllProviders(
+    ref,
+    query,
+    manager,
+    filter: filter,
+    isCancelled: () => cancelled,
+  );
 }
 
 class SearchSuggestionState {

@@ -139,7 +139,9 @@ class _ContinueWatchingSectionState
                 return ListView.builder(
                   controller: _scrollController,
                   padding: EdgeInsets.symmetric(
-                    horizontal: isLarge ? LayoutConstants.dashboardContentPadding : 16,
+                    horizontal: isLarge
+                        ? LayoutConstants.dashboardContentPadding
+                        : 16,
                     vertical: 8,
                   ),
                   scrollDirection: Axis.horizontal,

@@ -119,82 +119,90 @@ class _TmdbMovieDetailsScreenState
 
     final content = hasAnyData
         ? (context.isDesktop
-            ? _buildDesktopLayout(data, isHeavyLoading)
-            : _buildMobileLayout(data, isHeavyLoading))
+              ? _buildDesktopLayout(data, isHeavyLoading)
+              : _buildMobileLayout(data, isHeavyLoading))
         : detailsAsync.when(
             skipLoadingOnReload: false,
             skipLoadingOnRefresh: false,
             data: (data) => const SizedBox.shrink(), // Handled by hasAnyData
-      loading: () {
-        final isMovie = widget.mediaType == 'movie';
-        return Scaffold(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: const BackButton(),
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ShimmerPlaceholder.rectangular(
-                  height: 200,
-                  width: double.infinity,
-                  borderRadius: 12,
+            loading: () {
+              final isMovie = widget.mediaType == 'movie';
+              return Scaffold(
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                appBar: AppBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  leading: const BackButton(),
                 ),
-                const SizedBox(height: 24),
-                Row(
+                body: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ShimmerPlaceholder.rectangular(
+                        height: 200,
+                        width: double.infinity,
+                        borderRadius: 12,
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          _buildTmdbLogo(),
+                          const SizedBox(width: 12),
+                          _buildTopBadge(
+                            context,
+                            isMovie
+                                ? l10n.movie.toUpperCase()
+                                : l10n.tvShow.toUpperCase(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      ShimmerPlaceholder.rectangular(
+                        height: 30,
+                        width: 250,
+                        borderRadius: 6,
+                      ),
+                      const SizedBox(height: 16),
+                      ShimmerPlaceholder.rectangular(
+                        height: 100,
+                        width: double.infinity,
+                        borderRadius: 12,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            error: (e, st) => Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                leading: const BackButton(),
+              ),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildTmdbLogo(),
-                    const SizedBox(width: 12),
-                    _buildTopBadge(context, isMovie ? l10n.movie.toUpperCase() : l10n.tvShow.toUpperCase()),
+                    Text(
+                      l10n.failedToLoadContent,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          ref.invalidate(tmdbDetailsProvider(params)),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(l10n.retry),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                ShimmerPlaceholder.rectangular(
-                  height: 30,
-                  width: 250,
-                  borderRadius: 6,
-                ),
-                const SizedBox(height: 16),
-                ShimmerPlaceholder.rectangular(
-                  height: 100,
-                  width: double.infinity,
-                  borderRadius: 12,
-                ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
-      error: (e, st) => Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: const BackButton(),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                l10n.failedToLoadContent,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => ref.invalidate(tmdbDetailsProvider(params)),
-                icon: const Icon(Icons.refresh),
-                label: Text(l10n.retry),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+          );
 
     final scaffold = Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -567,7 +575,12 @@ class _TmdbMovieDetailsScreenState
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _buildTmdbLogo(),
-                    _buildTopBadge(context, isMovie ? l10n.movie.toUpperCase() : l10n.tvShow.toUpperCase()),
+                    _buildTopBadge(
+                      context,
+                      isMovie
+                          ? l10n.movie.toUpperCase()
+                          : l10n.tvShow.toUpperCase(),
+                    ),
                     _buildIconInfo(context, Icons.calendar_today_rounded, year),
                     _buildIconInfo(
                       context,
@@ -603,7 +616,9 @@ class _TmdbMovieDetailsScreenState
                     ),
                     children: [
                       TextSpan(
-                        text: isMovie ? "${l10n.director}: " : "${l10n.creator}: ",
+                        text: isMovie
+                            ? "${l10n.director}: "
+                            : "${l10n.creator}: ",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Theme.of(
@@ -648,10 +663,10 @@ class _TmdbMovieDetailsScreenState
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Row(
                               children: [
-                                  Text(
-                                    _isDescriptionExpanded
-                                        ? l10n.showLess
-                                        : l10n.showMore,
+                                Text(
+                                  _isDescriptionExpanded
+                                      ? l10n.showLess
+                                      : l10n.showMore,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -699,7 +714,8 @@ class _TmdbMovieDetailsScreenState
                   ),
                 ],
 
-                if (!isMovie && (isHeavyLoading || data.seasons.isNotEmpty)) ...[
+                if (!isMovie &&
+                    (isHeavyLoading || data.seasons.isNotEmpty)) ...[
                   MovieSeasonsList(
                     movieId: widget.movieId,
                     seasons: data.seasons,
@@ -708,7 +724,9 @@ class _TmdbMovieDetailsScreenState
 
                 // Movie Details Table
                 Text(
-                  isMovie ? l10n.movieDetails.toUpperCase() : l10n.showDetails.toUpperCase(),
+                  isMovie
+                      ? l10n.movieDetails.toUpperCase()
+                      : l10n.showDetails.toUpperCase(),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 16,

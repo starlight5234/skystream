@@ -67,8 +67,23 @@ class TmdbService {
     final iso = fullLanguageCode.split('-')[0].toLowerCase();
     const regional = {'kn', 'ml', 'bn', 'mr', 'pa', 'gu', 'or', 'as'};
     const major = {
-      'hi', 'ta', 'te', 'es', 'fr', 'de', 'it', 'ja', 'ko', 'ru', 'pt',
-      'zh', 'tr', 'ar', 'pl', 'nl', 'sv'
+      'hi',
+      'ta',
+      'te',
+      'es',
+      'fr',
+      'de',
+      'it',
+      'ja',
+      'ko',
+      'ru',
+      'pt',
+      'zh',
+      'tr',
+      'ar',
+      'pl',
+      'nl',
+      'sv',
     };
     if (iso == 'en') return 100;
     if (major.contains(iso)) return 25;
@@ -526,7 +541,10 @@ class TmdbService {
     }
     if (minRating != null) query['vote_average.gte'] = minRating;
 
-    final response = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
+    final response = await _dio.get<Map<String, dynamic>>(
+      path,
+      queryParameters: query,
+    );
 
     if (response.statusCode == 200 && response.data != null) {
       return (response.data!['results'] as List)

@@ -104,8 +104,12 @@ class DashboardHeaderBar extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: 500),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(LayoutConstants.radiusPill),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    LayoutConstants.radiusPill,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -143,7 +147,9 @@ class DashboardHeaderBar extends ConsumerWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
               ),
               child: Icon(
                 Icons.refresh,
@@ -164,7 +170,9 @@ class DashboardHeaderBar extends ConsumerWidget {
               height: 36,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
                 borderRadius: BorderRadius.circular(LayoutConstants.radiusPill),
               ),
               child: Row(

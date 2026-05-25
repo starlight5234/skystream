@@ -11,7 +11,8 @@ NotificationService notificationService(Ref ref) {
 /// A global service to manage UI notifications (SnackBars) without needing a [BuildContext].
 /// This is particularly useful for background tasks, providers, and deep nested components.
 class NotificationService {
-  final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   void showSnackBar(
     String message, {
@@ -38,7 +39,13 @@ class NotificationService {
             Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(message, style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w500)),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ],
         ),
@@ -54,10 +61,20 @@ class NotificationService {
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 20),
+            Icon(
+              Icons.check_circle_outline,
+              color: Colors.green.shade700,
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(message, style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ],
         ),

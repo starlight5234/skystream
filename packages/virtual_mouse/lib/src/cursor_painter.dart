@@ -4,10 +4,7 @@ class CursorPainter extends CustomPainter {
   final Color color;
   final double angle;
 
-  CursorPainter({
-    required this.color,
-    required this.angle,
-  });
+  CursorPainter({required this.color, required this.angle});
 
   @override
   void paint(Canvas canvas, Size size) {

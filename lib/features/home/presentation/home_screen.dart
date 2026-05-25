@@ -285,17 +285,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _wrapWithHeaderIfNeeded(BuildContext context, bool isWidescreen, Widget child) {
+  Widget _wrapWithHeaderIfNeeded(
+    BuildContext context,
+    bool isWidescreen,
+    Widget child,
+  ) {
     if (!isWidescreen) return child;
     return CustomScrollView(
       // Ensure we use the main scroll controller so opacity updates work
       controller: _scrollController,
       slivers: [
         _buildWidescreenHeader(context),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: child,
-        ),
+        SliverFillRemaining(hasScrollBody: false, child: child),
       ],
     );
   }
@@ -331,10 +332,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     return switch (state) {
-      HomeLoading() => _wrapWithHeaderIfNeeded(context, isWidescreen, const Center(child: CircularProgressIndicator())),
-      HomeNoProvider() => _wrapWithHeaderIfNeeded(context, isWidescreen, _buildNoProviderState(context, l10n, isWidescreen: isWidescreen)),
-      HomeOffline() => _wrapWithHeaderIfNeeded(context, isWidescreen, _buildErrorState(context, l10n.noInternetError, ref)),
-      HomeError(:final message) => _wrapWithHeaderIfNeeded(context, isWidescreen, _buildErrorState(context, message, ref)),
+      HomeLoading() => _wrapWithHeaderIfNeeded(
+        context,
+        isWidescreen,
+        const Center(child: CircularProgressIndicator()),
+      ),
+      HomeNoProvider() => _wrapWithHeaderIfNeeded(
+        context,
+        isWidescreen,
+        _buildNoProviderState(context, l10n, isWidescreen: isWidescreen),
+      ),
+      HomeOffline() => _wrapWithHeaderIfNeeded(
+        context,
+        isWidescreen,
+        _buildErrorState(context, l10n.noInternetError, ref),
+      ),
+      HomeError(:final message) => _wrapWithHeaderIfNeeded(
+        context,
+        isWidescreen,
+        _buildErrorState(context, message, ref),
+      ),
       HomeSuccess(:final data) => RefreshIndicator(
         onRefresh: () async => ref.read(homeDataProvider.notifier).fetch(),
         child: CustomScrollView(

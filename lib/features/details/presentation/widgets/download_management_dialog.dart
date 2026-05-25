@@ -74,7 +74,11 @@ class DownloadManagementDialog extends HookConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(l10n.delete, style: const TextStyle(color: Colors.red)),
               ],
@@ -130,7 +134,10 @@ class DownloadManagementDialog extends HookConsumerWidget {
             onPressed: () => Navigator.pop(context, true),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(l10n.yesDelete, style: const TextStyle(color: Colors.white)),
+              child: Text(
+                l10n.yesDelete,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ),
         ],

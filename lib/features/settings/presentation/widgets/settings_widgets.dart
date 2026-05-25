@@ -87,11 +87,11 @@ class _SettingsTileState extends State<SettingsTile> {
                 final ro = ctx?.findRenderObject();
                 if (ctx != null && ctx.mounted && ro != null) {
                   Scrollable.maybeOf(ctx)?.position.ensureVisible(
-                        ro,
-                        alignment: 0.5,
-                        duration: const Duration(milliseconds: 380),
-                        curve: Curves.fastOutSlowIn,
-                      );
+                    ro,
+                    alignment: 0.5,
+                    duration: const Duration(milliseconds: 380),
+                    curve: Curves.fastOutSlowIn,
+                  );
                 }
               });
             }
@@ -133,7 +133,8 @@ class _SettingsTileState extends State<SettingsTile> {
                         ),
                       )
                     : null,
-                trailing: widget.trailing ??
+                trailing:
+                    widget.trailing ??
                     const Icon(Icons.chevron_right_rounded, size: 20),
                 onTap: widget.onTap,
                 shape: RoundedRectangleBorder(

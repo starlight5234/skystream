@@ -466,9 +466,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               subtitleViewConfiguration:
                                   const SubtitleViewConfiguration(
                                     visible: false,
-                                    style: TextStyle(
-                                      color: Colors.transparent,
-                                    ),
+                                    style: TextStyle(color: Colors.transparent),
                                   ),
                               controls: (state) => const SizedBox.shrink(),
                             );

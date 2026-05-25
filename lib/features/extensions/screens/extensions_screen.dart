@@ -357,7 +357,8 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     AppLocalizations l10n,
   ) {
     // True when every plugin in this repo is already installed (non-debug).
-    final allInstalled = plugins.isNotEmpty &&
+    final allInstalled =
+        plugins.isNotEmpty &&
         plugins.every(
           (p) => state.installedPlugins.any(
             (i) => !i.isDebug && i.packageName == p.packageName,
@@ -437,11 +438,11 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                 button: true,
                 label: l10n.downloadAllProviders,
                 child: IconButton(
-                  focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                  focusColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.15),
                   icon: Icon(
-                    allInstalled
-                        ? Icons.check_circle_outline
-                        : Icons.download,
+                    allInstalled ? Icons.check_circle_outline : Icons.download,
                     color: allInstalled
                         ? Theme.of(context).colorScheme.primary
                         : null,
@@ -459,7 +460,9 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                 ),
               ),
               IconButton(
-                focusColor: Theme.of(context).colorScheme.error.withValues(alpha: 0.15),
+                focusColor: Theme.of(
+                  context,
+                ).colorScheme.error.withValues(alpha: 0.15),
                 icon: Icon(
                   Icons.delete_outline,
                   color: Theme.of(context).colorScheme.error,
@@ -545,7 +548,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
         ),
         actions: [
           CustomButton(
-
             onPressed: () => Navigator.pop(context),
             child: Text(
               l10n.cancel,
@@ -594,10 +596,9 @@ class _PluginTile extends ConsumerWidget {
         leading: Container(
           padding: const EdgeInsets.all(LayoutConstants.spacingXs),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .tertiary
-                .withValues(alpha: 0.1),
+            color: Theme.of(
+              context,
+            ).colorScheme.tertiary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(
@@ -644,14 +645,11 @@ class _PluginTile extends ConsumerWidget {
 
     final installedPlugin = state.installedPlugins
         .cast<ExtensionPlugin?>()
-        .firstWhere(
-          (p) {
-            if (p == null) return false;
-            if (p.isDebug) return false;
-            return p.packageName == plugin.packageName;
-          },
-          orElse: () => null,
-        );
+        .firstWhere((p) {
+          if (p == null) return false;
+          if (p.isDebug) return false;
+          return p.packageName == plugin.packageName;
+        }, orElse: () => null);
 
     final isInstalled = installedPlugin != null;
     final updateAvailable = state.availableUpdates[plugin.packageName];
@@ -660,8 +658,7 @@ class _PluginTile extends ConsumerWidget {
       leading: Container(
         padding: const EdgeInsets.all(LayoutConstants.spacingXs),
         decoration: BoxDecoration(
-          color:
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
@@ -755,15 +752,13 @@ class _PluginTile extends ConsumerWidget {
     );
 
     // Version from installed copy if present, otherwise from the catalog.
-    final version = 'v${isInstalled ? installedPlugin!.version : plugin.version}';
+    final version =
+        'v${isInstalled ? installedPlugin!.version : plugin.version}';
 
     // Authors: up to 2, prefixed with "By".
     final authors = plugin.authors.take(2).join(', ');
 
-    final metaParts = [
-      version,
-      if (authors.isNotEmpty) 'By $authors',
-    ];
+    final metaParts = [version, if (authors.isNotEmpty) 'By $authors'];
     final metaLine = metaParts.join(' • ');
 
     final desc = plugin.description;

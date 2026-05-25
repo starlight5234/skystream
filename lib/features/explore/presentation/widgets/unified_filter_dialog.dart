@@ -155,9 +155,7 @@ class _UnifiedFilterDialogState extends ConsumerState<UnifiedFilterDialog>
                         Consumer(
                           builder: (c, ref, _) {
                             final hasFilter =
-                                ref
-                                    .watch(exploreFilterProvider)
-                                    .selectedYear !=
+                                ref.watch(exploreFilterProvider).selectedYear !=
                                 null;
                             return Tab(
                               text: "Year",

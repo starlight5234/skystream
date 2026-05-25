@@ -15,14 +15,11 @@ class PluginDomain {
 class PluginSubProvider {
   final String id;
   final String name;
+
   /// Optional static URL. When null the JS resolves the URL dynamically via manifest.providerId.
   final String? baseUrl;
 
-  const PluginSubProvider({
-    required this.id,
-    required this.name,
-    this.baseUrl,
-  });
+  const PluginSubProvider({required this.id, required this.name, this.baseUrl});
 
   factory PluginSubProvider.fromJson(Map<String, dynamic> json) {
     final rawUrl = json['baseUrl'] as String?;
@@ -52,7 +49,8 @@ class ExtensionPlugin {
   final Map<String, dynamic> manifest; // Raw JSON manifest
   final String? customBaseUrl; // User-defined override for baseUrl
   final List<PluginDomain>? domains; // Available mirror domains from manifest
-  final List<PluginSubProvider>? providers; // Sub-providers (one JS, many feeds)
+  final List<PluginSubProvider>?
+  providers; // Sub-providers (one JS, many feeds)
 
   ExtensionPlugin({
     required this.packageName,
