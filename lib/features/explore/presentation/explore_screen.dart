@@ -33,6 +33,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   final ValueNotifier<double> _appBarOpacityNotifier = ValueNotifier<double>(0);
   final FocusNode _firstActionFocusNode = FocusNode();
 
+  /// Cached during build so [_onScroll] can skip logic on widescreen.
+  bool _isCurrentlyWidescreen = false;
+
   /// Carousel controller exposed by ExploreCarousel via [onControllerReady].
   CarouselSliderController? _carouselController;
 
@@ -48,6 +51,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
+
+    // On widescreen there is no mobile AppBar, skip calculations
+    if (_isCurrentlyWidescreen) return;
+
     final offset = _scrollController.offset * 0.8;
     final opacity = (offset / 300).clamp(0.0, 1.0);
     if (opacity != _appBarOpacityNotifier.value) {
@@ -75,7 +82,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
 
     final profile = ref.watch(deviceProfileProvider).asData?.value;
     final isTv = profile?.isTv == true || context.isTv;
-    final isWidescreen = isTv || context.isTabletOrLarger;
+    // Use profile?.isLargeScreen so this matches AppScaffold's sidebar
+    // decision even when the ExploreScreen's context width is narrowed
+    // by the sidebar (e.g. iPad portrait).
+    final isWidescreen = isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
+    _isCurrentlyWidescreen = isWidescreen;
 
     if (isWidescreen) {
       return Scaffold(
@@ -126,7 +137,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
             actions: [
               Padding(
                 padding: const EdgeInsets.only(
-                  right: LayoutConstants.spacingXs,
+                  right: LayoutConstants.spacingMd,
                 ),
                 child: CardsWrapper(
                   onTap: () {
@@ -205,31 +216,23 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   }
 
   Widget _buildWidescreenBody(BuildContext context) {
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        // Explore header bar (widescreen only)
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _ExploreHeaderDelegate(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: ExploreHeaderBar(
-                searchFocusNode: _firstActionFocusNode,
-                onPrevious: _carouselController != null
-                    ? () => _carouselController!.previousPage()
-                    : null,
-                onNext: _carouselController != null
-                    ? () => _carouselController!.nextPage()
-                    : null,
-              ),
-            ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: ExploreHeaderBar(
+            searchFocusNode: _firstActionFocusNode,
+            onPrevious: _carouselController != null
+                ? () => _carouselController!.previousPage()
+                : null,
+            onNext: _carouselController != null
+                ? () => _carouselController!.nextPage()
+                : null,
           ),
         ),
-
-        ..._buildContentSlivers(context),
-
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        Expanded(
+          child: _buildScrollView(context),
+        ),
       ],
     );
   }
@@ -264,16 +267,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                         onControllerReady: (c) =>
                             setState(() => _carouselController = c),
                       ),
-              AsyncLoading() => Padding(
-                padding: const EdgeInsets.only(
-                  bottom: LayoutConstants.spacingLg,
-                ),
-                child: SizedBox(
-                  height: 500,
-                  width: double.infinity,
-                  child: ShimmerPlaceholder(borderRadius: 12),
-                ),
-              ),
+              AsyncLoading() => _buildCarouselShimmer(context),
               AsyncError() => Container(
                 height: 500,
                 margin: const EdgeInsets.only(
@@ -399,84 +393,101 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                 category: category,
                 heroTagPrefix: 'explore',
               ),
-      AsyncLoading() => Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: LayoutConstants.spacingMd,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title Placeholder
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: LayoutConstants.spacingMd,
-              ),
-              child: ShimmerPlaceholder.rectangular(
-                width: 150,
-                height: 24,
-                borderRadius: 4,
-              ),
-            ),
-            const SizedBox(height: LayoutConstants.spacingMd),
-            // List Placeholder
-            SizedBox(
-              height: 250,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemCount: 5,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: LayoutConstants.spacingSm),
-                itemBuilder: (context, index) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ShimmerPlaceholder.rectangular(
-                        width: 130, // mobile width
-                        height: 195,
-                        borderRadius: 12,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+      AsyncLoading() => _buildListShimmer(context),
       AsyncError() => const SizedBox.shrink(),
     };
   }
-}
 
-class _ExploreHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-
-  _ExploreHeaderDelegate({required this.child});
-
-  @override
-  double get minExtent => LayoutConstants.dashboardHeaderHeight + 8; // padding top 8
-
-  @override
-  double get maxExtent => LayoutConstants.dashboardHeaderHeight + 8;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // We add a subtle background so content doesn't collide when scrolling behind it
-    return ColoredBox(
-      color: Theme.of(
-        context,
-      ).scaffoldBackgroundColor.withValues(alpha: shrinkOffset > 0 ? 0.9 : 1.0),
-      child: child,
-    );
+  Widget _buildCarouselShimmer(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final heroHeight = size.height * 0.60;
+    final isDesktop =
+        size.width > LayoutConstants.exploreCarouselDesktopBreakpoint;
+    
+    if (isDesktop) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: LayoutConstants.dashboardContentPadding,
+          vertical: LayoutConstants.spacingSm,
+        ),
+        child: SizedBox(
+          height: heroHeight,
+          width: double.infinity,
+          child: ShimmerPlaceholder(borderRadius: 18),
+        ),
+      );
+    } else {
+      return SizedBox(
+        height: heroHeight,
+        width: double.infinity,
+        child: ShimmerPlaceholder.rectangular(
+          width: double.infinity,
+          height: heroHeight,
+          borderRadius: 0,
+        ),
+      );
+    }
   }
 
-  @override
-  bool shouldRebuild(covariant _ExploreHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child;
+  Widget _buildListShimmer(BuildContext context) {
+    final isDesktop = context.isDesktop;
+    final cardWidth = isDesktop ? 200.0 : 130.0;
+    final imageHeight = cardWidth / (2 / 3);
+    final listHeight = imageHeight + 40.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title Placeholder
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
+            LayoutConstants.spacingLg,
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
+            LayoutConstants.spacingSm,
+          ),
+            child: ShimmerPlaceholder.rectangular(
+              width: 150,
+              height: 24,
+              borderRadius: 4,
+            ),
+          ),
+          const SizedBox(height: LayoutConstants.spacingMd),
+          // List Placeholder
+          SizedBox(
+            height: listHeight,
+            child: ListView.separated(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop
+                    ? LayoutConstants.dashboardContentPadding
+                    : LayoutConstants.spacingMd,
+              ),
+              scrollDirection: Axis.horizontal,
+              itemCount: 10,
+              separatorBuilder: (_, _) => SizedBox(
+                width: isDesktop
+                    ? LayoutConstants.spacingLg
+                    : LayoutConstants.spacingSm,
+              ),
+              itemBuilder: (context, index) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerPlaceholder.rectangular(
+                      width: cardWidth,
+                      height: imageHeight,
+                      borderRadius: 12,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      );
   }
 }

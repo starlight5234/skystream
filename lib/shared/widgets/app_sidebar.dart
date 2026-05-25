@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
+import 'package:skystream/core/storage/settings_repository.dart';
+import 'package:skystream/core/providers/device_info_provider.dart';
 
 /// Number of destinations rendered by [AppSidebar]. Used by [AppScaffold] to
 /// size its own FocusNode list so the two stay in sync — change this and the
 /// destinations list together.
 const int kSidebarDestinationCount = 5;
 
-class AppSidebar extends StatefulWidget {
+class AppSidebar extends ConsumerStatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onItemTapped;
   // FocusNodes owned by the parent scaffold so the content-area key handler
@@ -24,16 +27,36 @@ class AppSidebar extends StatefulWidget {
   });
 
   @override
-  State<AppSidebar> createState() => _AppSidebarState();
+  ConsumerState<AppSidebar> createState() => _AppSidebarState();
 }
 
-class _AppSidebarState extends State<AppSidebar> {
+class _AppSidebarState extends ConsumerState<AppSidebar> {
   bool _isExpanded = true;
 
+  @override
+  void initState() {
+    super.initState();
+    final repo = ref.read(settingsRepositoryProvider);
+    final savedState = repo.getSidebarExpanded();
+    if (savedState != null) {
+      _isExpanded = savedState;
+    } else {
+      // Apply defaults based on platform
+      final profile = ref.read(deviceProfileProvider).asData?.value;
+      if (profile?.isTv == true || profile?.isTablet == true) {
+        _isExpanded = false;
+      } else {
+        _isExpanded = true;
+      }
+    }
+  }
+
   void _toggleSidebar() {
+    final newState = !_isExpanded;
     setState(() {
-      _isExpanded = !_isExpanded;
+      _isExpanded = newState;
     });
+    ref.read(settingsRepositoryProvider).setSidebarExpanded(newState);
   }
 
   @override

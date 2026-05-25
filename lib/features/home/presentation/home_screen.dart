@@ -22,6 +22,7 @@ import 'package:skystream/core/router/app_router.dart';
 import 'delegates/home_search_delegate.dart';
 import '../../../shared/widgets/cards_wrapper.dart';
 import '../../../shared/widgets/custom_widgets.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../../core/utils/responsive_breakpoints.dart';
 import '../../../../core/providers/device_info_provider.dart';
@@ -42,6 +43,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final ValueNotifier<bool> _isFabExtended = ValueNotifier<bool>(true);
   final FocusNode _firstActionFocusNode = FocusNode();
 
+  /// Cached during build so [_onScroll] can skip FAB logic on widescreen.
+  bool _isCurrentlyWidescreen = false;
+
   /// Carousel controller exposed by ExploreCarousel via [onControllerReady].
   /// Used by DashboardHeaderBar arrows.
   CarouselSliderController? _carouselController;
@@ -57,6 +61,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
+
+    // On widescreen there is no mobile AppBar (opacity notifier) and no FAB
+    // (extended notifier). Skip all work to avoid per-frame overhead that
+    // can stall the rendering pipeline during bounce / direction-change.
+    if (_isCurrentlyWidescreen) return;
 
     final opacity = (_scrollController.offset * 0.8 / 300).clamp(0.0, 1.0);
     if (opacity != _appBarOpacityNotifier.value) {
@@ -99,19 +108,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final profile = ref.watch(deviceProfileProvider).asData?.value;
     final isTv = profile?.isTv == true || context.isTv;
-    final isWidescreen = isTv || context.isTabletOrLarger;
+    // Use profile?.isLargeScreen so this matches AppScaffold's sidebar
+    // decision even when the HomeScreen's context width is narrowed
+    // by the sidebar (e.g. iPad portrait).
+    final isWidescreen = isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
+    _isCurrentlyWidescreen = isWidescreen;
 
     // On widescreen: no AppBar, no FAB — we use the DashboardHeaderBar instead.
+    // The header lives outside the scroll view in a plain Column so there is
+    // no SliverPersistentHeader / pinned-header interaction with scroll
+    // physics (which was causing scroll-direction-change jitter on iPad).
     if (isWidescreen) {
       return Scaffold(
         extendBodyBehindAppBar: false,
         backgroundColor: Colors.transparent,
-        body: _buildBody(
-          context,
-          homeDataAsync,
-          history,
-          generalSettings.watchHistoryEnabled,
-          isWidescreen: true,
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: DashboardHeaderBar(
+                searchFocusNode: _firstActionFocusNode,
+                onShowProviderSelector: () =>
+                    _showProviderSelector(context, ref),
+                onPrevious: _carouselController != null
+                    ? () => _carouselController!.previousPage()
+                    : null,
+                onNext: _carouselController != null
+                    ? () => _carouselController!.nextPage()
+                    : null,
+              ),
+            ),
+            Expanded(
+              child: _buildBody(
+                context,
+                homeDataAsync,
+                history,
+                generalSettings.watchHistoryEnabled,
+                isWidescreen: true,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -264,43 +300,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildWidescreenHeader(BuildContext context) {
-    return SliverPersistentHeader(
-      pinned: true,
-      delegate: _HomeHeaderDelegate(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: DashboardHeaderBar(
-            searchFocusNode: _firstActionFocusNode,
-            onShowProviderSelector: () => _showProviderSelector(context, ref),
-            onPrevious: _carouselController != null
-                ? () => _carouselController!.previousPage()
-                : null,
-            onNext: _carouselController != null
-                ? () => _carouselController!.nextPage()
-                : null,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _wrapWithHeaderIfNeeded(
-    BuildContext context,
-    bool isWidescreen,
-    Widget child,
-  ) {
-    if (!isWidescreen) return child;
-    return CustomScrollView(
-      // Ensure we use the main scroll controller so opacity updates work
-      controller: _scrollController,
-      slivers: [
-        _buildWidescreenHeader(context),
-        SliverFillRemaining(hasScrollBody: false, child: child),
-      ],
-    );
-  }
-
   Widget _buildBody(
     BuildContext context,
     HomeState state,
@@ -312,52 +311,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final isResolving = ref.watch(providerResolutionLoadingProvider);
 
     if (isResolving) {
-      return _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        Center(
-          child: CircularProgressIndicator(
-            color: Theme.of(context).colorScheme.primary,
-          ),
+      return Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
         ),
       );
     }
 
     if (ref.watch(activeProviderProvider) == null) {
-      return _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        _buildNoProviderState(context, l10n, isWidescreen: isWidescreen),
-      );
+      return _buildNoProviderState(context, l10n, isWidescreen: isWidescreen);
     }
 
     return switch (state) {
-      HomeLoading() => _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        const Center(child: CircularProgressIndicator()),
+      HomeLoading() => CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(child: _buildCarouselShimmer(context)),
+          SliverToBoxAdapter(child: _buildListShimmer(context)),
+          SliverToBoxAdapter(child: _buildListShimmer(context)),
+          SliverToBoxAdapter(child: _buildListShimmer(context)),
+        ],
       ),
-      HomeNoProvider() => _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        _buildNoProviderState(context, l10n, isWidescreen: isWidescreen),
-      ),
-      HomeOffline() => _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        _buildErrorState(context, l10n.noInternetError, ref),
-      ),
-      HomeError(:final message) => _wrapWithHeaderIfNeeded(
-        context,
-        isWidescreen,
-        _buildErrorState(context, message, ref),
-      ),
+      HomeNoProvider() => _buildNoProviderState(context, l10n, isWidescreen: isWidescreen),
+      HomeOffline() => _buildErrorState(context, l10n.noInternetError, ref),
+      HomeError(:final message) => _buildErrorState(context, message, ref),
       HomeSuccess(:final data) => RefreshIndicator(
         onRefresh: () async => ref.read(homeDataProvider.notifier).fetch(),
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
-            if (isWidescreen) _buildWidescreenHeader(context),
 
             if (data.containsKey('Trending'))
               SliverToBoxAdapter(
@@ -919,36 +901,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return l10n.unknown;
     }
   }
-}
 
-class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-
-  _HomeHeaderDelegate({required this.child});
-
-  @override
-  double get minExtent => LayoutConstants.dashboardHeaderHeight + 8; // padding top 8
-
-  @override
-  double get maxExtent => LayoutConstants.dashboardHeaderHeight + 8;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // Add a solid background so content doesn't collide when scrolling behind it
-    return ColoredBox(
-      color: Theme.of(
-        context,
-      ).scaffoldBackgroundColor.withValues(alpha: shrinkOffset > 0 ? 0.9 : 1.0),
-      child: child,
-    );
+  Widget _buildCarouselShimmer(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final heroHeight = size.height * 0.60;
+    final isDesktop =
+        size.width > LayoutConstants.exploreCarouselDesktopBreakpoint;
+    
+    if (isDesktop) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: LayoutConstants.dashboardContentPadding,
+          vertical: LayoutConstants.spacingSm,
+        ),
+        child: SizedBox(
+          height: heroHeight,
+          width: double.infinity,
+          child: ShimmerPlaceholder(borderRadius: 18),
+        ),
+      );
+    } else {
+      return SizedBox(
+        height: heroHeight,
+        width: double.infinity,
+        child: ShimmerPlaceholder.rectangular(
+          width: double.infinity,
+          height: heroHeight,
+          borderRadius: 0,
+        ),
+      );
+    }
   }
 
-  @override
-  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child;
+  Widget _buildListShimmer(BuildContext context) {
+    final isDesktop = context.isDesktop;
+    final cardWidth = isDesktop ? 200.0 : 130.0;
+    final imageHeight = cardWidth / (2 / 3);
+    final listHeight = imageHeight + 40.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title Placeholder
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
+            LayoutConstants.spacingLg,
+            isDesktop
+                ? LayoutConstants.dashboardContentPadding
+                : LayoutConstants.spacingMd,
+            LayoutConstants.spacingSm,
+          ),
+            child: ShimmerPlaceholder.rectangular(
+              width: 150,
+              height: 24,
+              borderRadius: 4,
+            ),
+          ),
+          const SizedBox(height: LayoutConstants.spacingMd),
+          // List Placeholder
+          SizedBox(
+            height: listHeight,
+            child: ListView.separated(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop
+                    ? LayoutConstants.dashboardContentPadding
+                    : LayoutConstants.spacingMd,
+              ),
+              scrollDirection: Axis.horizontal,
+              itemCount: 10,
+              separatorBuilder: (_, _) => SizedBox(
+                width: isDesktop
+                    ? LayoutConstants.spacingLg
+                    : LayoutConstants.spacingSm,
+              ),
+              itemBuilder: (context, index) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerPlaceholder.rectangular(
+                      width: cardWidth,
+                      height: imageHeight,
+                      borderRadius: 12,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      );
   }
 }

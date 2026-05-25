@@ -74,6 +74,12 @@ class _ExploreCarouselState extends ConsumerState<ExploreCarousel> {
   }
 
   void _onParentScroll() {
+    // Skip parallax updates when the carousel is scrolled off-screen.
+    // Without this guard, every scroll event triggers a
+    // ValueListenableBuilder rebuild (Transform.translate + Opacity)
+    // that stalls the build phase and causes visible jitter in the
+    // content that IS on screen.
+    if (!_isVisibleOnScreen) return;
     if (widget.scrollController!.hasClients) {
       _scrollOffset.value = widget.scrollController!.offset;
     }

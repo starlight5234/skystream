@@ -114,31 +114,34 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
             },
             child: Material(
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: Row(
-                children: [
-                  // Sidebar in its own traversal group so UP/DOWN stays inside it.
-                  FocusTraversalGroup(
-                    policy: WidgetOrderTraversalPolicy(),
-                    child: AppSidebar(
-                      currentIndex: widget.navigationShell.currentIndex,
-                      onItemTapped: (int index) =>
-                          _onItemTapped(index, context),
-                      focusNodes: _sidebarNodes,
-                    ),
-                  ),
-                  // Content in its own traversal group.
-                  Expanded(
-                    child: FocusTraversalGroup(
+              child: SafeArea(
+                bottom: false,
+                child: Row(
+                  children: [
+                    // Sidebar in its own traversal group so UP/DOWN stays inside it.
+                    FocusTraversalGroup(
                       policy: WidgetOrderTraversalPolicy(),
-                      child: Focus(
-                        canRequestFocus: false,
-                        skipTraversal: true,
-                        onKeyEvent: _onContentKeyEvent,
-                        child: widget.navigationShell,
+                      child: AppSidebar(
+                        currentIndex: widget.navigationShell.currentIndex,
+                        onItemTapped: (int index) =>
+                            _onItemTapped(index, context),
+                        focusNodes: _sidebarNodes,
                       ),
                     ),
-                  ),
-                ],
+                    // Content in its own traversal group.
+                    Expanded(
+                      child: FocusTraversalGroup(
+                        policy: WidgetOrderTraversalPolicy(),
+                        child: Focus(
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          onKeyEvent: _onContentKeyEvent,
+                          child: widget.navigationShell,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );

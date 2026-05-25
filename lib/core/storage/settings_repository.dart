@@ -17,8 +17,16 @@ class SettingsRepository {
     await _storageService.saveThemeMode(mode);
   }
 
-  String getThemeMode() {
+  String? getThemeMode() {
     return _storageService.getThemeMode();
+  }
+
+  Future<void> setSidebarExpanded(bool expanded) async {
+    await _storageService.setSidebarExpanded(expanded);
+  }
+
+  bool? getSidebarExpanded() {
+    return _storageService.getSidebarExpanded();
   }
 
   Future<void> setDefaultHomeScreen(String path) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../storage/settings_repository.dart';
+import '../providers/device_info_provider.dart';
 
 part 'theme_provider.g.dart';
 
@@ -12,6 +13,13 @@ class AppThemeMode extends _$AppThemeMode {
   ThemeMode build() {
     _repository = ref.watch(settingsRepositoryProvider);
     final saved = _repository.getThemeMode();
+    if (saved == null) {
+      final profile = ref.watch(deviceProfileProvider).asData?.value;
+      if (profile?.isTv == true) {
+        return ThemeMode.dark;
+      }
+      return ThemeMode.system;
+    }
     return _getThemeMode(saved);
   }
 

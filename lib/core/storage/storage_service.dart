@@ -145,8 +145,17 @@ class StorageService {
     await _settingsBox.put('theme_mode', mode);
   }
 
-  String getThemeMode() {
-    return _settingsBox.get('theme_mode', defaultValue: 'system') as String;
+  String? getThemeMode() {
+    return _settingsBox.get('theme_mode') as String?;
+  }
+
+  // --- Sidebar State ---
+  Future<void> setSidebarExpanded(bool expanded) async {
+    await _settingsBox.put('sidebar_expanded', expanded);
+  }
+
+  bool? getSidebarExpanded() {
+    return _settingsBox.get('sidebar_expanded') as bool?;
   }
 
   Future<void> setDefaultHomeScreen(String path) async {

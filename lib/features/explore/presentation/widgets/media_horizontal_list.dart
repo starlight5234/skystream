@@ -35,12 +35,24 @@ class MediaHorizontalList extends StatefulWidget {
 class _MediaHorizontalListState extends State<MediaHorizontalList> {
   late ScrollController _scrollController;
   bool _isPortrait = true;
+  
+  // Cache the aspect ratio for a given URL to prevent layout shifts
+  // when the widget is destroyed and recreated during scrolling.
+  static final Map<String, bool> _aspectRatioCache = {};
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _checkAspectRatio();
+    
+    if (widget.mediaList.isNotEmpty) {
+      final url = widget.mediaList.first.posterImageUrl;
+      if (_aspectRatioCache.containsKey(url)) {
+        _isPortrait = _aspectRatioCache[url]!;
+      } else {
+        _checkAspectRatio();
+      }
+    }
   }
 
   @override
@@ -48,7 +60,14 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     super.didUpdateWidget(oldWidget);
     if (widget.mediaList.isNotEmpty &&
         oldWidget.mediaList != widget.mediaList) {
-      _checkAspectRatio();
+      final url = widget.mediaList.first.posterImageUrl;
+      if (_aspectRatioCache.containsKey(url)) {
+        if (_isPortrait != _aspectRatioCache[url]) {
+          setState(() => _isPortrait = _aspectRatioCache[url]!);
+        }
+      } else {
+        _checkAspectRatio();
+      }
     }
   }
 
@@ -57,6 +76,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     final url = widget.mediaList.first.posterImageUrl;
     if (url.isEmpty) return;
     final isPortrait = await ImageUtils.isImagePortrait(url);
+    _aspectRatioCache[url] = isPortrait;
     if (mounted && _isPortrait != isPortrait) {
       setState(() {
         _isPortrait = isPortrait;
