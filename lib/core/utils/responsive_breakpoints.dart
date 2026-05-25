@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 enum DeviceScreenType { mobile, tablet, desktop }
@@ -39,4 +40,9 @@ extension ResponsiveContext on BuildContext {
   bool get isTablet => ResponsiveBreakpoints.isTablet(this);
   bool get isDesktop => ResponsiveBreakpoints.isDesktop(this);
   bool get isTabletOrLarger => ResponsiveBreakpoints.isTabletOrLarger(this);
+  bool get isTv =>
+      MediaQuery.maybeNavigationModeOf(this) == NavigationMode.directional ||
+      (Platform.isAndroid &&
+          MediaQuery.of(this).size.aspectRatio > 1.0 &&
+          MediaQuery.of(this).padding.top == 0);
 }

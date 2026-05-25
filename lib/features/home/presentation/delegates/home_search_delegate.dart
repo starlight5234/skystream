@@ -146,17 +146,20 @@ class _HomeSearchSuggestionsState
       itemCount: suggestions.length,
       itemBuilder: (context, index) {
         final suggestion = suggestions[index];
-        return ListTile(
-          leading: const Icon(Icons.search_rounded),
-          title: Text(suggestion),
-          trailing: IconButton(
-            tooltip: 'Fill query',
-            icon: const Icon(Icons.north_west_rounded),
-            onPressed: () {
-              widget.onSelect(suggestion);
-            },
+        return Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            leading: const Icon(Icons.search_rounded),
+            title: Text(suggestion),
+            trailing: IconButton(
+              tooltip: 'Fill query',
+              icon: const Icon(Icons.north_west_rounded),
+              onPressed: () {
+                widget.onSelect(suggestion);
+              },
+            ),
+            onTap: () => widget.onSelect(suggestion),
           ),
-          onTap: () => widget.onSelect(suggestion),
         );
       },
     );

@@ -4,11 +4,11 @@ import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../../../core/utils/layout_constants.dart';
 import '../../../../shared/widgets/cards_wrapper.dart';
 
-import '../../../../shared/widgets/desktop_scroll_wrapper.dart';
 import '../../../../core/utils/responsive_breakpoints.dart';
 import '../../../../shared/widgets/multimedia_card.dart';
 import '../view_all_screen.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../../core/utils/image_utils.dart';
 
 class MediaHorizontalList extends StatefulWidget {
   final String title;
@@ -34,11 +34,34 @@ class MediaHorizontalList extends StatefulWidget {
 
 class _MediaHorizontalListState extends State<MediaHorizontalList> {
   late ScrollController _scrollController;
+  bool _isPortrait = true;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _checkAspectRatio();
+  }
+
+  @override
+  void didUpdateWidget(MediaHorizontalList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.mediaList.isNotEmpty && oldWidget.mediaList != widget.mediaList) {
+      _checkAspectRatio();
+    }
+  }
+
+  void _checkAspectRatio() async {
+    if (widget.mediaList.isEmpty) return;
+    final url = widget.mediaList.first.posterImageUrl;
+    if (url == null || url.isEmpty) return;
+    
+    final isPortrait = await ImageUtils.isImagePortrait(url);
+    if (mounted && _isPortrait != isPortrait) {
+      setState(() {
+        _isPortrait = isPortrait;
+      });
+    }
   }
 
   @override
@@ -47,23 +70,40 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     super.dispose();
   }
 
+  void _scrollBy(double delta) {
+    if (!_scrollController.hasClients) return;
+    final target = (_scrollController.offset + delta)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.mediaList.isEmpty) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
 
     final isDesktop = context.isDesktop;
-    final listHeight = isDesktop ? 350.0 : 230.0;
+    
+    final double cardWidth = isDesktop
+        ? (_isPortrait ? 200.0 : 300.0)
+        : (_isPortrait ? 130.0 : 200.0);
+
+    final double imageHeight = cardWidth / (_isPortrait ? (2 / 3) : (16 / 9));
+    final double listHeight = imageHeight + 40.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header Row
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            LayoutConstants.spacingMd,
+          padding: EdgeInsets.fromLTRB(
+            isDesktop ? LayoutConstants.dashboardContentPadding : LayoutConstants.spacingMd,
             LayoutConstants.spacingLg,
-            LayoutConstants.spacingMd,
+            isDesktop ? LayoutConstants.dashboardContentPadding : LayoutConstants.spacingMd,
             LayoutConstants.spacingSm,
           ),
           child: Row(
@@ -97,6 +137,21 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
                   ],
                 ),
               ),
+
+              // Desktop arrow buttons — before the View All chip
+              if (isDesktop) ...[
+                const SizedBox(width: 8),
+                _HeaderArrowButton(
+                  icon: Icons.arrow_back_ios_new,
+                  onTap: () => _scrollBy(-400),
+                ),
+                const SizedBox(width: 4),
+                _HeaderArrowButton(
+                  icon: Icons.arrow_forward_ios,
+                  onTap: () => _scrollBy(400),
+                ),
+              ],
+
               if (widget.showViewAll)
                 const SizedBox(width: LayoutConstants.spacingXs),
 
@@ -107,6 +162,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
                       title: widget.title,
                       initialMediaList: widget.mediaList,
                       category: widget.category,
+                      onTap: widget.onTap,
                     )).push(context);
                   },
                   borderRadius: BorderRadius.circular(20),
@@ -149,64 +205,96 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
           ),
         ),
 
-        // List
+        // List — no DesktopScrollWrapper overlay; arrows are in the header
         SizedBox(
           height: listHeight, // Adjusted for 2:3 ratio within list
-          child: DesktopScrollWrapper(
-            // Wraps ListView
-            controller: _scrollController,
-            showButtons: isDesktop, // Show nav buttons on desktop/TV
-            child: Builder(
-              builder: (context) {
-                final double cardWidth = isDesktop ? 200.0 : 130.0;
-                final double spacing = isDesktop
-                    ? LayoutConstants.spacingLg
-                    : LayoutConstants.spacingSm;
+          child: Builder(
+            builder: (context) {
+              final double spacing = isDesktop
+                  ? LayoutConstants.spacingLg
+                  : LayoutConstants.spacingSm;
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  clipBehavior: Clip.none,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: LayoutConstants.spacingMd,
-                  ),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: widget.mediaList.length,
-                  itemExtent: cardWidth + spacing,
-                  itemBuilder: (context, index) {
-                    final item = widget.mediaList[index];
-                    final imageUrl = item.posterImageUrl;
-                    final itemTitle = item.title;
-                    final prefix = widget.heroTagPrefix ?? 'list';
-                    final uniqueTag =
-                        '${prefix}_${widget.title}_${item.id}_${itemTitle.hashCode}_$index';
+              return ListView.builder(
+                controller: _scrollController,
+                clipBehavior: Clip.none,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop
+                      ? LayoutConstants.dashboardContentPadding
+                      : LayoutConstants.spacingMd,
+                ),
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.mediaList.length,
+                itemExtent: cardWidth + spacing,
+                itemBuilder: (context, index) {
+                  final item = widget.mediaList[index];
+                  final imageUrl = item.posterImageUrl;
+                  final itemTitle = item.title;
+                  final prefix = widget.heroTagPrefix ?? 'list';
+                  final uniqueTag =
+                      '${prefix}_${widget.title}_${item.id}_${itemTitle.hashCode}_$index';
 
-                    return Padding(
-                      padding: EdgeInsets.only(right: spacing),
-                      child: MultimediaCard(
-                        imageUrl: imageUrl,
-                        title: itemTitle,
-                        heroTag: uniqueTag,
-                        onTap: () {
-                          if (widget.onTap != null) {
-                            widget.onTap!(item);
-                          } else {
-                            TmdbDetailsRoute(
-                              movieId: item.id,
-                              mediaType: item.tmdbMediaType,
-                              heroTag: uniqueTag,
-                              placeholderPoster: imageUrl,
-                            ).push(context);
-                          }
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                  return Padding(
+                    padding: EdgeInsets.only(right: spacing),
+                    child: MultimediaCard(
+                      imageUrl: imageUrl,
+                      title: itemTitle,
+                      heroTag: uniqueTag,
+                      isPortrait: _isPortrait,
+                      onTap: () {
+                        if (widget.onTap != null) {
+                          widget.onTap!(item);
+                        } else {
+                          TmdbDetailsRoute(
+                            movieId: item.id,
+                            mediaType: item.tmdbMediaType,
+                            heroTag: uniqueTag,
+                            placeholderPoster: imageUrl,
+                          ).push(context);
+                        }
+                      },
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Small arrow button used in section headers on desktop.
+class _HeaderArrowButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _HeaderArrowButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return CardsWrapper(
+      scaleFactor: 1.01,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 12,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
     );
   }
 }

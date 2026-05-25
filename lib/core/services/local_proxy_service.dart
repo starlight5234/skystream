@@ -148,9 +148,10 @@ class LocalProxyService {
       request.response.headers.contentType = ContentType(
         "application",
         "vnd.apple.mpegurl",
+        charset: "utf-8",
       );
       request.response.headers.add("Access-Control-Allow-Origin", "*");
-      request.response.write(content);
+      request.response.add(utf8.encode(content));
     } else {
       request.response.statusCode = HttpStatus.notFound;
     }
@@ -395,6 +396,7 @@ class LocalProxyService {
         request.response.headers.contentType = ContentType(
           "application",
           "vnd.apple.mpegurl",
+          charset: "utf-8",
         );
         await _rewriteM3u8Response(
           response,
@@ -604,7 +606,7 @@ class LocalProxyService {
         })
         .join('\n');
 
-    clientRequest.response.write(rewritten);
+    clientRequest.response.add(utf8.encode(rewritten));
     await clientRequest.response.close();
     // debugPrint("[PROXY] M3U8 Rewrite Complete for: $originalUrl");
   }

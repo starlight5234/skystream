@@ -10,14 +10,15 @@ import '../../../core/utils/image_fallbacks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
-import 'package:skystream/core/providers/device_info_provider.dart';
+
+import 'package:skystream/shared/widgets/custom_widgets.dart';
 
 import '../../library/presentation/library_provider.dart';
 import '../../library/presentation/library_state.dart';
 
 import 'details_controller.dart';
 import "widgets/details_layout_widgets.dart";
+import "widgets/details_desktop_hero.dart";
 import "widgets/premium_details_widgets.dart";
 import "../../../shared/widgets/expandable_text.dart";
 import 'package:skystream/l10n/generated/app_localizations.dart';
@@ -83,16 +84,28 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     final item = details ?? widget.item;
 
     final l10n = AppLocalizations.of(context)!;
-    final deviceProfileAsync = ref.watch(deviceProfileProvider);
 
-    final scaffold = Scaffold(
+    // ── Desktop / TV: Immersive hero layout ──
+    if (isLarge) {
+      return _buildDesktopLayout(
+        context,
+        item,
+        details,
+        detailsAsync,
+        isMovie,
+        isBookmarked,
+        libraryNotifier,
+        l10n,
+      );
+    }
+
+    // ── Mobile: SliverAppBar-based layout (unchanged) ──
+    return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
-            expandedHeight: isLarge
-                ? LayoutConstants.detailsExpandedHeightDesktop
-                : LayoutConstants.detailsExpandedHeightMobile,
+            expandedHeight: LayoutConstants.detailsExpandedHeightMobile,
             stretch: true,
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             flexibleSpace: FlexibleSpaceBar(
@@ -142,78 +155,140 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 ],
               ),
             ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.pop(),
-              style: IconButton.styleFrom(
+            // Mobile: back/bookmark excluded from D-pad traversal.
+            // Users navigate back via hardware Back key on TV remotes.
+            leading: Focus(
+              descendantsAreTraversable: false,
+              child: CustomButton(
+                shape: const CircleBorder(),
                 backgroundColor: Colors.black45,
-                foregroundColor: Colors.white,
+                onPressed: () => context.pop(),
+                child: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white,
+                ),
               ),
             ),
             actions: [
-              IconButton(
-                icon: Icon(
-                  isBookmarked
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: isBookmarked
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.white,
-                ),
-                onPressed: () {
-                  if (isBookmarked) {
-                    libraryNotifier.removeItem(item.url);
-                  } else {
-                    libraryNotifier.addItem(item);
-                  }
-                },
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black45,
-                  foregroundColor: Colors.white,
+              Focus(
+                descendantsAreTraversable: false,
+                child: IconButton(
+                  icon: Icon(
+                    isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    color: isBookmarked
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.white,
+                  ),
+                  onPressed: () {
+                    if (isBookmarked) {
+                      libraryNotifier.removeItem(item.url);
+                    } else {
+                      libraryNotifier.addItem(item);
+                    }
+                  },
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
             ],
           ),
-          if (isLarge)
-            ..._buildDesktopSlivers(
-              context,
-              item,
-              details,
-              detailsAsync,
-              isMovie,
-              l10n,
-            )
-          else
-            ..._buildMobileSlivers(
-              context,
-              item,
-              details,
-              detailsAsync,
-              isMovie,
-              l10n,
-            ),
+          ..._buildMobileSlivers(
+            context,
+            item,
+            details,
+            detailsAsync,
+            isMovie,
+            l10n,
+          ),
         ],
       ),
     );
+  }
 
-    return deviceProfileAsync.maybeWhen(
-      data: (profile) {
-        if (profile.isTv) {
-          return VirtualMouse(
-            visible: true,
-            velocity: 3,
-            pointerColor: Theme.of(context).colorScheme.primary,
-            child: scaffold,
-          );
-        }
-        return scaffold;
-      },
-      orElse: () => scaffold,
+  // ─────────────────────────────────────────────────────────────────
+  //  DESKTOP / TV  — Immersive hero layout
+  // ─────────────────────────────────────────────────────────────────
+
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    MultimediaItem item,
+    MultimediaItem? details,
+    AsyncValue<MultimediaItem?> detailsState,
+    bool isMovie,
+    bool isBookmarked,
+    dynamic libraryNotifier,
+    AppLocalizations l10n,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).colorScheme.onSurface;
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        // Back button — D-pad reachable (Up from Play)
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+          style: IconButton.styleFrom(
+            backgroundColor: isDark ? Colors.black45 : Colors.white54,
+            foregroundColor: textColor,
+          ),
+        ),
+        actions: [
+          // Bookmark — D-pad reachable
+          IconButton(
+            icon: Icon(
+              isBookmarked
+                  ? Icons.bookmark_rounded
+                  : Icons.bookmark_border_rounded,
+              color: isBookmarked
+                  ? Theme.of(context).colorScheme.primary
+                  : textColor,
+            ),
+            onPressed: () {
+              if (isBookmarked) {
+                libraryNotifier.removeItem(item.url);
+              } else {
+                libraryNotifier.addItem(item);
+              }
+            },
+            style: IconButton.styleFrom(
+              backgroundColor: isDark ? Colors.black45 : Colors.white54,
+              foregroundColor: textColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: DetailsDesktopHero(
+        displayItem: item,
+        baseItem: widget.item,
+        details: details,
+        detailsState: detailsState,
+        isMovie: isMovie,
+        itemUrl: widget.item.url,
+        child: _buildDesktopContentBelow(
+          context,
+          item,
+          details,
+          detailsState,
+          isMovie,
+          l10n,
+        ),
+      ),
     );
   }
 
-  List<Widget> _buildDesktopSlivers(
+  /// Content rendered below the hero section: season chips, episodes,
+  /// cast, trailers, and recommendations.
+  Widget _buildDesktopContentBelow(
     BuildContext context,
     MultimediaItem item,
     MultimediaItem? details,
@@ -221,156 +296,57 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     bool isMovie,
     AppLocalizations l10n,
   ) {
-    return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(32, 16, 32, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left side: Poster and actions
-              SizedBox(
-                width: 250,
-                child: Column(
-                  children: [
-                    Hero(
-                      tag: 'poster_${item.url}',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: CachedNetworkImage(
-                          imageUrl:
-                              AppImageFallbacks.poster(
-                                item.posterUrl,
-                                label: item.title,
-                              ) ??
-                              '',
-                          width: 250,
-                          height: 375,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, _, _) =>
-                              ThumbnailErrorPlaceholder(label: item.title),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    DetailsActionButtons(
-                      item: widget.item,
-                      details: details,
-                      itemUrl: widget.item.url,
-                      vertical: true,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 32),
-              // Right side: Metadata and Synopsis
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (item.logoUrl != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: CachedNetworkImage(
-                          imageUrl: item.logoUrl!,
-                          height: 80,
-                          fit: BoxFit.contain,
-                          alignment: Alignment.centerLeft,
-                        ),
-                      )
-                    else
-                      Text(
-                        item.title,
-                        style: Theme.of(context).textTheme.displaySmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    const SizedBox(height: 16),
-                    MetadataBar(
-                      item: item,
-                      isLoading: detailsState is AsyncLoading,
-                    ),
-                    const SizedBox(height: 24),
-                    if (item.nextAiring != null) ...[
-                      NextAiringWidget(nextAiring: item.nextAiring!),
-                      const SizedBox(height: 24),
-                    ],
-                    Text(
-                      l10n.synopsis,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    ExpandableText(
-                      text: item.description ?? l10n.noDescription,
-                      maxLines: 10,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontSize: 16,
-                        height: 1.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
-        sliver: SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (detailsState is AsyncLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (detailsState is AsyncError)
-                Text(
-                  "Error: ${detailsState.error}",
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                )
-              else if (!isMovie && details?.episodes != null)
-                DetailsSeasonListWrapper(itemUrl: widget.item.url),
-            ],
-          ),
-        ),
-      ),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(32, 16, 32, 0),
-        sliver: SliverDetailsDesktopEpisodeGrid(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Loading / Error / Season chips
+        if (detailsState is AsyncLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (detailsState is AsyncError)
+          Text(
+            "Error: ${detailsState.error}",
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          )
+        else if (!isMovie && details?.episodes != null)
+          DetailsSeasonListWrapper(itemUrl: widget.item.url),
+
+        const SizedBox(height: 16),
+
+        // Episode grid (non-sliver version)
+        DetailsDesktopEpisodeColumn(
           parentItem: item,
           itemUrl: widget.item.url,
           isMovie: isMovie,
         ),
-      ),
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(32, 32, 32, 50),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (item.cast != null && item.cast!.isNotEmpty) ...[
-                CastCarousel(cast: item.cast!),
-              ],
-              if (item.trailers != null && item.trailers!.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                TrailersSection(trailers: item.trailers!),
-              ],
-              if (item.recommendations != null &&
-                  item.recommendations!.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                RecommendationsCarousel(
-                  items: item.recommendations!,
-                  onItemTap: (rec) {
-                    DetailsRoute($extra: DetailsRouteExtra(item: rec)).push(context);
-                  },
-                ),
-              ],
-            ],
+
+        const SizedBox(height: 32),
+
+        // Cast
+        if (item.cast != null && item.cast!.isNotEmpty) ...[
+          CastCarousel(cast: item.cast!),
+        ],
+
+        // Trailers
+        if (item.trailers != null && item.trailers!.isNotEmpty) ...[
+          const SizedBox(height: 32),
+          TrailersSection(trailers: item.trailers!),
+        ],
+
+        // Recommendations
+        if (item.recommendations != null &&
+            item.recommendations!.isNotEmpty) ...[
+          const SizedBox(height: 32),
+          RecommendationsCarousel(
+            items: item.recommendations!,
+            onItemTap: (rec) {
+              DetailsRoute($extra: DetailsRouteExtra(item: rec)).push(context);
+            },
           ),
-        ),
-      ),
-    ];
+        ],
+
+        const SizedBox(height: 100),
+      ],
+    );
   }
 
   List<Widget> _buildMobileSlivers(

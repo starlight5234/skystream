@@ -29,4 +29,11 @@ class LayoutConstants {
 
   // Content constraints
   static const double contentMaxWidth = 800;
+
+  // Dashboard layout (widescreen)
+  static const double sidebarWidthExpanded = 230;
+  static const double sidebarWidthCompact = 80;
+  static const double contentCardRadius = 24;
+  static const double dashboardHeaderHeight = 56;
+  static const double dashboardContentPadding = 24;
 }

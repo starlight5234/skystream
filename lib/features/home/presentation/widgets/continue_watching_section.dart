@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
+import 'package:skystream/core/utils/layout_constants.dart';
 
 import 'package:skystream/features/home/presentation/widgets/continue_watching_card.dart';
 import 'package:skystream/features/library/presentation/history_provider.dart';
@@ -47,7 +48,12 @@ class _ContinueWatchingSectionState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          padding: EdgeInsets.fromLTRB(
+            isLarge ? LayoutConstants.dashboardContentPadding : 16,
+            24,
+            isLarge ? LayoutConstants.dashboardContentPadding : 16,
+            12,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -132,8 +138,8 @@ class _ContinueWatchingSectionState
                 final double spacing = isLarge ? 24.0 : 12.0;
                 return ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isLarge ? LayoutConstants.dashboardContentPadding : 16,
                     vertical: 8,
                   ),
                   scrollDirection: Axis.horizontal,

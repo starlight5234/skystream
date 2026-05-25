@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:virtual_mouse/virtual_mouse.dart';
+
 import 'dart:async';
 
 import '../../../shared/widgets/custom_widgets.dart';
@@ -104,22 +104,7 @@ class _DeveloperOptionsScreenState
       ),
     );
 
-    // Wrap with VirtualMouse on TV (this screen bypasses AppScaffold)
-    return deviceAsync.when(
-      data: (profile) {
-        if (profile.isTv) {
-          return VirtualMouse(
-            visible: true,
-            velocity: 3,
-            pointerColor: Theme.of(context).colorScheme.primary,
-            child: scaffold,
-          );
-        }
-        return scaffold;
-      },
-      loading: () => scaffold,
-      error: (_, _) => scaffold,
-    );
+    return scaffold;
   }
 
   Future<void> _toggleAssetLoading(BuildContext context, bool newValue) async {
@@ -183,7 +168,7 @@ class _DeveloperOptionsScreenState
         ),
         actions: [
           CustomButton(
-            showFocusHighlight: isTv,
+
             onPressed: () => Navigator.pop(context),
             child: Text(
               l10n.cancel,
@@ -196,7 +181,7 @@ class _DeveloperOptionsScreenState
           CustomButton(
             autofocus: true,
             isPrimary: true,
-            showFocusHighlight: isTv,
+
             onPressed: () {
               final url = controller.text.trim();
               if (url.isNotEmpty) {

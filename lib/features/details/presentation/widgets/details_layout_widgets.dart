@@ -791,14 +791,18 @@ class _LanguageButtonState extends State<_LanguageButton> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: widget.isSelected
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 40/255)
+                ? Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 40 / 255)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFocused
                   ? Colors.white
                   : (widget.isSelected
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 80/255)
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 80 / 255)
                         : Colors.transparent),
               width: _isFocused ? 2 : 1,
             ),
@@ -921,6 +925,123 @@ class DetailsProviderChip extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Non-sliver desktop episode grid for use inside [DetailsDesktopHero]'s
+/// [SingleChildScrollView]. Mirrors [SliverDetailsDesktopEpisodeGrid] but
+/// uses [LayoutBuilder] + [Column] instead of sliver equivalents.
+class DetailsDesktopEpisodeColumn extends ConsumerWidget {
+  final MultimediaItem parentItem;
+  final String itemUrl;
+  final bool isMovie;
+
+  const DetailsDesktopEpisodeColumn({
+    super.key,
+    required this.parentItem,
+    required this.itemUrl,
+    required this.isMovie,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (isMovie) return const SizedBox.shrink();
+
+    final detailsState = ref.watch(detailsControllerProvider(itemUrl));
+    var episodes = detailsState.seasonMap[detailsState.selectedSeason] ?? [];
+
+    if (episodes.isEmpty) return const SizedBox.shrink();
+
+    // Apply Language Filter
+    if (detailsState.selectedDubStatus != DubStatus.none) {
+      episodes = episodes
+          .where((e) => e.dubStatus == detailsState.selectedDubStatus)
+          .toList();
+    }
+
+    // Apply Batching (FIRST)
+    const int batchSize = 20;
+    final int start = detailsState.selectedRangeIndex * batchSize;
+    final int end = (start + batchSize).clamp(0, episodes.length);
+    List<Episode> displayedEpisodes = episodes.sublist(start, end);
+
+    // Apply Sorting (SECOND - only on the batch)
+    if (!detailsState.isAscending) {
+      displayedEpisodes = displayedEpisodes.reversed.toList();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: LayoutConstants.spacingMd),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 12,
+            children: [
+              Text(
+                AppLocalizations.of(context)!.episodes,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              DetailsEpisodeFilterBar(
+                itemUrl: itemUrl,
+                totalEpisodes: episodes.length,
+                batchSize: batchSize,
+              ),
+            ],
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double crossAxisExtent = constraints.maxWidth;
+            final int crossAxisCount =
+                (crossAxisExtent / 480).ceil().clamp(1, 5);
+            final int rowCount =
+                (displayedEpisodes.length / crossAxisCount).ceil();
+
+            return Column(
+              children: List.generate(rowCount, (rowIndex) {
+                final int startIndex = rowIndex * crossAxisCount;
+                final int endIndex = (startIndex + crossAxisCount)
+                    .clamp(0, displayedEpisodes.length);
+                final rowEpisodes =
+                    displayedEpisodes.sublist(startIndex, endIndex);
+
+                return Padding(
+                  padding: EdgeInsets.only(bottom: rowIndex < rowCount - 1 ? 16 : 0),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < crossAxisCount; i++)
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                left: i == 0 ? 0 : 8,
+                                right: i == crossAxisCount - 1 ? 0 : 8,
+                              ),
+                              child: i < rowEpisodes.length
+                                  ? EpisodeCard(
+                                      episode: rowEpisodes[i],
+                                      parentItem: parentItem,
+                                    ) as Widget
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      ],
     );
   }
 }

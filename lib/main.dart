@@ -23,6 +23,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'core/providers/locale_provider.dart';
 import 'core/network/cloudflare_bypass.dart';
+import 'package:dpad/dpad.dart';
+import 'core/providers/device_info_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -160,11 +162,61 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.addEarlyKeyEventHandler(_handleEarlyKeyEvent);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(downloadServiceProvider).init();
       _checkExtensionsUpdates();
       _checkAppUpdates();
     });
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleEarlyKeyEvent);
+    super.dispose();
+  }
+
+  KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus == null) {
+      return KeyEventResult.ignored;
+    }
+
+    final context = primaryFocus.context;
+    if (context == null || !context.mounted) {
+      return KeyEventResult.ignored;
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject == null) {
+      return KeyEventResult.ignored;
+    }
+
+    RenderObject? current = renderObject;
+    bool isLaidOut = true;
+    while (current != null) {
+      if (current is RenderBox && !current.hasSize) {
+        isLaidOut = false;
+        break;
+      }
+      final parent = current.parent;
+      if (parent is RenderObject) {
+        current = parent;
+      } else {
+        break;
+      }
+    }
+
+    if (!isLaidOut) {
+      if (kDebugMode) {
+        debugPrint(
+          '[FocusGuard] Consumed key event ${event.logicalKey.keyLabel} because primary focus context or its ancestor is not laid out.',
+        );
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Future<void> _checkAppUpdates() async {
@@ -225,6 +277,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     final themeMode = ref.watch(appThemeModeProvider);
     final appRouter = ref.watch(appRouterProvider);
     final locale = ref.watch(localeProvider);
+    final profileAsync = ref.watch(deviceProfileProvider);
 
     // Reactive Listener: Keeps UpdateController alive and handles the UI side-effect
     ref.listen<UpdateState>(updateControllerProvider, (previous, next) {
@@ -252,7 +305,7 @@ class _MyAppState extends ConsumerState<MyApp> {
           darkScheme = darkDynamic;
         }
 
-        return MaterialApp.router(
+        final materialApp = MaterialApp.router(
           scaffoldMessengerKey: ref
               .read(notificationServiceProvider)
               .messengerKey,
@@ -272,6 +325,29 @@ class _MyAppState extends ConsumerState<MyApp> {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            Widget result = child!;
+
+            // Phase 1: Density override for TV devices
+            // Android TV often reports inflated pixel density; we clamp to 1.0 for standard scaling.
+            final profile = profileAsync.asData?.value;
+            if (profile?.isTv == true) {
+              result = MediaQuery(
+                data: mq.copyWith(
+                  devicePixelRatio: 1.0,
+                  textScaler: TextScaler.noScaling,
+                ),
+                child: result,
+              );
+            }
+
+            return result;
+          },
+        );
+
+        return DpadNavigator(
+          child: materialApp,
         );
       },
     );

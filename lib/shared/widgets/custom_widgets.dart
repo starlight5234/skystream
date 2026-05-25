@@ -3,20 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/utils/layout_constants.dart';
 
-/// Wraps [child] inside a [Shortcuts] that remaps D-pad arrow keys (up/down)
-/// to plain focus traversal intents.  Place this as the direct child of a
-/// [RadioGroup] to prevent the group from auto-selecting the focused option
-/// when the user navigates with a TV remote — selection still fires on Enter.
-Widget tvRadioFocusShortcuts({required Widget child}) {
-  return Shortcuts(
-    shortcuts: const <ShortcutActivator, Intent>{
-      SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-      SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-    },
-    child: child,
-  );
-}
-
 /// A Slider widget that handles D-pad navigation properly on TV.
 /// Left/Right D-pad adjusts the value, Up/Down D-pad navigates to other focusable elements.
 class CustomSlider extends StatefulWidget {
@@ -119,15 +105,17 @@ class _CustomSliderState extends State<CustomSlider> {
           return KeyEventResult.handled;
         }
 
-        // Up arrow: move focus up
+        // Up arrow: move focus up — operate on our own node so traversal is
+        // anchored to the slider and not to whatever happens to be the
+        // enclosing FocusScope.
         if (logicalKey == LogicalKeyboardKey.arrowUp) {
-          FocusScope.of(context).focusInDirection(TraversalDirection.up);
+          _focusNode.focusInDirection(TraversalDirection.up);
           return KeyEventResult.handled;
         }
 
         // Down arrow: move focus down
         if (logicalKey == LogicalKeyboardKey.arrowDown) {
-          FocusScope.of(context).focusInDirection(TraversalDirection.down);
+          _focusNode.focusInDirection(TraversalDirection.down);
           return KeyEventResult.handled;
         }
 
@@ -136,7 +124,9 @@ class _CustomSliderState extends State<CustomSlider> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          border: _isFocused
+          border: (_isFocused &&
+                  FocusManager.instance.highlightMode ==
+                      FocusHighlightMode.traditional)
               ? Border.all(
                   color: Theme.of(context).colorScheme.primary,
                   width: 2,
@@ -156,9 +146,12 @@ class _CustomSliderState extends State<CustomSlider> {
             onChanged: widget.onChanged,
             onChangeStart: widget.onChangeStart,
             onChangeEnd: widget.onChangeEnd,
-            activeColor:
-                widget.activeColor ??
-                (_isFocused ? Theme.of(context).colorScheme.primary : null),
+            activeColor: widget.activeColor ??
+                ((_isFocused &&
+                        FocusManager.instance.highlightMode ==
+                            FocusHighlightMode.traditional)
+                    ? Theme.of(context).colorScheme.primary
+                    : null),
             inactiveColor: widget.inactiveColor,
           ),
         ),
@@ -208,15 +201,17 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
         final key = event.logicalKey;
 
-        // Up arrow: move focus to previous element
+        // Use directional traversal anchored to our own node so D-pad Up/Down
+        // lands on the spatial neighbour. The previous unfocus/disable/
+        // re-enable dance relied on a 100ms timer that could race on slow
+        // devices and re-focus the field instead of moving on.
         if (key == LogicalKeyboardKey.arrowUp) {
-          _moveFocusPrevious();
+          _focusNode.focusInDirection(TraversalDirection.up);
           return KeyEventResult.handled;
         }
 
-        // Down arrow: move focus to next element
         if (key == LogicalKeyboardKey.arrowDown) {
-          _moveFocusNext();
+          _focusNode.focusInDirection(TraversalDirection.down);
           return KeyEventResult.handled;
         }
 
@@ -224,38 +219,6 @@ class _CustomTextFieldState extends State<CustomTextField> {
         return KeyEventResult.ignored;
       },
     );
-  }
-
-  void _moveFocusNext() {
-    // Temporarily make this node non-focusable to prevent cycling back
-    _focusNode.unfocus();
-    _focusNode.canRequestFocus = false;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        FocusScope.of(context).nextFocus();
-        // Re-enable focus after a delay
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) _focusNode.canRequestFocus = true;
-        });
-      }
-    });
-  }
-
-  void _moveFocusPrevious() {
-    // Temporarily make this node non-focusable to prevent cycling back
-    _focusNode.unfocus();
-    _focusNode.canRequestFocus = false;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        FocusScope.of(context).previousFocus();
-        // Re-enable focus after a delay
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) _focusNode.canRequestFocus = true;
-        });
-      }
-    });
   }
 
   @override
@@ -280,19 +243,17 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
     final focusedBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(
-        color: colorScheme.primary,
-        width: 2,
-      ),
+      borderSide: BorderSide(color: colorScheme.primary, width: 2),
     );
 
     // Merge the provided decoration with our consistent styling
-    final effectiveDecoration = (widget.decoration ?? const InputDecoration()).copyWith(
-      hintText: widget.hintText ?? widget.decoration?.hintText,
-      enabledBorder: widget.decoration?.enabledBorder ?? enabledBorder,
-      focusedBorder: widget.decoration?.focusedBorder ?? focusedBorder,
-      border: widget.decoration?.border ?? enabledBorder,
-    );
+    final effectiveDecoration = (widget.decoration ?? const InputDecoration())
+        .copyWith(
+          hintText: widget.hintText ?? widget.decoration?.hintText,
+          enabledBorder: widget.decoration?.enabledBorder ?? enabledBorder,
+          focusedBorder: widget.decoration?.focusedBorder ?? focusedBorder,
+          border: widget.decoration?.border ?? enabledBorder,
+        );
 
     return TextField(
       focusNode: _focusNode,
@@ -303,10 +264,12 @@ class _CustomTextFieldState extends State<CustomTextField> {
       obscureText: widget.obscureText,
       keyboardType: widget.keyboardType,
       onSubmitted: (value) {
-        // Call user callback first
+        // Call user callback first — it may navigate away or close a host
+        // dialog, so bail out if we got unmounted before moving focus.
         widget.onSubmitted?.call(value);
-        // Then move focus to next element (the buttons)
-        _moveFocusNext();
+        if (mounted) {
+          _focusNode.focusInDirection(TraversalDirection.down);
+        }
       },
     );
   }
@@ -321,8 +284,8 @@ class CustomButton extends StatefulWidget {
   final bool isOutlined;
   final FocusNode? focusNode;
   final Color? backgroundColor;
-  final bool showFocusHighlight;
   final OutlinedBorder? shape;
+  final bool showFocusHighlight;
 
   const CustomButton({
     super.key,
@@ -333,8 +296,8 @@ class CustomButton extends StatefulWidget {
     this.isOutlined = false,
     this.focusNode,
     this.backgroundColor,
-    this.showFocusHighlight = true,
     this.shape,
+    this.showFocusHighlight = false,
   });
 
   @override
@@ -344,18 +307,24 @@ class CustomButton extends StatefulWidget {
 class _CustomButtonState extends State<CustomButton> {
   late FocusNode _focusNode;
   bool _isFocused = false;
+  late final VoidCallback _focusListener;
 
   @override
   void initState() {
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
-    _focusNode.addListener(() {
+    _focusListener = () {
       if (mounted) setState(() => _isFocused = _focusNode.hasFocus);
-    });
+    };
+    _focusNode.addListener(_focusListener);
   }
 
   @override
   void dispose() {
+    // Always remove the listener; the node may be owned by the parent, in
+    // which case it outlives this state and would otherwise hold a reference
+    // to a disposed closure target.
+    _focusNode.removeListener(_focusListener);
     if (widget.focusNode == null) {
       _focusNode.dispose();
     }
@@ -365,17 +334,27 @@ class _CustomButtonState extends State<CustomButton> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final showHighlight = _isFocused && widget.showFocusHighlight;
+    final isTraditional = FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    final showHighlight =
+        widget.showFocusHighlight && _isFocused && isTraditional;
 
-    // Use Material 3 button with custom focus highlight
+    // Wrap in an AnimatedScale + Container so focused buttons get a clear
+    // "elevation" cue regardless of their fill color. Useful on TV where blue
+    // and grey buttons can otherwise look identical to non-focused.
+    final scale = showHighlight ? 1.04 : 1.0;
+    final glowColor = primaryColor;
+
+    Widget core;
     if (widget.isPrimary) {
-      return FilledButton(
+      core = FilledButton(
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onPressed: widget.onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: showHighlight
-              ? primaryColor.withValues(alpha: 0.9)
+              // On focus, brighten the primary fill so it pops against the dark
+              // background and the white outline contrasts clearly.
+              ? Color.lerp(primaryColor, Colors.white, 0.18)
               : (widget.backgroundColor ?? primaryColor),
           foregroundColor: Theme.of(context).colorScheme.onPrimary,
           disabledBackgroundColor: Theme.of(
@@ -392,30 +371,54 @@ class _CustomButtonState extends State<CustomButton> {
         ),
         child: widget.child,
       );
+    } else {
+      core = TextButton(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onPressed: widget.onPressed,
+        style: TextButton.styleFrom(
+          backgroundColor: showHighlight
+              // Fill the button on focus so a "grey" outlined button no longer
+              // looks identical to its non-focused state.
+              ? primaryColor.withValues(alpha: 0.28)
+              : null,
+          foregroundColor: _isFocused
+              ? Theme.of(context).colorScheme.onPrimary
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+          disabledForegroundColor: Theme.of(
+            context,
+          ).colorScheme.onSurface.withValues(alpha: 0.38),
+          side: showHighlight
+              ? const BorderSide(color: Colors.white, width: 3)
+              : (widget.isOutlined
+                    ? BorderSide(color: Theme.of(context).colorScheme.outline)
+                    : BorderSide.none),
+          shape: widget.shape,
+        ),
+        child: widget.child,
+      );
     }
 
-    return TextButton(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onPressed: widget.onPressed,
-      style: TextButton.styleFrom(
-        backgroundColor: showHighlight
-            ? primaryColor.withValues(alpha: 0.15)
-            : null,
-        foregroundColor: _isFocused
-            ? primaryColor
-            : Theme.of(context).colorScheme.onSurfaceVariant,
-        disabledForegroundColor: Theme.of(
-          context,
-        ).colorScheme.onSurface.withValues(alpha: 0.38),
-        side: showHighlight
-            ? const BorderSide(color: Colors.white, width: 2)
-            : (widget.isOutlined
-                  ? BorderSide(color: Theme.of(context).colorScheme.outline)
-                  : BorderSide.none),
-        shape: widget.shape,
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      scale: scale,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: showHighlight
+              ? [
+                  BoxShadow(
+                    color: glowColor.withValues(alpha: 0.55),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: core,
       ),
-      child: widget.child,
     );
   }
 }

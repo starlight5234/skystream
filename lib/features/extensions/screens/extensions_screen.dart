@@ -545,7 +545,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
         ),
         actions: [
           CustomButton(
-            showFocusHighlight: isTv,
+
             onPressed: () => Navigator.pop(context),
             child: Text(
               l10n.cancel,
@@ -558,7 +558,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
           CustomButton(
             autofocus: true,
             isPrimary: true,
-            showFocusHighlight: isTv,
+
             onPressed: () {
               if (controller.text.isNotEmpty) {
                 ref

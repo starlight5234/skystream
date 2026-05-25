@@ -123,32 +123,44 @@ class PlayerCenterControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.center,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _RoundedPlaybackButton(
-            icon: Icons.keyboard_double_arrow_left_rounded,
-            size: 46,
-            isTv: isTv,
-            onPressed: onSeekBackward,
-          ),
-          const SizedBox(width: 64),
-          PlayerPlayPauseButton(
-            player: player,
-            videoViewController: videoViewController,
-            isLoading: isLoading,
-            isTv: isTv,
-            focusNode: playFocusNode,
-            onPressed: onPlayPause,
-          ),
-          const SizedBox(width: 64),
-          _RoundedPlaybackButton(
-            icon: Icons.keyboard_double_arrow_right_rounded,
-            size: 46,
-            isTv: isTv,
-            onPressed: onSeekForward,
-          ),
-        ],
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(0),
+              child: _RoundedPlaybackButton(
+                icon: Icons.keyboard_double_arrow_left_rounded,
+                size: 46,
+                isTv: isTv,
+                onPressed: onSeekBackward,
+              ),
+            ),
+            const SizedBox(width: 64),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: PlayerPlayPauseButton(
+                player: player,
+                videoViewController: videoViewController,
+                isLoading: isLoading,
+                isTv: isTv,
+                focusNode: playFocusNode,
+                onPressed: onPlayPause,
+              ),
+            ),
+            const SizedBox(width: 64),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: _RoundedPlaybackButton(
+                icon: Icons.keyboard_double_arrow_right_rounded,
+                size: 46,
+                isTv: isTv,
+                onPressed: onSeekForward,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -184,7 +196,7 @@ class _RoundedPlaybackButton extends StatelessWidget {
 }
 
 /// A reusable action button for the player controls bottom bar.
-class PlayerActionButton extends StatefulWidget {
+class PlayerActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -205,84 +217,56 @@ class PlayerActionButton extends StatefulWidget {
   });
 
   @override
-  State<PlayerActionButton> createState() => _PlayerActionButtonState();
-}
-
-class _PlayerActionButtonState extends State<PlayerActionButton> {
-  bool _hovered = false;
-  bool _focused = false;
-  bool _pressed = false;
-
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isActive = widget.highlight || _hovered || _focused || _pressed;
-
     return FocusTraversalOrder(
-      order: NumericFocusOrder(widget.focusOrder.toDouble()),
-      child: FocusableActionDetector(
-        mouseCursor: SystemMouseCursors.click,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          child: InkWell(
-            onTap: widget.onTap,
-            onHighlightChanged: _setPressed,
+      order: NumericFocusOrder(focusOrder.toDouble()),
+      child: CustomButton(
+        showFocusHighlight: isTv,
+        onPressed: onTap,
+        child: AnimatedContainer(
+          duration: HotstarPlayerStyle.fastMotionDuration,
+          height: 40,
+          decoration: BoxDecoration(
+            color: highlight
+                ? HotstarPlayerStyle.accent.withValues(alpha: 0.16)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            hoverColor: Colors.transparent,
-            focusColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            child: AnimatedContainer(
-              duration: HotstarPlayerStyle.fastMotionDuration,
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 9),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? HotstarPlayerStyle.accent.withValues(alpha: 0.16)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: widget.rotate ? 0.5 : 0.0),
-                    duration: const Duration(milliseconds: 180),
-                    builder: (context, value, child) {
-                      return Transform.rotate(
-                        angle: value * 3.14159,
-                        child: Icon(
-                          widget.icon,
-                          color: isActive
-                              ? HotstarPlayerStyle.accent
-                              : Colors.white,
-                          size: 20,
-                        ),
-                      );
-                    },
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: rotate ? 0.5 : 0.0),
+                  duration: const Duration(milliseconds: 180),
+                  builder: (context, value, child) {
+                    return Transform.rotate(
+                      angle: value * 3.14159,
+                      child: Icon(
+                        icon,
+                        color: highlight
+                            ? HotstarPlayerStyle.accent
+                            : Colors.white,
+                        size: 20,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: highlight
+                        ? HotstarPlayerStyle.accent
+                        : HotstarPlayerStyle.primaryText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    widget.label,
-                    style: TextStyle(
-                      color: isActive
-                          ? HotstarPlayerStyle.accent
-                          : HotstarPlayerStyle.primaryText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),

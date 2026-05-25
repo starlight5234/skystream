@@ -3287,6 +3287,11 @@ class PlayerController extends Notifier<PlayerState> {
       } catch (e) {
         if (kDebugMode) debugPrint('Failed to set cache-dir/cookies-file: $e');
       }
+
+      // Re-assert: disable native MPV subtitle rendering on the video
+      // surface. MPV resets sub-visibility when a new file is opened,
+      // so we must set it again after every stream load.
+      await native.setProperty('sub-visibility', 'no');
     }
   }
 
@@ -3653,6 +3658,10 @@ class PlayerController extends Notifier<PlayerState> {
       } else {
         await native.setProperty('sub-back-color', '#00000000');
       }
+
+      // Re-assert: keep native MPV subtitle rendering disabled.
+      // Setting sub-* properties above may implicitly re-enable it.
+      await native.setProperty('sub-visibility', 'no');
     }
   }
 

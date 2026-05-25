@@ -31,6 +31,7 @@ class MovieSeasonsList extends ConsumerStatefulWidget {
 class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
   late final ScrollController _scrollController;
   late final ScrollController _episodesScrollController;
+  int _selectedRangeIndex = 0;
 
   @override
   void initState() {
@@ -117,6 +118,9 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                       }).toList(),
                       onChanged: (val) {
                         if (val != null) {
+                          setState(() {
+                            _selectedRangeIndex = 0;
+                          });
                           ref
                               .read(
                                 tmdbDetailsControllerProvider(
@@ -172,13 +176,18 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
                         seasonNum;
 
                     return GestureDetector(
-                      onTap: () => ref
-                          .read(
-                            tmdbDetailsControllerProvider(
-                              widget.movieId,
-                            ).notifier,
-                          )
-                          .fetchEpisodes(seasonNum),
+                      onTap: () {
+                        setState(() {
+                          _selectedRangeIndex = 0;
+                        });
+                        ref
+                            .read(
+                              tmdbDetailsControllerProvider(
+                                widget.movieId,
+                              ).notifier,
+                            )
+                            .fetchEpisodes(seasonNum);
+                      },
                       child: Container(
                         width: 120,
                         decoration: BoxDecoration(
@@ -433,26 +442,80 @@ class _MovieSeasonsListState extends ConsumerState<MovieSeasonsList> {
             );
             if (episodes.isEmpty) return const SizedBox.shrink();
 
+            const int batchSize = 10;
+            final int totalEpisodes = episodes.length;
+            final int batchCount = (totalEpisodes / batchSize).ceil();
+
+            if (_selectedRangeIndex >= batchCount) {
+              _selectedRangeIndex = 0;
+            }
+
+            final int start = _selectedRangeIndex * batchSize;
+            final int end = (start + batchSize).clamp(0, totalEpisodes);
+            final displayedEpisodes = episodes.sublist(start, end);
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  AppLocalizations.of(context)!.episodes,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      AppLocalizations.of(context)!.episodes,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (batchCount > 1)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _selectedRangeIndex,
+                            dropdownColor: Theme.of(context).colorScheme.surfaceContainer,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            icon: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            items: List.generate(batchCount, (index) {
+                              final rangeStart = index * batchSize + 1;
+                              final rangeEnd = ((index + 1) * batchSize).clamp(1, totalEpisodes);
+                              return DropdownMenuItem(
+                                value: index,
+                                child: Text("$rangeStart-$rangeEnd"),
+                              );
+                            }),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedRangeIndex = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 ListView.separated(
                   padding: EdgeInsets.zero,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: episodes.length,
+                  itemCount: displayedEpisodes.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
-                    final ep = episodes[index];
+                    final ep = displayedEpisodes[index];
                     final imageUrl = AppImageFallbacks.tmdbStill(
                       ep['still_path'],
                       label: ep['name'] ?? 'Episode',

@@ -58,6 +58,7 @@ class UpdateDialog extends ConsumerWidget {
             ),
           if (updateState is! UpdateDownloading)
             FilledButton(
+              autofocus: true,
               onPressed: () {
                 ref
                     .read(updateControllerProvider.notifier)
