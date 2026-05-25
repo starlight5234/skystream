@@ -237,7 +237,7 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
                   alignment: Alignment.center,
                   clipBehavior: Clip.none,
                   children: [
-                    if (bufferWidget != null) bufferWidget,
+                    ?bufferWidget,
                     SliderTheme(
                       data: SliderThemeData(
                         trackHeight: 2.5,

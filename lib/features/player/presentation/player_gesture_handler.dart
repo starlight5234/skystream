@@ -198,7 +198,7 @@ class PlayerGestureHandler extends _$PlayerGestureHandler {
     if (getSettings == null) return;
     final settings = _cachedSettings ?? await getSettings!();
     _cachedSettings ??= settings;
-    getSettings!().then((s) => _cachedSettings = s);
+    unawaited(getSettings!().then((s) => _cachedSettings = s));
 
     PlayerGesture type = PlayerGesture.none;
     Alignment alignment = state.osdAlignment;

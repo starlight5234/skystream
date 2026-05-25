@@ -124,37 +124,42 @@ class SubtitleSearch extends _$SubtitleSearch {
     int completedProviders = 0;
 
     for (final provider in _providers) {
-      provider
-          .search(
-            query: query,
-            imdbId: imdbId,
-            tmdbId: tmdbId,
-            season: season,
-            episode: episode,
-            language: lang,
-            cancelToken: _cancelToken,
-          )
-          .then((results) {
-            if (!ref.mounted || searchId != _activeSearchId) return;
+      unawaited(
+        provider
+            .search(
+              query: query,
+              imdbId: imdbId,
+              tmdbId: tmdbId,
+              season: season,
+              episode: episode,
+              language: lang,
+              cancelToken: _cancelToken,
+            )
+            .then((results) {
+              if (!ref.mounted || searchId != _activeSearchId) return;
 
-            if (results.isNotEmpty) {
-              allResults.addAll(results);
-              state = AsyncData(List.from(allResults));
-            }
-          })
-          .catchError((Object e) {
-            if (e is DioException && e.type == DioExceptionType.cancel) return;
-            if (kDebugMode) print("${provider.name} search failed: $e");
-          })
-          .whenComplete(() {
-            if (!ref.mounted || searchId != _activeSearchId) return;
+              if (results.isNotEmpty) {
+                allResults.addAll(results);
+                state = AsyncData(List.from(allResults));
+              }
+            })
+            .catchError((Object e) {
+              if (e is DioException && e.type == DioExceptionType.cancel) {
+                return;
+              }
+              if (kDebugMode) print("${provider.name} search failed: $e");
+            })
+            .whenComplete(() {
+              if (!ref.mounted || searchId != _activeSearchId) return;
 
-            completedProviders++;
-            // If all finished and no results found, ensure we transition from loading to empty data
-            if (completedProviders == _providers.length && allResults.isEmpty) {
-              state = const AsyncData([]);
-            }
-          });
+              completedProviders++;
+              // If all finished and no results found, ensure we transition from loading to empty data
+              if (completedProviders == _providers.length &&
+                  allResults.isEmpty) {
+                state = const AsyncData([]);
+              }
+            }),
+      );
     }
   }
 

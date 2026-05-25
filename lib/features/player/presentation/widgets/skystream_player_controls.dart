@@ -386,7 +386,7 @@ class SkyStreamPlayerControlsState
     try {
       if (context.isDesktop &&
           (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-        toggleFullscreen();
+        await toggleFullscreen();
         return;
       }
     } catch (e) {
@@ -397,7 +397,7 @@ class SkyStreamPlayerControlsState
 
     if (widget.isLoading || _duration == Duration.zero) return;
     if (_tapPosition != null) {
-      ref
+      await ref
           .read(playerGestureHandlerProvider.notifier)
           .handleDoubleTap(_tapPosition!, MediaQuery.sizeOf(context).width);
     }

@@ -345,15 +345,8 @@ class PlayerController extends Notifier<PlayerState> {
   List<SubtitleFile> get userAddedExternalSubtitles =>
       _userAddedExternalSubtitles;
 
-  Set<String>? get pendingVideoViewSubtitleIdsBeforeReload =>
-      _pendingVideoViewSubtitleIdsBeforeReload;
-  set pendingVideoViewSubtitleIdsBeforeReload(Set<String>? values) =>
-      _pendingVideoViewSubtitleIdsBeforeReload = values;
-
-  bool get selectNewestVideoViewSubtitleAfterReload =>
-      _selectNewestVideoViewSubtitleAfterReload;
-  set selectNewestVideoViewSubtitleAfterReload(bool value) =>
-      _selectNewestVideoViewSubtitleAfterReload = value;
+  Set<String>? pendingVideoViewSubtitleIdsBeforeReload;
+  bool selectNewestVideoViewSubtitleAfterReload = false;
 
   void updateState(PlayerState Function(PlayerState s) update) {
     state = update(state);
@@ -434,8 +427,6 @@ class PlayerController extends Notifier<PlayerState> {
   bool _isApplyingPendingResumeSeek = false;
   double _lastNonZeroVolumeLevel = 1.0;
   final List<SubtitleFile> _userAddedExternalSubtitles = [];
-  Set<String>? _pendingVideoViewSubtitleIdsBeforeReload;
-  bool _selectNewestVideoViewSubtitleAfterReload = false;
   bool _hasConfirmedPlaybackFrame = false;
   bool _suppressNextEpisodeDetection = false;
   bool _nextEpisodeOverlayDismissedForCurrentEnding = false;
@@ -677,7 +668,7 @@ class PlayerController extends Notifier<PlayerState> {
     VideoController? videoViewController,
   }) async {
     state = const PlayerState(); // Resets all fields including errorMessage
-    _logSub?.cancel();
+    unawaited(_logSub?.cancel());
     _logSub = null;
     _hasConfirmedPlaybackFrame = false;
     _manualSelectionPending = false;
@@ -689,8 +680,8 @@ class PlayerController extends Notifier<PlayerState> {
     _pendingResumeSeekPosition = null;
     _isApplyingPendingResumeSeek = false;
     _userAddedExternalSubtitles.clear();
-    _pendingVideoViewSubtitleIdsBeforeReload = null;
-    _selectNewestVideoViewSubtitleAfterReload = false;
+    pendingVideoViewSubtitleIdsBeforeReload = null;
+    selectNewestVideoViewSubtitleAfterReload = false;
 
     _item = item;
 
@@ -803,10 +794,10 @@ class PlayerController extends Notifier<PlayerState> {
           _suppressNextEpisodeDetection = false;
         }
 
-        if (_selectNewestVideoViewSubtitleAfterReload &&
+        if (selectNewestVideoViewSubtitleAfterReload &&
             info.subtitleTracks.isNotEmpty) {
           final previousIds =
-              _pendingVideoViewSubtitleIdsBeforeReload ?? const <String>{};
+              pendingVideoViewSubtitleIdsBeforeReload ?? const <String>{};
           final newTrackId =
               info.subtitleTracks.keys.firstWhereOrNull(
                 (id) => !previousIds.contains(id),
@@ -816,8 +807,8 @@ class PlayerController extends Notifier<PlayerState> {
             _videoViewController!.setShowSubtitle(true);
             _videoViewController!.setOverrideSubtitle(newTrackId);
           }
-          _pendingVideoViewSubtitleIdsBeforeReload = null;
-          _selectNewestVideoViewSubtitleAfterReload = false;
+          pendingVideoViewSubtitleIdsBeforeReload = null;
+          selectNewestVideoViewSubtitleAfterReload = false;
         }
       }
     });
@@ -862,8 +853,8 @@ class PlayerController extends Notifier<PlayerState> {
     _videoViewController!.error.addListener(() {
       final error = _videoViewController!.error.value;
       if (error != null) {
-        _pendingVideoViewSubtitleIdsBeforeReload = null;
-        _selectNewestVideoViewSubtitleAfterReload = false;
+        pendingVideoViewSubtitleIdsBeforeReload = null;
+        selectNewestVideoViewSubtitleAfterReload = false;
         if (kDebugMode) debugPrint("VideoView Player Error: $error");
         if (!_hasConfirmedPlaybackFrame ||
             (_videoViewController!.position.value) == 0) {
@@ -879,7 +870,7 @@ class PlayerController extends Notifier<PlayerState> {
               "Selected source is not playable. Reverting back to previous source.",
             );
           } else {
-            retryNextStream(sourceSessionId: state.sourceSessionId);
+            unawaited(retryNextStream(sourceSessionId: state.sourceSessionId));
           }
         } else {
           // Error during active playback.
@@ -895,7 +886,7 @@ class PlayerController extends Notifier<PlayerState> {
               kind: PlaybackUiPhaseKind.reconnectingLive,
               detail: "Reconnecting to live stream...",
             );
-            changeStream(state.currentStream!, resetPosition: true);
+            unawaited(changeStream(state.currentStream!, resetPosition: true));
             Future.delayed(const Duration(seconds: 10), () {
               _isRecoveringFromStall = false;
             });
@@ -908,7 +899,7 @@ class PlayerController extends Notifier<PlayerState> {
           );
           _revertMessage =
               "Current source stopped unexpectedly. Trying next available source...";
-          retryNextStream(sourceSessionId: state.sourceSessionId);
+          unawaited(retryNextStream(sourceSessionId: state.sourceSessionId));
         }
       }
     });
@@ -937,7 +928,7 @@ class PlayerController extends Notifier<PlayerState> {
             kind: PlaybackUiPhaseKind.reconnectingLive,
             detail: "Reconnecting to live stream...",
           );
-          changeStream(state.currentStream!, resetPosition: true);
+          unawaited(changeStream(state.currentStream!, resetPosition: true));
         }
       }
     });
@@ -1239,7 +1230,7 @@ class PlayerController extends Notifier<PlayerState> {
             kind: PlaybackUiPhaseKind.reconnectingLive,
             detail: "Reconnecting to live stream...",
           );
-          changeStream(state.currentStream!, resetPosition: true);
+          unawaited(changeStream(state.currentStream!, resetPosition: true));
           Future.delayed(const Duration(seconds: 10), () {
             _isRecoveringFromStall = false;
           });
@@ -1296,7 +1287,7 @@ class PlayerController extends Notifier<PlayerState> {
             kind: PlaybackUiPhaseKind.reconnectingLive,
             detail: "Reconnecting to live stream...",
           );
-          changeStream(state.currentStream!, resetPosition: true);
+          unawaited(changeStream(state.currentStream!, resetPosition: true));
         }
       }
     });
@@ -1326,7 +1317,9 @@ class PlayerController extends Notifier<PlayerState> {
 
             // Recovery: reconnect live streams from scratch; kick VOD.
             if (state.isLive && state.currentStream != null) {
-              changeStream(state.currentStream!, resetPosition: true);
+              unawaited(
+                changeStream(state.currentStream!, resetPosition: true),
+              );
             } else {
               _player.play();
             }
@@ -2270,7 +2263,7 @@ class PlayerController extends Notifier<PlayerState> {
         );
         return;
       }
-      retryNextStream(sourceSessionId: sourceSessionId);
+      unawaited(retryNextStream(sourceSessionId: sourceSessionId));
     }
   }
 
@@ -2306,7 +2299,7 @@ class PlayerController extends Notifier<PlayerState> {
         kind: PlaybackUiPhaseKind.reconnectingLive,
         detail: "Reconnecting to live stream...",
       );
-      changeStream(state.currentStream!, resetPosition: true);
+      unawaited(changeStream(state.currentStream!, resetPosition: true));
     }
   }
 
@@ -2575,7 +2568,7 @@ class PlayerController extends Notifier<PlayerState> {
           source: "Torrent ($fileLabel)",
           headers: {},
         );
-        changeStream(newStream, resetPosition: true);
+        unawaited(changeStream(newStream, resetPosition: true));
       }
     } catch (e) {
       if (kDebugMode) debugPrint("Failed to switch file: $e");
@@ -2899,50 +2892,52 @@ class PlayerController extends Notifier<PlayerState> {
       final results = <int, bool>{}; // idx → isHealthy
 
       for (final idx in candidates) {
-        _isStreamCandidateHealthy(streams[idx])
-            .then((isHealthy) {
-              if (completer.isCompleted) return;
-              if (!isHealthy) {
+        unawaited(
+          _isStreamCandidateHealthy(streams[idx])
+              .then((isHealthy) {
+                if (completer.isCompleted) return;
+                if (!isHealthy) {
+                  _markSourceAttempt(
+                    idx,
+                    SourceAttemptStatus.failed,
+                    isCurrent: false,
+                  );
+                }
+                results[idx] = isHealthy;
+
+                // Walk candidates in preference order; stop at the first one
+                // whose result we have and which is healthy.
+                for (final c in candidates) {
+                  if (!results.containsKey(c)) {
+                    break; // still waiting for a higher-priority one
+                  }
+                  if (results[c]!) {
+                    if (kDebugMode) {
+                      debugPrint("Stream $c is healthy (early-exit)");
+                    }
+                    completer.complete(c);
+                    return;
+                  }
+                }
+                // All results are in and all failed → fall back to start
+                if (results.length == candidates.length &&
+                    !completer.isCompleted) {
+                  completer.complete(start);
+                }
+              })
+              .catchError((_) {
+                if (completer.isCompleted) return;
+                results[idx] = false;
                 _markSourceAttempt(
                   idx,
                   SourceAttemptStatus.failed,
                   isCurrent: false,
                 );
-              }
-              results[idx] = isHealthy;
-
-              // Walk candidates in preference order; stop at the first one
-              // whose result we have and which is healthy.
-              for (final c in candidates) {
-                if (!results.containsKey(c)) {
-                  break; // still waiting for a higher-priority one
+                if (results.length == candidates.length) {
+                  completer.complete(start);
                 }
-                if (results[c]!) {
-                  if (kDebugMode) {
-                    debugPrint("Stream $c is healthy (early-exit)");
-                  }
-                  completer.complete(c);
-                  return;
-                }
-              }
-              // All results are in and all failed → fall back to start
-              if (results.length == candidates.length &&
-                  !completer.isCompleted) {
-                completer.complete(start);
-              }
-            })
-            .catchError((_) {
-              if (completer.isCompleted) return;
-              results[idx] = false;
-              _markSourceAttempt(
-                idx,
-                SourceAttemptStatus.failed,
-                isCurrent: false,
-              );
-              if (results.length == candidates.length) {
-                completer.complete(start);
-              }
-            });
+              }),
+        );
       }
 
       final winner = await completer.future;
@@ -3778,20 +3773,20 @@ class PlayerController extends Notifier<PlayerState> {
       }
 
       if (state.useExoPlayer && state.currentStream != null) {
-        _pendingVideoViewSubtitleIdsBeforeReload = _videoViewController
+        pendingVideoViewSubtitleIdsBeforeReload = _videoViewController
             ?.mediaInfo
             .value
             ?.subtitleTracks
             .keys
             .toSet();
-        _selectNewestVideoViewSubtitleAfterReload =
+        selectNewestVideoViewSubtitleAfterReload =
             !(Platform.isMacOS || Platform.isIOS);
 
         await changeStream(state.currentStream!, resetPosition: false);
 
         if (!state.useExoPlayer) {
-          _pendingVideoViewSubtitleIdsBeforeReload = null;
-          _selectNewestVideoViewSubtitleAfterReload = false;
+          pendingVideoViewSubtitleIdsBeforeReload = null;
+          selectNewestVideoViewSubtitleAfterReload = false;
           await selectSubtitleTrack('external:${newSub.url}');
         }
         return;

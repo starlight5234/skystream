@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
@@ -52,6 +53,7 @@ class PlayerBottomSheets {
     final wasPlaying = controller.isPlaying;
 
     if (wasPlaying) await controller.pause();
+    if (!context.mounted) return;
     final result = await _showPlayerOptionsDialog(
       context: context,
       ref: ref,
@@ -426,6 +428,8 @@ class PlayerBottomSheets {
     final wasPlaying = controller.isPlaying;
 
     if (wasPlaying) await controller.pause();
+    if (!context.mounted) return;
+
     final optionsResult = await _showPlayerOptionsDialog(
       context: context,
       ref: ref,
@@ -433,6 +437,7 @@ class PlayerBottomSheets {
       currentStream: currentStream,
       initialTab: 1,
     );
+    if (!context.mounted) return;
     final result = optionsResult?.tracks;
 
     if (optionsResult?.openSubtitleOptions == true ||
@@ -1574,19 +1579,19 @@ class PlayerBottomSheets {
                                       ),
                                     ),
                                     const SizedBox(height: 16),
-                                    Text(
+                                    const Text(
                                       'Subtitle Accounts Not Configured',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w800,
                                         color: HotstarPlayerStyle.primaryText,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    Text(
+                                    const Text(
                                       'Explorey requires your personal API keys for OpenSubtitles, SubDL, or SubSource.',
                                       textAlign: TextAlign.center,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         color: HotstarPlayerStyle.secondaryText,
                                       ),
@@ -1670,9 +1675,13 @@ class PlayerBottomSheets {
                                     .downloadAndPrepare(sub);
 
                                 if (path != null) {
-                                  ref
-                                      .read(playerControllerProvider.notifier)
-                                      .loadExternalSubtitleFile(filePath: path);
+                                  unawaited(
+                                    ref
+                                        .read(playerControllerProvider.notifier)
+                                        .loadExternalSubtitleFile(
+                                          filePath: path,
+                                        ),
+                                  );
                                   if (context.mounted) Navigator.pop(ctx);
                                 } else {
                                   if (context.mounted) {
@@ -2103,7 +2112,7 @@ class _HotstarOptionColumn extends StatelessWidget {
                 ),
               ),
             ),
-            if (action != null) action!,
+            ?action,
           ],
         ),
         SizedBox(height: isCompact ? 10 : 26),
