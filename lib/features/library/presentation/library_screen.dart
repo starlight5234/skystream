@@ -90,13 +90,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               ),
             ),
             Expanded(
-              child: PageView(
+              child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (index) {
                   _tabController.animateTo(index);
                 },
                 physics: const BouncingScrollPhysics(),
-                children: const [DownloadsTab(), BookmarksTab()],
+                itemCount: 2,
+                itemBuilder: (_, i) =>
+                    i == 0 ? const DownloadsTab() : const BookmarksTab(),
               ),
             ),
           ],

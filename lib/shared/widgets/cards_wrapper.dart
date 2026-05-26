@@ -25,23 +25,19 @@ class CardsWrapper extends StatefulWidget {
 
 class _CardsWrapperState extends State<CardsWrapper>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
+  // Lazily-built. Hundreds of cards live offscreen in long rails and never
+  // get focused or hovered — creating an AnimationController for each one
+  // up front wastes vsync registrations and Tween allocations.
+  AnimationController? _controller;
+  Animation<double>? _scaleAnimation;
   bool _isFocused = false;
+  bool _isHovered = false;
   late FocusNode _node;
 
   @override
   void initState() {
     super.initState();
     _node = widget.focusNode ?? FocusNode();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: widget.scaleFactor,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     if (widget.autoFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,12 +57,22 @@ class _CardsWrapperState extends State<CardsWrapper>
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     if (widget.focusNode == null) _node.dispose();
     super.dispose();
   }
 
-  bool _isHovered = false;
+  void _ensureController() {
+    if (_controller != null) return;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: widget.scaleFactor,
+    ).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeInOut));
+  }
 
   void _updateAnimation() {
     // In D-pad/keyboard mode the border+glow is the focus indicator; skip scale
@@ -75,9 +81,10 @@ class _CardsWrapperState extends State<CardsWrapper>
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final shouldScale = _isHovered || (_isFocused && !isDpad);
     if (shouldScale) {
-      _controller.forward();
+      _ensureController();
+      _controller!.forward();
     } else {
-      _controller.reverse();
+      _controller?.reverse();
     }
   }
 
@@ -159,23 +166,28 @@ class _CardsWrapperState extends State<CardsWrapper>
         onExit: (_) => _onHover(false),
         child: GestureDetector(
           onTap: widget.onTap,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: widget.borderRadius ?? BorderRadius.circular(12),
-                border:
-                    (_isFocused &&
-                        FocusManager.instance.highlightMode ==
-                            FocusHighlightMode.traditional)
-                    ? Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      )
-                    : null,
-              ),
-              child: widget.child,
-            ),
+          child: Builder(
+            builder: (context) {
+              final card = Container(
+                decoration: BoxDecoration(
+                  borderRadius:
+                      widget.borderRadius ?? BorderRadius.circular(12),
+                  border:
+                      (_isFocused &&
+                          FocusManager.instance.highlightMode ==
+                              FocusHighlightMode.traditional)
+                      ? Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        )
+                      : null,
+                ),
+                child: widget.child,
+              );
+              final animation = _scaleAnimation;
+              if (animation == null) return card;
+              return ScaleTransition(scale: animation, child: card);
+            },
           ),
         ),
       ),

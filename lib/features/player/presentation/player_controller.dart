@@ -32,7 +32,6 @@ import '../../../../core/services/local_proxy_service.dart';
 import '../../../../core/utils/stream_quality_sorter.dart';
 import '../../skip/data/intro_db_service.dart';
 import '../../skip/data/anime_skip_service.dart';
-import '../../tracking/data/sync_manager.dart';
 
 // Sentinel so copyWith can distinguish "not passed" from "explicitly null".
 const Object _keep = Object();
@@ -737,7 +736,8 @@ class PlayerController extends Notifier<PlayerState> {
       }
     }
 
-    final imdbId = item.syncData?['imdbId'] ?? item.syncData?['imdb_id'];
+    final imdbId =
+        item.imdbId ?? item.syncData?['imdbId'] ?? item.syncData?['imdb_id'];
     final tmdbId = item.tmdbId;
 
     state = state.copyWith(
@@ -766,7 +766,7 @@ class PlayerController extends Notifier<PlayerState> {
     );
 
     _isInitialized = true;
-    _fetchAndLogSkipSegments();
+    unawaited(_fetchAndLogSkipSegments());
 
     await _initStream();
     if (_isDisposed) return;
@@ -775,8 +775,10 @@ class PlayerController extends Notifier<PlayerState> {
 
   Future<void> _fetchAndLogSkipSegments() async {
     if (_episode == null) return;
-    print('=============================================');
-    print('SKIP SEGMENTS (IntroDB/AnimeSkip)');
+    if (kDebugMode) {
+      debugPrint('=============================================');
+      debugPrint('SKIP SEGMENTS (IntroDB/AnimeSkip)');
+    }
 
     try {
       final introDb = ref.read(introDbServiceProvider);
@@ -786,12 +788,14 @@ class PlayerController extends Notifier<PlayerState> {
         season: _episode!.season,
         episode: _episode!.episode,
       );
-      print('IntroDB returned ${segments.length} segments:');
-      for (final s in segments) {
-        print('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+      if (kDebugMode) {
+        debugPrint('IntroDB returned ${segments.length} segments:');
+        for (final s in segments) {
+          debugPrint('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+        }
       }
     } catch (e) {
-      print('IntroDB error: $e');
+      if (kDebugMode) debugPrint('IntroDB error: $e');
     }
 
     try {
@@ -804,15 +808,17 @@ class PlayerController extends Notifier<PlayerState> {
           season: _episode!.season,
           episode: _episode!.episode,
         );
-        print('AnimeSkip returned ${segments.length} segments:');
-        for (final s in segments) {
-          print('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+        if (kDebugMode) {
+          debugPrint('AnimeSkip returned ${segments.length} segments:');
+          for (final s in segments) {
+            debugPrint('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+          }
         }
       }
     } catch (e) {
-      print('AnimeSkip error: $e');
+      if (kDebugMode) debugPrint('AnimeSkip error: $e');
     }
-    print('=============================================');
+    if (kDebugMode) debugPrint('=============================================');
   }
 
   void _setupVideoViewListeners() {
@@ -1949,9 +1955,11 @@ class PlayerController extends Notifier<PlayerState> {
       }
       final double progressDecimal = dur > 0 ? pos / dur : 0.0;
       if (_hasScrobbleStarted && !_hasMarkedWatched) {
-        ref
-            .read(syncManagerProvider)
-            .scrobbleStart(_item, _resolveCurrentEpisode(), progressDecimal);
+        unawaited(
+          ref
+              .read(syncManagerProvider)
+              .scrobbleStart(_item, _resolveCurrentEpisode(), progressDecimal),
+        );
       }
     } catch (_) {}
   }
@@ -1975,9 +1983,11 @@ class PlayerController extends Notifier<PlayerState> {
       }
       final double progressDecimal = dur > 0 ? pos / dur : 0.0;
       if (_hasScrobbleStarted && !_hasMarkedWatched) {
-        ref
-            .read(syncManagerProvider)
-            .scrobblePause(_item, _resolveCurrentEpisode(), progressDecimal);
+        unawaited(
+          ref
+              .read(syncManagerProvider)
+              .scrobblePause(_item, _resolveCurrentEpisode(), progressDecimal),
+        );
       }
     } catch (_) {}
   }
@@ -2345,35 +2355,53 @@ class PlayerController extends Notifier<PlayerState> {
       final allHistory = historyRepo.getWatchHistory();
       if (isSeries) {
         final ep = _resolveCurrentEpisode();
-        final match = allHistory.where((h) => 
-            h.item.url == _item.url && 
-            h.season == ep?.season && 
-            h.episode == ep?.episode).firstOrNull;
+        final match = allHistory
+            .where(
+              (h) =>
+                  h.item.url == _item.url &&
+                  h.season == ep?.season &&
+                  h.episode == ep?.episode,
+            )
+            .firstOrNull;
         if (match != null) localTimestamp = match.timestamp;
       } else {
-        final match = allHistory.where((h) => h.item.url == _item.url).firstOrNull;
+        final match = allHistory
+            .where((h) => h.item.url == _item.url)
+            .firstOrNull;
         if (match != null) localTimestamp = match.timestamp;
       }
 
       double? syncedPct;
       int syncedTimestamp = 0;
       try {
-        final syncedProgressList = await ref.read(syncedProgressProvider.future);
+        final syncedProgressList = await ref.read(
+          syncedProgressProvider.future,
+        );
         if (syncedProgressList.isNotEmpty) {
           SyncProgressItem? match;
           if (isSeries) {
             final ep = _resolveCurrentEpisode();
-            match = syncedProgressList.where((p) => 
-              p.type == MultimediaContentType.series &&
-              p.season == ep?.season &&
-              p.episode == ep?.episode &&
-              (p.tmdbId == _item.tmdbId?.toString() || p.imdbId == _item.imdbId || p.title.toLowerCase() == _item.title.toLowerCase())
-            ).firstOrNull;
+            match = syncedProgressList
+                .where(
+                  (p) =>
+                      p.type == MultimediaContentType.series &&
+                      p.season == ep?.season &&
+                      p.episode == ep?.episode &&
+                      (p.tmdbId == _item.tmdbId?.toString() ||
+                          p.imdbId == _item.imdbId ||
+                          p.title.toLowerCase() == _item.title.toLowerCase()),
+                )
+                .firstOrNull;
           } else {
-            match = syncedProgressList.where((p) =>
-              p.type == MultimediaContentType.movie &&
-              (p.tmdbId == _item.tmdbId?.toString() || p.imdbId == _item.imdbId || p.title.toLowerCase() == _item.title.toLowerCase())
-            ).firstOrNull;
+            match = syncedProgressList
+                .where(
+                  (p) =>
+                      p.type == MultimediaContentType.movie &&
+                      (p.tmdbId == _item.tmdbId?.toString() ||
+                          p.imdbId == _item.imdbId ||
+                          p.title.toLowerCase() == _item.title.toLowerCase()),
+                )
+                .firstOrNull;
           }
           if (match != null && match.progressPercentage > 0) {
             syncedPct = match.progressPercentage;
@@ -2418,7 +2446,10 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> confirmResume() async {
     final pos = state.resumePromptPosition;
     final pct = state.resumePromptPercentage;
-    state = state.copyWith(resumePromptPosition: null, resumePromptPercentage: null);
+    state = state.copyWith(
+      resumePromptPosition: null,
+      resumePromptPercentage: null,
+    );
     if ((pos != null && pos > 0) || (pct != null && pct > 0)) {
       _pendingResumeSeekPosition = pos;
       _pendingResumeSeekPercentage = pct;
@@ -2430,7 +2461,10 @@ class PlayerController extends Notifier<PlayerState> {
   void dismissResumePrompt() {
     _pendingResumeSeekPosition = null;
     _pendingResumeSeekPercentage = null;
-    state = state.copyWith(resumePromptPosition: null, resumePromptPercentage: null);
+    state = state.copyWith(
+      resumePromptPosition: null,
+      resumePromptPercentage: null,
+    );
   }
 
   /// Jumps back to the live edge. For DVR streams, seeks to the end of the
@@ -3815,7 +3849,7 @@ class PlayerController extends Notifier<PlayerState> {
     int? pos = _pendingResumeSeekPosition;
     final pct = _pendingResumeSeekPercentage;
     if (pos == null && pct != null) {
-      int dur = state.useExoPlayer
+      final int dur = state.useExoPlayer
           ? _videoViewController?.mediaInfo.value?.duration ?? 0
           : _player.state.duration.inMilliseconds;
       if (dur > 0) {

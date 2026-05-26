@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import '../../../../core/router/app_router.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
@@ -35,20 +37,41 @@ class MediaHorizontalList extends StatefulWidget {
 class _MediaHorizontalListState extends State<MediaHorizontalList> {
   late ScrollController _scrollController;
   bool _isPortrait = true;
-  
+
   // Cache the aspect ratio for a given URL to prevent layout shifts
-  // when the widget is destroyed and recreated during scrolling.
-  static final Map<String, bool> _aspectRatioCache = {};
+  // when the widget is destroyed and recreated during scrolling. Bounded
+  // because a power user can scroll thousands of unique posters over a
+  // session; LRU eviction keeps the working set bounded.
+  static const int _aspectRatioCacheMax = 5000;
+  static final LinkedHashMap<String, bool> _aspectRatioCache =
+      LinkedHashMap<String, bool>();
+
+  static bool? _lookupCached(String url) {
+    if (!_aspectRatioCache.containsKey(url)) return null;
+    // Move to most-recently-used.
+    final v = _aspectRatioCache.remove(url)!;
+    _aspectRatioCache[url] = v;
+    return v;
+  }
+
+  static void _storeCached(String url, bool isPortrait) {
+    _aspectRatioCache.remove(url);
+    _aspectRatioCache[url] = isPortrait;
+    while (_aspectRatioCache.length > _aspectRatioCacheMax) {
+      _aspectRatioCache.remove(_aspectRatioCache.keys.first);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    
+
     if (widget.mediaList.isNotEmpty) {
       final url = widget.mediaList.first.posterImageUrl;
-      if (_aspectRatioCache.containsKey(url)) {
-        _isPortrait = _aspectRatioCache[url]!;
+      final cached = _lookupCached(url);
+      if (cached != null) {
+        _isPortrait = cached;
       } else {
         _checkAspectRatio();
       }
@@ -61,9 +84,10 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     if (widget.mediaList.isNotEmpty &&
         oldWidget.mediaList != widget.mediaList) {
       final url = widget.mediaList.first.posterImageUrl;
-      if (_aspectRatioCache.containsKey(url)) {
-        if (_isPortrait != _aspectRatioCache[url]) {
-          setState(() => _isPortrait = _aspectRatioCache[url]!);
+      final cached = _lookupCached(url);
+      if (cached != null) {
+        if (_isPortrait != cached) {
+          setState(() => _isPortrait = cached);
         }
       } else {
         _checkAspectRatio();
@@ -76,7 +100,7 @@ class _MediaHorizontalListState extends State<MediaHorizontalList> {
     final url = widget.mediaList.first.posterImageUrl;
     if (url.isEmpty) return;
     final isPortrait = await ImageUtils.isImagePortrait(url);
-    _aspectRatioCache[url] = isPortrait;
+    _storeCached(url, isPortrait);
     if (mounted && _isPortrait != isPortrait) {
       setState(() {
         _isPortrait = isPortrait;

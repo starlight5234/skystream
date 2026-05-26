@@ -1,6 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/logger/app_logger.dart';
 import '../../../../core/storage/history_repository.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../explore/data/explore_tmdb_provider.dart';
@@ -184,7 +184,7 @@ Future<List<SyncProgressItem>> syncedProgress(Ref ref) async {
       final items = await service.pullPlaybackProgress();
       syncedItems.addAll(items);
     } catch (e) {
-      print('Failed to pull progress from ${service.name}: $e');
+      talker.error('Failed to pull progress from ${service.name}', e);
     }
   }
 

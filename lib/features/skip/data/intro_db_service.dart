@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'skip_service.dart';
@@ -24,8 +23,8 @@ class IntroDbService implements SkipService {
     required int episode,
     int? duration,
   }) async {
-    // IntroDB primarily uses IMDB id for Western TV/movies, or TMDB as fallback
-    if (imdbId == null && tmdbId == null) {
+    // The new API seems to only support imdb_id
+    if (imdbId == null) {
       return [];
     }
 
@@ -33,33 +32,42 @@ class IntroDbService implements SkipService {
       final queryParams = <String, dynamic>{
         'season': season,
         'episode': episode,
+        'imdb_id': imdbId,
       };
-      
-      if (imdbId != null) {
-        queryParams['imdb'] = imdbId;
-      } else if (tmdbId != null) {
-        queryParams['tmdb'] = tmdbId.toString();
-      }
 
-      final response = await _dio.get<List<dynamic>>(
-        'https://api.intro-skipper.workers.dev/api/v1/segments',
+      final response = await _dio.get<Map<String, dynamic>>(
+        'https://api.introdb.app/segments',
         queryParameters: queryParams,
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        return response.data!.map((dynamic item) {
-          final map = item as Map<String, dynamic>;
-          return SkipSegment(
-            startTime: (map['start'] as num).toDouble(),
-            endTime: (map['end'] as num).toDouble(),
-            type: SkipType.fromString(map['type'] as String),
-          );
-        }).toList();
+        final data = response.data!;
+        final segments = <SkipSegment>[];
+
+        void addSegment(String key, SkipType type) {
+          final segmentData = data[key];
+          // If we use 'is Map' it's safer for dynamic JSON maps
+          if (segmentData != null && segmentData is Map) {
+            segments.add(
+              SkipSegment(
+                startTime: (segmentData['start_sec'] as num).toDouble(),
+                endTime: (segmentData['end_sec'] as num).toDouble(),
+                type: type,
+              ),
+            );
+          }
+        }
+
+        addSegment('intro', SkipType.intro);
+        addSegment('recap', SkipType.recap);
+        addSegment('outro', SkipType.outro);
+
+        return segments;
       }
     } catch (e) {
       // Ignore errors (e.g. 404 if no skip data exists)
     }
-    
+
     return [];
   }
 }

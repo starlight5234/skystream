@@ -58,15 +58,24 @@ class _MovieTrailersCarouselState extends State<MovieTrailersCarousel> {
             height: 160,
             child: DesktopScrollWrapper(
               controller: _scrollController,
-              child: ListView.separated(
+              child: ListView.builder(
                 clipBehavior: Clip.none,
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
                 itemCount: displayCount,
-                separatorBuilder: (_, _) => const SizedBox(width: 16),
-                itemBuilder: (context, index) => widget.isLoading
-                    ? _buildShimmerItem(context, isDesktop: true)
-                    : _buildDesktopItem(context, index),
+                // 16:9 at height 160 → width ≈ 284, +16 spacing baked in.
+                itemExtent: 300,
+                itemBuilder: (context, index) {
+                  final child = widget.isLoading
+                      ? _buildShimmerItem(context, isDesktop: true)
+                      : _buildDesktopItem(context, index);
+                  return RepaintBoundary(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: child,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -122,9 +131,13 @@ class _MovieTrailersCarouselState extends State<MovieTrailersCarousel> {
               clipBehavior: Clip.none,
               scrollDirection: Axis.horizontal,
               itemCount: displayCount,
-              itemBuilder: (context, index) => widget.isLoading
-                  ? _buildShimmerItem(context, isDesktop: false)
-                  : _buildMobileItem(context, index),
+              // Mobile item is width:200 + margin-right:16 inside _buildMobileItem.
+              itemExtent: 216,
+              itemBuilder: (context, index) => RepaintBoundary(
+                child: widget.isLoading
+                    ? _buildShimmerItem(context, isDesktop: false)
+                    : _buildMobileItem(context, index),
+              ),
             ),
           ),
           const SizedBox(height: 32),
@@ -143,8 +156,10 @@ class _MovieTrailersCarouselState extends State<MovieTrailersCarousel> {
           await launchUrl(uri);
         }
       },
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
+      child: SizedBox(
+        // Matches itemExtent: 16:9 at row height 160 = 284 logical px.
+        width: 284,
+        height: 160,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Stack(

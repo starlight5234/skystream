@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,7 +58,9 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
     setState(() {
       _isExpanded = newState;
     });
-    ref.read(settingsRepositoryProvider).setSidebarExpanded(newState);
+    unawaited(
+      ref.read(settingsRepositoryProvider).setSidebarExpanded(newState),
+    );
   }
 
   @override

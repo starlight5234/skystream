@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'tracking_service.dart';
 import '../domain/sync_progress_item.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../../core/logger/app_logger.dart';
 import '../../../../core/network/dio_client_provider.dart';
 import '../../../../core/storage/storage_service.dart';
 import '../../../../core/config/sync_config.dart';
@@ -46,69 +46,66 @@ class SimklService implements TrackingService {
     bool Function()? isCancelled,
   }) async {
     try {
-      print('SimklService: Initiating Device PIN Flow...');
-      final response = await _dio.get(
+      talker.debug('SimklService: Initiating Device PIN Flow...');
+      final response = await _dio.get<dynamic>(
         'https://api.simkl.com/oauth/pin',
         queryParameters: {'client_id': _clientId},
       );
-      
+
       final userCode = response.data['user_code'] as String;
-      final deviceCode = response.data['device_code'] as String;
       final verificationUrl = response.data['verification_url'] as String;
       final interval = (response.data['interval'] as num?)?.toInt() ?? 5;
-      
-      print('=============================================');
-      print('SIMKL DEVICE LOGIN');
-      print('1. Go to: $verificationUrl');
-      print('2. Enter code: $userCode');
-      print('=============================================');
+
+      talker.debug(
+        'SIMKL DEVICE LOGIN — go to $verificationUrl and enter code $userCode',
+      );
 
       if (onDeviceCodeGenerated != null) {
         await onDeviceCodeGenerated(verificationUrl, userCode);
       }
-      
+
       // Polling
       int attempts = 0;
       while (attempts < 60) { // Timeout after ~5 mins (assuming 5s interval)
         if (isCancelled != null && isCancelled()) {
-          print('SimklService: Polling cancelled by user.');
+          talker.debug('SimklService: Polling cancelled by user.');
           return false;
         }
-        await Future.delayed(Duration(seconds: interval));
+        await Future<void>.delayed(Duration(seconds: interval));
         if (isCancelled != null && isCancelled()) return false;
-        
+
         try {
-          print('SimklService: Polling for token...');
-          final tokenResponse = await _dio.get(
+          talker.debug('SimklService: Polling for token...');
+          final tokenResponse = await _dio.get<dynamic>(
             'https://api.simkl.com/oauth/pin/$userCode',
             queryParameters: {'client_id': _clientId},
           );
-          
+
           final data = tokenResponse.data;
           if (data is Map && data['result'] == 'OK' && data['access_token'] != null) {
             _accessToken = data['access_token'].toString();
             await _storage.setString('simkl_access_token', _accessToken!);
-            print('SimklService: Login successful!');
+            talker.debug('SimklService: Login successful!');
             return true;
           }
         } on DioException catch (e) {
           if (e.response?.statusCode != 400) {
-            print('SimklService: Polling error: ${e.message}');
+            talker.debug('SimklService: Polling error: ${e.message}');
           }
         }
         attempts++;
       }
-      print('SimklService: Login timed out.');
+      talker.debug('SimklService: Login timed out.');
       return false;
     } catch (e) {
-      print('SimklService: Login failed: $e');
+      talker.error('SimklService: Login failed', e);
       return false;
     }
   }
 
   @override
   Future<void> logout() async {
-    print('SimklService: Logging out...');
+    talker.debug('SimklService: Logging out...');
     _accessToken = null;
     await _storage.remove('simkl_access_token');
   }
@@ -172,7 +169,7 @@ class SimklService implements TrackingService {
     try {
       final payload = <String, dynamic>{};
       final ids = <String, dynamic>{
-        if (simklId != null) 'simkl': simklId,
+        'simkl': ?simklId,
         if (simklId == null && item.tmdbId != null) 'tmdb': item.tmdbId,
         if (simklId == null && item.imdbId != null) 'imdb': item.imdbId,
       };
@@ -187,7 +184,7 @@ class SimklService implements TrackingService {
         ];
       }
 
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         'https://api.simkl.com/sync/add-to-list',
         data: payload,
         options: Options(
@@ -197,10 +194,10 @@ class SimklService implements TrackingService {
           },
         ),
       );
-      print('SimklService: Add to list $listType success: ${response.statusCode}');
+      talker.debug('SimklService: Add to list $listType success: ${response.statusCode}');
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print('SimklService: Add to list $listType failed: $e');
+      talker.error('SimklService: Add to list $listType failed', e);
       return false;
     }
   }
@@ -214,7 +211,7 @@ class SimklService implements TrackingService {
     try {
       final payload = <String, dynamic>{};
       final ids = <String, dynamic>{
-        if (simklId != null) 'simkl': simklId,
+        'simkl': ?simklId,
         if (simklId == null && item.tmdbId != null) 'tmdb': item.tmdbId,
         if (simklId == null && item.imdbId != null) 'imdb': item.imdbId,
       };
@@ -236,7 +233,7 @@ class SimklService implements TrackingService {
         ];
       }
 
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         'https://api.simkl.com/sync/history',
         data: payload,
         options: Options(
@@ -246,10 +243,10 @@ class SimklService implements TrackingService {
           },
         ),
       );
-      print('SimklService: Mark watched success: ${response.statusCode}');
+      talker.debug('SimklService: Mark watched success: ${response.statusCode}');
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print('SimklService: Mark watched failed: $e');
+      talker.error('SimklService: Mark watched failed', e);
       return false;
     }
   }

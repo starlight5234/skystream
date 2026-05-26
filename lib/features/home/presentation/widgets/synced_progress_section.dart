@@ -10,7 +10,7 @@ import 'synced_progress_card.dart';
 class SyncedProgressSection extends ConsumerStatefulWidget {
   final String title;
   final List<SyncProgressItem> items;
-  final Function(SyncProgressItem) onItemTap;
+  final void Function(SyncProgressItem) onItemTap;
 
   const SyncedProgressSection({
     super.key,

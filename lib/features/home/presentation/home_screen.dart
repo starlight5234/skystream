@@ -47,9 +47,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final ValueNotifier<bool> _isFabExtended = ValueNotifier<bool>(true);
   final FocusNode _firstActionFocusNode = FocusNode();
 
-  /// Cached during build so [_onScroll] can skip FAB logic on widescreen.
-  bool _isCurrentlyWidescreen = false;
-
   /// Carousel controller exposed by ExploreCarousel via [onControllerReady].
   /// Used by DashboardHeaderBar arrows.
   CarouselSliderController? _carouselController;
@@ -63,13 +60,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _scrollController.addListener(_onScroll);
   }
 
+  bool _isWidescreenForScroll() {
+    final profile = ref.read(deviceProfileProvider).asData?.value;
+    final isTv = profile?.isTv == true || context.isTv;
+    return isTv ||
+        profile?.isLargeScreen == true ||
+        context.isTabletOrLarger;
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
 
     // On widescreen there is no mobile AppBar (opacity notifier) and no FAB
     // (extended notifier). Skip all work to avoid per-frame overhead that
     // can stall the rendering pipeline during bounce / direction-change.
-    if (_isCurrentlyWidescreen) return;
+    if (_isWidescreenForScroll()) return;
 
     final opacity = (_scrollController.offset * 0.8 / 300).clamp(0.0, 1.0);
     if (opacity != _appBarOpacityNotifier.value) {
@@ -117,7 +122,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // decision even when the HomeScreen's context width is narrowed
     // by the sidebar (e.g. iPad portrait).
     final isWidescreen = isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
-    _isCurrentlyWidescreen = isWidescreen;
 
     // On widescreen: no AppBar, no FAB — we use the DashboardHeaderBar instead.
     // The header lives outside the scroll view in a plain Column so there is

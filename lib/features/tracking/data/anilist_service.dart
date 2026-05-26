@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'tracking_service.dart';
 import '../domain/sync_progress_item.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../../core/logger/app_logger.dart';
 import '../../../../core/network/dio_client_provider.dart';
 import '../../../../core/storage/storage_service.dart';
 import '../../../../core/config/sync_config.dart';
@@ -46,27 +46,23 @@ class AniListService implements TrackingService {
     bool Function()? isCancelled,
   }) async {
     try {
-      print('AniListService: Initiating OAuth Flow...');
-      final authUrl = 'https://anilist.co/api/v2/oauth/authorize?client_id=$_clientId&response_type=token';
-      print('=============================================');
-      print('ANILIST LOGIN');
-      print('Open this URL in browser/webview:');
-      print(authUrl);
-      print('=============================================');
+      talker.debug('AniListService: Initiating OAuth Flow...');
+      const authUrl = 'https://anilist.co/api/v2/oauth/authorize?client_id=$_clientId&response_type=token';
+      talker.debug('ANILIST LOGIN — open in browser/webview: $authUrl');
 
       if (onWebViewRequested != null) {
         await onWebViewRequested(authUrl);
       }
       return true;
     } catch (e) {
-      print('AniListService: Login error: $e');
+      talker.error('AniListService: Login error', e);
       return false;
     }
   }
 
   @override
   Future<void> logout() async {
-    print('AniListService: Logging out...');
+    talker.debug('AniListService: Logging out...');
     _accessToken = null;
     await _storage.remove('anilist_access_token');
   }
@@ -93,7 +89,7 @@ class AniListService implements TrackingService {
       if (status != null) variables['status'] = status;
       if (progress != null) variables['progress'] = progress;
 
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         'https://graphql.anilist.co',
         data: {
           'query': '''
@@ -116,10 +112,10 @@ class AniListService implements TrackingService {
         ),
       );
 
-      print('AniListService: SaveMediaListEntry success: ${response.statusCode}');
+      talker.debug('AniListService: SaveMediaListEntry success: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('AniListService: SaveMediaListEntry failed: $e');
+      talker.error('AniListService: SaveMediaListEntry failed', e);
       return false;
     }
   }

@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'tracking_service.dart';
 import '../domain/sync_progress_item.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../../core/logger/app_logger.dart';
 import '../../../../core/network/dio_client_provider.dart';
 import '../../../../core/storage/storage_service.dart';
 import '../../../../core/config/sync_config.dart';
@@ -46,40 +46,38 @@ class TraktService implements TrackingService {
     bool Function()? isCancelled,
   }) async {
     try {
-      print('TraktService: Initiating Device PIN Flow...');
-      final response = await _dio.post(
+      talker.debug('TraktService: Initiating Device PIN Flow...');
+      final response = await _dio.post<dynamic>(
         'https://api.trakt.tv/oauth/device/code',
         data: {'client_id': _clientId},
       );
-      
+
       final userCode = response.data['user_code'] as String;
       final deviceCode = response.data['device_code'] as String;
       final verificationUrl = response.data['verification_url'] as String;
       final interval = (response.data['interval'] as num?)?.toInt() ?? 5;
-      
-      print('=============================================');
-      print('TRAKT DEVICE LOGIN');
-      print('1. Go to: $verificationUrl');
-      print('2. Enter code: $userCode');
-      print('=============================================');
+
+      talker.debug(
+        'TRAKT DEVICE LOGIN — go to $verificationUrl and enter code $userCode',
+      );
 
       if (onDeviceCodeGenerated != null) {
         await onDeviceCodeGenerated(verificationUrl, userCode);
       }
-      
+
       // Polling
       int attempts = 0;
       while (attempts < 60) {
         if (isCancelled != null && isCancelled()) {
-          print('TraktService: Polling cancelled by user.');
+          talker.debug('TraktService: Polling cancelled by user.');
           return false;
         }
-        await Future.delayed(Duration(seconds: interval));
+        await Future<void>.delayed(Duration(seconds: interval));
         if (isCancelled != null && isCancelled()) return false;
-        
+
         try {
-          print('TraktService: Polling for token...');
-          final tokenResponse = await _dio.post(
+          talker.debug('TraktService: Polling for token...');
+          final tokenResponse = await _dio.post<dynamic>(
             'https://api.trakt.tv/oauth/device/token',
             data: {
               'code': deviceCode,
@@ -87,37 +85,37 @@ class TraktService implements TrackingService {
               'client_secret': SyncConfig.traktClientSecret,
             },
           );
-          
+
           final data = tokenResponse.data;
           if (tokenResponse.statusCode == 200 && data is Map && data['access_token'] != null) {
             _accessToken = data['access_token'].toString();
             await _storage.setString('trakt_access_token', _accessToken!);
-            print('TraktService: Login successful!');
+            talker.debug('TraktService: Login successful!');
             return true;
           }
         } on DioException catch (e) {
           if (e.response?.statusCode != 400) { // 400 = authorization_pending
-            print('TraktService: Polling error: ${e.response?.statusCode} ${e.message}');
+            talker.debug('TraktService: Polling error: ${e.response?.statusCode} ${e.message}');
             if (e.response?.statusCode == 404 || e.response?.statusCode == 409 || e.response?.statusCode == 410 || e.response?.statusCode == 418) {
                // 404 Not Found, 409 Already Used, 410 Expired, 418 Denied
-               print('TraktService: Terminal error, stopping polling.');
+               talker.debug('TraktService: Terminal error, stopping polling.');
                return false;
             }
           }
         }
         attempts++;
       }
-      print('TraktService: Login timed out.');
+      talker.debug('TraktService: Login timed out.');
       return false;
     } catch (e) {
-      print('TraktService: Login failed: $e');
+      talker.error('TraktService: Login failed', e);
       return false;
     }
   }
 
   @override
   Future<void> logout() async {
-    print('TraktService: Logging out...');
+    talker.debug('TraktService: Logging out...');
     _accessToken = null;
     await _storage.remove('trakt_access_token');
   }
@@ -171,13 +169,13 @@ class TraktService implements TrackingService {
   Future<bool> _scrobble(String action, MultimediaItem item, Episode? episode, double progress) async {
     if (_accessToken == null) return false;
     if (item.tmdbId == null && item.imdbId == null) {
-      print('TraktService: Cannot scrobble, no TMDB/IMDB ID available');
+      talker.debug('TraktService: Cannot scrobble, no TMDB/IMDB ID available');
       return false;
     }
 
     try {
       final payload = _buildScrobblePayload(item, episode, progress);
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         'https://api.trakt.tv/scrobble/$action',
         data: payload,
         options: Options(
@@ -189,10 +187,10 @@ class TraktService implements TrackingService {
           },
         ),
       );
-      print('TraktService: Scrobble $action success: ${response.statusCode}');
+      talker.debug('TraktService: Scrobble $action success: ${response.statusCode}');
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
-      print('TraktService: Scrobble $action failed: $e');
+      talker.error('TraktService: Scrobble $action failed', e);
       return false;
     }
   }
@@ -249,7 +247,7 @@ class TraktService implements TrackingService {
         ];
       }
 
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         'https://api.trakt.tv/sync/watchlist',
         data: payload,
         options: Options(
@@ -261,10 +259,10 @@ class TraktService implements TrackingService {
           },
         ),
       );
-      print('TraktService: Added to watchlist: ${response.statusCode}');
+      talker.debug('TraktService: Added to watchlist: ${response.statusCode}');
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
-      print('TraktService: Add to watchlist failed: $e');
+      talker.error('TraktService: Add to watchlist failed', e);
       return false;
     }
   }
@@ -274,7 +272,7 @@ class TraktService implements TrackingService {
     if (_accessToken == null) return [];
 
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<dynamic>(
         'https://api.trakt.tv/sync/playback',
         options: Options(
           headers: {
@@ -291,7 +289,7 @@ class TraktService implements TrackingService {
         return items.map((json) => SyncProgressItem.fromJson(json as Map<String, dynamic>)).toList();
       }
     } catch (e) {
-      print('TraktService: Pull playback progress failed: $e');
+      talker.error('TraktService: Pull playback progress failed', e);
     }
     return [];
   }
@@ -300,7 +298,7 @@ class TraktService implements TrackingService {
   Future<bool> removePlaybackProgress(String id) async {
     if (_accessToken == null) return false;
     try {
-      final response = await _dio.delete(
+      final response = await _dio.delete<dynamic>(
         'https://api.trakt.tv/sync/playback/$id',
         options: Options(
           headers: {
@@ -313,7 +311,7 @@ class TraktService implements TrackingService {
       );
       return response.statusCode == 204;
     } catch (e) {
-      print('TraktService: Remove playback progress failed: $e');
+      talker.error('TraktService: Remove playback progress failed', e);
       return false;
     }
   }

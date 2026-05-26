@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'tracking_service.dart';
 import '../domain/sync_progress_item.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
+import '../../../../core/logger/app_logger.dart';
 import '../../../../core/network/dio_client_provider.dart';
 import '../../../../core/storage/storage_service.dart';
 import '../../../../core/config/sync_config.dart';
@@ -46,32 +46,28 @@ class MalService implements TrackingService {
     bool Function()? isCancelled,
   }) async {
     try {
-      print('MALService: Initiating OAuth Flow...');
-      
-      final authUrl = 'https://myanimelist.net/v1/oauth2/authorize'
+      talker.debug('MALService: Initiating OAuth Flow...');
+
+      const authUrl = 'https://myanimelist.net/v1/oauth2/authorize'
           '?response_type=code'
           '&client_id=$_clientId'
           '&code_challenge=skystream_challenge';
-          
-      print('=============================================');
-      print('MYANIMELIST LOGIN');
-      print('Open this URL in browser/webview:');
-      print(authUrl);
-      print('=============================================');
+
+      talker.debug('MYANIMELIST LOGIN — open in browser/webview: $authUrl');
 
       if (onWebViewRequested != null) {
         await onWebViewRequested(authUrl);
       }
       return true;
     } catch (e) {
-      print('MALService: Login error: $e');
+      talker.error('MALService: Login error', e);
       return false;
     }
   }
 
   @override
   Future<void> logout() async {
-    print('MALService: Logging out...');
+    talker.debug('MALService: Logging out...');
     _accessToken = null;
     await _storage.remove('mal_access_token');
   }
@@ -97,7 +93,7 @@ class MalService implements TrackingService {
       if (status != null) data['status'] = status;
       if (numWatchedEpisodes != null) data['num_watched_episodes'] = numWatchedEpisodes;
 
-      final response = await _dio.patch(
+      final response = await _dio.patch<dynamic>(
         'https://api.myanimelist.net/v2/anime/$malId/my_list_status',
         data: data,
         options: Options(
@@ -108,10 +104,10 @@ class MalService implements TrackingService {
         ),
       );
 
-      print('MALService: Update list status success: ${response.statusCode}');
+      talker.debug('MALService: Update list status success: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('MALService: Update list status failed: $e');
+      talker.error('MALService: Update list status failed', e);
       return false;
     }
   }

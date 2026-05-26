@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/layout_constants.dart';
@@ -6,7 +8,6 @@ import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'widgets/settings_widgets.dart';
 import 'widgets/settings_dialogs.dart';
 import 'widgets/tracking_auth_dialog.dart';
-import 'widgets/webview_auth_dialog.dart';
 import 'player_settings_provider.dart';
 
 import '../../tracking/presentation/tracking_auth_provider.dart';
@@ -110,7 +111,7 @@ class AccountSettingsScreen extends ConsumerWidget {
                                   ? 'Connected'
                                   : l10n.notLoggedIn,
                               loading: () => l10n.loading,
-                              error: (_, __) => l10n.unknown,
+                              error: (_, _) => l10n.unknown,
                             ),
                             onTap: () async {
                               final state = trackingAuthAsync.value ?? {};
@@ -137,26 +138,28 @@ class AccountSettingsScreen extends ConsumerWidget {
                                       onDeviceCodeGenerated: (url, code) async {
                                         if (context.mounted) {
                                           isDialogShowing = true;
-                                          showDialog(
-                                            context: context,
-                                            barrierDismissible: true,
-                                            builder: (ctx) {
-                                              dialogContext = ctx;
-                                              return TrackingAuthDialog(
-                                                providerName: 'Simkl',
-                                                verificationUrl: url,
-                                                userCode: code,
-                                              );
-                                            },
-                                          ).then((_) {
-                                            isCancelled = true;
-                                            isDialogShowing = false;
-                                            if (context.mounted) {
-                                              FocusScope.of(
-                                                context,
-                                              ).requestFocus();
-                                            }
-                                          });
+                                          unawaited(
+                                            showDialog<void>(
+                                              context: context,
+                                              barrierDismissible: true,
+                                              builder: (ctx) {
+                                                dialogContext = ctx;
+                                                return TrackingAuthDialog(
+                                                  providerName: 'Simkl',
+                                                  verificationUrl: url,
+                                                  userCode: code,
+                                                );
+                                              },
+                                            ).then((_) {
+                                              isCancelled = true;
+                                              isDialogShowing = false;
+                                              if (context.mounted) {
+                                                FocusScope.of(
+                                                  context,
+                                                ).requestFocus();
+                                              }
+                                            }),
+                                          );
                                         }
                                       },
                                     );
@@ -187,7 +190,7 @@ class AccountSettingsScreen extends ConsumerWidget {
                                   ? 'Connected'
                                   : l10n.notLoggedIn,
                               loading: () => l10n.loading,
-                              error: (_, __) => l10n.unknown,
+                              error: (_, _) => l10n.unknown,
                             ),
                             onTap: () async {
                               final state = trackingAuthAsync.value ?? {};
@@ -214,26 +217,28 @@ class AccountSettingsScreen extends ConsumerWidget {
                                       onDeviceCodeGenerated: (url, code) async {
                                         if (context.mounted) {
                                           isDialogShowing = true;
-                                          showDialog(
-                                            context: context,
-                                            barrierDismissible: true,
-                                            builder: (ctx) {
-                                              dialogContext = ctx;
-                                              return TrackingAuthDialog(
-                                                providerName: 'Trakt',
-                                                verificationUrl: url,
-                                                userCode: code,
-                                              );
-                                            },
-                                          ).then((_) {
-                                            isCancelled = true;
-                                            isDialogShowing = false;
-                                            if (context.mounted) {
-                                              FocusScope.of(
-                                                context,
-                                              ).requestFocus();
-                                            }
-                                          });
+                                          unawaited(
+                                            showDialog<void>(
+                                              context: context,
+                                              barrierDismissible: true,
+                                              builder: (ctx) {
+                                                dialogContext = ctx;
+                                                return TrackingAuthDialog(
+                                                  providerName: 'Trakt',
+                                                  verificationUrl: url,
+                                                  userCode: code,
+                                                );
+                                              },
+                                            ).then((_) {
+                                              isCancelled = true;
+                                              isDialogShowing = false;
+                                              if (context.mounted) {
+                                                FocusScope.of(
+                                                  context,
+                                                ).requestFocus();
+                                              }
+                                            }),
+                                          );
                                         }
                                       },
                                     );
@@ -264,7 +269,7 @@ class AccountSettingsScreen extends ConsumerWidget {
                                   ? 'Connected'
                                   : l10n.notLoggedIn,
                               loading: () => l10n.loading,
-                              error: (_, __) => l10n.unknown,
+                              error: (_, _) => l10n.unknown,
                             ),
                             onTap: () async {
                               final state = trackingAuthAsync.value ?? {};
@@ -321,7 +326,7 @@ class AccountSettingsScreen extends ConsumerWidget {
                                   ? 'Connected'
                                   : l10n.notLoggedIn,
                               loading: () => l10n.loading,
-                              error: (_, __) => l10n.unknown,
+                              error: (_, _) => l10n.unknown,
                             ),
                             isLast: true,
                             onTap: () async {

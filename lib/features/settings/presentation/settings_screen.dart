@@ -313,7 +313,7 @@ class SettingsScreen extends ConsumerWidget {
                   isLast: true,
                   onTap: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(
+                      MaterialPageRoute<void>(
                         builder: (_) => const AccountSettingsScreen(),
                       ),
                     );

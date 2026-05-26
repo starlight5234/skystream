@@ -33,9 +33,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   final ValueNotifier<double> _appBarOpacityNotifier = ValueNotifier<double>(0);
   final FocusNode _firstActionFocusNode = FocusNode();
 
-  /// Cached during build so [_onScroll] can skip logic on widescreen.
-  bool _isCurrentlyWidescreen = false;
-
   /// Carousel controller exposed by ExploreCarousel via [onControllerReady].
   CarouselSliderController? _carouselController;
 
@@ -49,11 +46,19 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     _scrollController.addListener(_onScroll);
   }
 
+  bool _isWidescreenForScroll() {
+    final profile = ref.read(deviceProfileProvider).asData?.value;
+    final isTv = profile?.isTv == true || context.isTv;
+    return isTv ||
+        profile?.isLargeScreen == true ||
+        context.isTabletOrLarger;
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
 
     // On widescreen there is no mobile AppBar, skip calculations
-    if (_isCurrentlyWidescreen) return;
+    if (_isWidescreenForScroll()) return;
 
     final offset = _scrollController.offset * 0.8;
     final opacity = (offset / 300).clamp(0.0, 1.0);
@@ -86,7 +91,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     // decision even when the ExploreScreen's context width is narrowed
     // by the sidebar (e.g. iPad portrait).
     final isWidescreen = isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
-    _isCurrentlyWidescreen = isWidescreen;
 
     if (isWidescreen) {
       return Scaffold(

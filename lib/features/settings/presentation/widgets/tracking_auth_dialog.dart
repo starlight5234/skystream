@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../shared/widgets/custom_widgets.dart';
 
 class TrackingAuthDialog extends StatefulWidget {
   final String providerName;

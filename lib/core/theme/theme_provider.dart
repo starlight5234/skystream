@@ -14,8 +14,15 @@ class AppThemeMode extends _$AppThemeMode {
     _repository = ref.watch(settingsRepositoryProvider);
     final saved = _repository.getThemeMode();
     if (saved == null) {
-      final profile = ref.watch(deviceProfileProvider).asData?.value;
-      if (profile?.isTv == true) {
+      final profileAsync = ref.watch(deviceProfileProvider);
+      final profile = profileAsync.asData?.value;
+      // While the profile is still loading, render dark. Splash + cold-start
+      // surfaces should match the dark splash background; a system-themed
+      // light flash is the worse failure mode.
+      if (profile == null) {
+        return ThemeMode.dark;
+      }
+      if (profile.isTv) {
         return ThemeMode.dark;
       }
       return ThemeMode.system;

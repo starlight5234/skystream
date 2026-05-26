@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/domain/entity/multimedia_item.dart';
@@ -65,7 +64,7 @@ class MetadataResolutionService {
       if (bestMatch != null) {
         if (kDebugMode) debugPrint('MetadataResolutionService: Found best match: ${bestMatch.title} (tmdbId: ${bestMatch.tmdbId}, imdbId: ${bestMatch.imdbId})');
         String? imdbId = bestMatch.imdbId;
-        int? tmdbId = bestMatch.tmdbId;
+        final int? tmdbId = bestMatch.tmdbId;
 
         if (tmdbId != null && imdbId == null) {
           if (kDebugMode) debugPrint('MetadataResolutionService: imdbId is missing, fetching extra details for tmdbId: $tmdbId (type: ${bestMatch.contentType})');
