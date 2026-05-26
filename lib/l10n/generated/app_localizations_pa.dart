@@ -1148,6 +1148,9 @@ class AppLocalizationsPa extends AppLocalizations {
   String get subtitleAccounts => 'ਸਬਟਾਈਟਲ ਖਾਤੇ';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

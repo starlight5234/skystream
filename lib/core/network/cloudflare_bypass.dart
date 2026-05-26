@@ -39,12 +39,25 @@ class CloudflareBypass {
   // State Management
   // ---------------------------------------------------------------------------
 
-  /// Active background WebView sessions indexed by normalized host.
+  /// Active background WebView sessions indexed by `(callerId, host)` so a
+  /// solve performed by plugin A can't be reused by plugin B — that would
+  /// hand B the cookies / session state A established (audit H6 / PR-08d).
+  /// Legacy callers without a callerId share the implicit `'_global_'`
+  /// namespace; this only matters during the rollout, since every code
+  /// path going through the JS bridge now threads a real namespace.
   final Map<String, _HostWebView> _hostWebViews = {};
 
-  /// Per-host deduplication: if we're already solving CF for a host,
-  /// new callers share the same Future instead of spawning a second WebView.
+  /// Per-`(callerId, host)` deduplication: if we're already solving CF for
+  /// a `(callerId, host)` pair, new callers for the same pair share the
+  /// same Future instead of spawning a second WebView.
   final Map<String, Future<CfResult?>> _activeByHost = {};
+
+  /// Composite key for cache buckets — keeps the map shape unchanged while
+  /// making the scope explicit.
+  static String _scopeKey(String? callerId, String host) {
+    final scope = (callerId == null || callerId.isEmpty) ? '_global_' : callerId;
+    return '$scope::$host';
+  }
 
   /// Limits concurrent WebView spawns to prevent GPU/RAM exhaustion.
   /// Each HeadlessInAppWebView spawn triggers a full Vulkan/GPU context init
@@ -106,6 +119,7 @@ class CloudflareBypass {
   /// avoid GPU/RAM exhaustion; cached sessions are reused for free.
   Future<CfResult?> solveAndFetch(
     String url, {
+    String? callerId,
     Future<void> Function(String host)? onSolved,
   }) async {
     final uri = Uri.tryParse(url);
@@ -113,19 +127,24 @@ class CloudflareBypass {
     final rawHost = uri.host;
     if (rawHost.isEmpty) return null;
     final host = _normalizeHost(rawHost);
+    // Per-caller cache key: plugin A's solved session is no longer
+    // visible to plugin B, so B can't reuse A's cookies / fingerprint.
+    // Audit H6 / PR-08d.
+    final scopeKey = _scopeKey(callerId, host);
 
-    // 1. Deduplicate: share an already-running solve for the same host.
-    final inFlight = _activeByHost[host];
+    // 1. Deduplicate: share an already-running solve for the same scope.
+    final inFlight = _activeByHost[scopeKey];
     if (inFlight != null) {
-      if (kDebugMode) debugPrint('$_tag Joining in-flight solve for $host');
+      if (kDebugMode) debugPrint('$_tag Joining in-flight solve for $scopeKey');
       return inFlight;
     }
 
     // 2. Try reusing a cached solved session (free — no spawn slot needed).
-    final cachedView = _hostWebViews[host];
+    final cachedView = _hostWebViews[scopeKey];
     if (cachedView != null) {
-      if (kDebugMode)
-        debugPrint('$_tag Reusing cached WebView for $host → $url');
+      if (kDebugMode) {
+        debugPrint('$_tag Reusing cached WebView for $scopeKey → $url');
+      }
       try {
         final html = await cachedView.navigate(url);
         if (html != null &&
@@ -133,36 +152,42 @@ class CloudflareBypass {
             !html.contains('Just a moment')) {
           return CfResult(body: html, statusCode: 200, finalUrl: url);
         }
-        if (kDebugMode)
-          debugPrint('$_tag Cached session stale for $host, disposing');
-        await _disposeHostSession(host);
+        if (kDebugMode) {
+          debugPrint('$_tag Cached session stale for $scopeKey, disposing');
+        }
+        await _disposeHostSession(scopeKey);
       } catch (e) {
         if (kDebugMode) debugPrint('$_tag Cached WebView error: $e');
-        await _disposeHostSession(host);
+        await _disposeHostSession(scopeKey);
       }
     }
 
     // 3. Fresh solve — register future before any await so concurrent callers
-    //    for this host share it rather than spawning duplicate WebViews.
-    final future = _freshSolve(url, host, onSolved: onSolved);
-    _activeByHost[host] = future;
+    //    for this scope share it rather than spawning duplicate WebViews.
+    final future = _freshSolve(url, host, scopeKey, onSolved: onSolved);
+    _activeByHost[scopeKey] = future;
     try {
       return await future;
     } finally {
-      final orphan = _activeByHost.remove(host);
+      final orphan = _activeByHost.remove(scopeKey);
       if (orphan != null) unawaited(orphan);
     }
   }
 
   /// Acquires a spawn slot, runs a fresh WebView solve, then releases the slot.
+  /// [host] is the real hostname (used for the `onSolved` callback, which is
+  /// where cookie injection per-host happens). [cacheKey] is the composite
+  /// `"$caller::$host"` used to index the cache so plugin A's session can't
+  /// be reused by plugin B (audit H6 / PR-08d).
   Future<CfResult?> _freshSolve(
     String url,
-    String host, {
+    String host,
+    String cacheKey, {
     Future<void> Function(String host)? onSolved,
   }) async {
     await _acquireSpawnSlot();
     try {
-      final result = await _fetchViaWebView(url, host);
+      final result = await _fetchViaWebView(url, cacheKey);
       if (result != null && onSolved != null) await onSolved(host);
       return result;
     } finally {
@@ -170,8 +195,8 @@ class CloudflareBypass {
     }
   }
 
-  Future<void> _disposeHostSession(String host) async {
-    final view = _hostWebViews.remove(host);
+  Future<void> _disposeHostSession(String cacheKey) async {
+    final view = _hostWebViews.remove(cacheKey);
     if (view != null) {
       await view.dispose();
     }
@@ -179,7 +204,7 @@ class CloudflareBypass {
 
   static const _maxCachedWebViews = 2;
 
-  Future<CfResult?> _fetchViaWebView(String url, String host) async {
+  Future<CfResult?> _fetchViaWebView(String url, String cacheKey) async {
     if (kDebugMode) debugPrint('$_tag Starting fresh solve for $url');
 
     // Evict oldest cached WebViews to prevent GPU memory exhaustion.
@@ -281,9 +306,9 @@ class CloudflareBypass {
         return null;
       }
 
-      final hostView = _HostWebView(host, headless, capturedController);
+      final hostView = _HostWebView(cacheKey, headless, capturedController);
       holder.hostView = hostView;
-      _hostWebViews[host] = hostView;
+      _hostWebViews[cacheKey] = hostView;
       hostView.startIdleTimer();
 
       // Silence the cached page's console to prevent scripts like
@@ -291,7 +316,7 @@ class CloudflareBypass {
       // and the plugin's method-channel debug layer with ~40 calls/sec.
       await hostView.silenceConsole();
 
-      if (kDebugMode) debugPrint('$_tag WebView session ready for $host');
+      if (kDebugMode) debugPrint('$_tag WebView session ready for $cacheKey');
       return result;
     } catch (e) {
       await headless.dispose();

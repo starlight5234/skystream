@@ -373,7 +373,7 @@ class _EpisodeItemState extends State<_EpisodeItem> {
                           )
                         : null,
                   ),
-                  if (widget.progress > 0 && widget.progress < 0.95)
+                  if (widget.progress > 0 && widget.progress < 0.85)
                     Container(
                       height: 3,
                       width: 120,

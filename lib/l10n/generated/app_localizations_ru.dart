@@ -1144,6 +1144,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subtitleAccounts => 'Аккаунты субтитров';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Вход не выполнен';
 
   @override

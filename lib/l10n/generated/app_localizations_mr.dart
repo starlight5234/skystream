@@ -1137,6 +1137,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get subtitleAccounts => 'उपशीर्षक खाती';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

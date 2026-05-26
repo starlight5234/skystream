@@ -8,11 +8,17 @@ import '../../../search/presentation/search_provider.dart';
 import 'package:skystream/shared/widgets/multimedia_card.dart';
 
 class HomeSearchDelegate extends SearchDelegate<void> {
-  HomeSearchDelegate()
+  final String? initialQuery;
+
+  HomeSearchDelegate({this.initialQuery})
     : super(
         searchFieldLabel: 'Search movies, series...',
         searchFieldStyle: const TextStyle(color: Colors.white70, fontSize: 18),
-      );
+      ) {
+    if (initialQuery != null) {
+      query = initialQuery!;
+    }
+  }
 
   @override
   ThemeData appBarTheme(BuildContext context) {

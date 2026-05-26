@@ -34,8 +34,9 @@ class _MovieTrailersCarouselState extends State<MovieTrailersCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isLoading && widget.trailers.isEmpty)
+    if (!widget.isLoading && widget.trailers.isEmpty) {
       return const SizedBox.shrink();
+    }
 
     final isDesktop = context.isDesktop;
     final displayCount = widget.isLoading ? 3 : widget.trailers.length;

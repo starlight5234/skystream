@@ -107,6 +107,7 @@ class MultimediaItem {
   final List<StreamResult>? streams;
 
   final int? tmdbId;
+  final String? imdbId;
 
   MultimediaItem({
     required this.title,
@@ -134,6 +135,7 @@ class MultimediaItem {
     this.nextAiring,
     this.streams,
     this.tmdbId,
+    this.imdbId,
   }) : episodes = episodes != null
            ? (List<Episode>.from(episodes)..sort((a, b) {
                if (a.season != b.season) return a.season.compareTo(b.season);
@@ -229,6 +231,7 @@ class MultimediaItem {
             )
           : null,
       tmdbId: json['tmdbId'] as int?,
+      imdbId: json['imdbId'] as String?,
     );
   }
 
@@ -267,6 +270,7 @@ class MultimediaItem {
       year: year,
       score: (json['vote_average'] as num?)?.toDouble(),
       tmdbId: json['id'] as int?,
+      imdbId: json['imdbId'] as String?,
     );
   }
 
@@ -343,6 +347,7 @@ class MultimediaItem {
     NextAiring? nextAiring,
     List<StreamResult>? streams,
     int? tmdbId,
+    String? imdbId,
   }) {
     return MultimediaItem(
       title: title ?? this.title,
@@ -370,6 +375,7 @@ class MultimediaItem {
       nextAiring: nextAiring ?? this.nextAiring,
       streams: streams ?? this.streams,
       tmdbId: tmdbId ?? this.tmdbId,
+      imdbId: imdbId ?? this.imdbId,
     );
   }
 
@@ -398,6 +404,8 @@ class MultimediaItem {
       'playbackPolicy': playbackPolicy,
       'isAdult': isAdult,
       'nextAiring': nextAiring?.toJson(),
+      'tmdbId': tmdbId,
+      'imdbId': imdbId,
       'streams': streams?.map((s) => s.toJson()).toList(),
     };
   }

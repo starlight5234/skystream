@@ -462,8 +462,9 @@ class LocalProxyService {
         if (lowerName == 'transfer-encoding') return;
         // Strip content-length when gzip (size changed after decompress) or M3U8
         // (body will be rewritten). Keep it for binary content so mpv can seek.
-        if (lowerName == 'content-length' && (wasGzip || isResponseM3u8))
+        if (lowerName == 'content-length' && (wasGzip || isResponseM3u8)) {
           return;
+        }
         // Strip content-encoding only when we actually decompressed gzip.
         // Forwarding "Content-Encoding: gzip" with a plain body causes mpv to
         // attempt decompression and corrupt the data.

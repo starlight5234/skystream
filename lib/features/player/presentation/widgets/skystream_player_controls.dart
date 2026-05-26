@@ -743,6 +743,9 @@ class SkyStreamPlayerControlsState
     final resumePromptPosition = ref.watch(
       playerControllerProvider.select((s) => s.resumePromptPosition),
     );
+    final resumePromptPercentage = ref.watch(
+      playerControllerProvider.select((s) => s.resumePromptPercentage),
+    );
     final showEpisodeList = ref.watch(
       playerControllerProvider.select((s) => s.showEpisodeList),
     );
@@ -882,9 +885,10 @@ class SkyStreamPlayerControlsState
                 ),
 
                 // Resume Prompt Button
-                if (resumePromptPosition != null)
+                if (resumePromptPosition != null || resumePromptPercentage != null)
                   ResumePromptOverlay(
                     positionMs: resumePromptPosition,
+                    percentage: resumePromptPercentage,
                     onResume: () => ref
                         .read(playerControllerProvider.notifier)
                         .confirmResume(),
@@ -895,6 +899,7 @@ class SkyStreamPlayerControlsState
 
                 // Next Episode Button (Persistent when triggered)
                 if (resumePromptPosition == null &&
+                    resumePromptPercentage == null &&
                     showNextEpOverlay &&
                     nextEpTitle != null)
                   NextEpisodeOverlay(

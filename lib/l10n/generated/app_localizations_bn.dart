@@ -1143,6 +1143,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get subtitleAccounts => 'সাবটাইটেল অ্যাকাউন্ট';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

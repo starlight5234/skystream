@@ -32,6 +32,20 @@ class WatchHistory extends _$WatchHistory {
     refresh();
   }
 
+  Future<void> updateHistoryItemTimestampAndPosition(
+    HistoryItem item,
+    int timestamp,
+    int position,
+  ) async {
+    final repository = ref.read(historyRepositoryProvider);
+    await repository.updateHistoryItemTimestampAndPosition(
+      item,
+      timestamp,
+      position,
+    );
+    refresh();
+  }
+
   Future<void> saveProgress(
     MultimediaItem item,
     int position,

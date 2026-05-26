@@ -20,8 +20,9 @@ class AppUtils {
   static Future<void> restartApp(BuildContext? context) async {
     final fn = _restartImpl;
     if (fn == null) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint("AppUtils.restartApp: no restart function registered");
+      }
       return;
     }
 

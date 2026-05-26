@@ -11,6 +11,7 @@ import '../../library/presentation/library_provider.dart';
 import '../../library/presentation/history_provider.dart';
 import 'playback_launcher.dart';
 import '../../../core/services/download_service.dart';
+import '../data/metadata_resolution_service.dart';
 import 'downloaded_file_provider.dart';
 
 part 'details_controller.g.dart';
@@ -191,16 +192,33 @@ class DetailsController extends _$DetailsController {
 
         final withProvider = fetchedItem.copyWith(
           provider: provider.packageName,
+          tmdbId: fetchedItem.tmdbId ?? item.tmdbId,
+          imdbId: fetchedItem.imdbId ?? item.imdbId,
         );
 
+        if (kDebugMode) {
+          debugPrint(
+            'DetailsController: Fetching missing IDs via MetadataResolutionService for ${withProvider.title}...',
+          );
+        }
+        final enrichedItem = await ref
+            .read(metadataResolutionServiceProvider)
+            .enrichWithIds(withProvider);
+        if (kDebugMode) {
+          debugPrint(
+            'DetailsController: Resulting tmdbId: ${enrichedItem.tmdbId}, imdbId: ${enrichedItem.imdbId}',
+          );
+        }
+        if (!ref.mounted) return;
+
         final sortedEpisodes = _processEpisodes(
-          withProvider.episodes,
-          withProvider,
+          enrichedItem.episodes,
+          enrichedItem,
           isInitial: true,
         );
         state = state.copyWith(
-          details: AsyncData(withProvider.copyWith(episodes: sortedEpisodes)),
-          item: withProvider.copyWith(episodes: sortedEpisodes),
+          details: AsyncData(enrichedItem.copyWith(episodes: sortedEpisodes)),
+          item: enrichedItem.copyWith(episodes: sortedEpisodes),
         );
       } else {
         throw Exception("No provider selected or found for this item");
@@ -291,7 +309,7 @@ class DetailsController extends _$DetailsController {
         );
         final progress = dur > 0 ? pos / dur : 0;
 
-        if (progress > 0.95) {
+        if (progress >= 0.85) {
           if (lastIndex + 1 < allEpisodes.length) {
             targetEpisode = allEpisodes[lastIndex + 1];
           } else {

@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,12 +41,16 @@ class ProviderSearchSection extends ConsumerStatefulWidget {
   final String query;
   final bool compact;
   final String? parentMediaType; // 'movie' or 'tv'
+  final int? tmdbId;
+  final String? imdbId;
 
   const ProviderSearchSection({
     super.key,
     required this.query,
     this.compact = false,
     this.parentMediaType,
+    this.tmdbId,
+    this.imdbId,
   });
 
   @override
@@ -155,7 +160,7 @@ class _ProviderSearchSectionState extends ConsumerState<ProviderSearchSection> {
 
                     return CardsWrapper(
                       onTap: () {
-                        // Enrich item with provider and content type before navigation
+                        // Enrich item with provider, content type, and metadata IDs before navigation
                         final enrichedItem = item.copyWith(
                           provider: providerName,
                           contentType: widget.parentMediaType != null
@@ -163,6 +168,8 @@ class _ProviderSearchSectionState extends ConsumerState<ProviderSearchSection> {
                                   widget.parentMediaType,
                                 )
                               : item.contentType,
+                          tmdbId: widget.tmdbId ?? item.tmdbId,
+                          imdbId: widget.imdbId ?? item.imdbId,
                         );
                         DetailsRoute(
                           $extra: DetailsRouteExtra(item: enrichedItem),

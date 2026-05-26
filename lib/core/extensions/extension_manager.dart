@@ -162,7 +162,16 @@ class ExtensionManager extends _$ExtensionManager {
           }
           newState.remove(p);
           if (p is JsBasedProvider) {
-            // _engine?.unload(p.namespace);
+            final ns = p.namespace;
+            if (ns != null && ns.isNotEmpty) {
+              // Releases the plugin's globalThis slot + runs GC in the
+              // worker isolate. Audit H9. Note: .qbc bytecode cache files
+              // live inside the per-plugin directory and are already cleaned
+              // by PluginStorageService.deletePlugin (recursive delete) and
+              // PluginStorageService.installPlugin (clears target dir first),
+              // so audit M21's "orphan .qbc" concern is already mitigated.
+              _engine?.unload(ns);
+            }
           }
         }
         state = newState;
@@ -216,15 +225,38 @@ class ExtensionManager extends _$ExtensionManager {
   Future<List<SkyStreamProvider>> _loadPlugin(ExtensionPlugin plugin) async {
     if (_engine == null || _storageService == null) return [];
     try {
+      // Integrity check (PR-08c): SHA-256 verification of plugin.js against
+      // meta.json's installSha256. DISABLED per project decision 2026-05-25 —
+      // the implementation in PluginStorageService.verifyIntegrity is kept
+      // intact in case we want to re-enable it later (e.g. for a signed-
+      // plugin distribution mode). Uncomment the block below to re-enable.
+      //
+      // final integrityOk = await _storageService!.verifyIntegrity(plugin);
+      // if (!integrityOk) {
+      //   if (kDebugMode) {
+      //     debugPrint(
+      //       "ExtensionManager: REFUSING to load ${plugin.packageName} — "
+      //       "plugin.js hash does not match meta.json installSha256. "
+      //       "Re-install the plugin to clear the warning.",
+      //     );
+      //   }
+      //   talker.error(
+      //     "Plugin integrity check failed for ${plugin.packageName} — refusing to load.",
+      //   );
+      //   return [];
+      // }
+
       final path = await _storageService!.getPluginJsPath(plugin);
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint("ExtensionManager: Registering lazy shells from: $path");
+      }
       talker.debug("ExtensionManager: Registering lazy shells from: $path");
 
       if (!path.startsWith('assets/')) {
         if (!await File(path).exists()) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint("ExtensionManager: JS File does NOT exist at $path");
+          }
           return [];
         }
       }
@@ -259,10 +291,11 @@ class ExtensionManager extends _$ExtensionManager {
       // The bootstrap and all sub-providers share the same .qbc bytecode, so
       // there is NO extra JS evaluation vs a static provider list.
       if (plugin.providers != null && plugin.providers!.isEmpty) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint(
             "ExtensionManager: Dynamic providers mode for ${plugin.packageName}",
           );
+        }
         talker.debug(
           "ExtensionManager: Dynamic providers mode for ${plugin.packageName}",
         );
@@ -286,20 +319,22 @@ class ExtensionManager extends _$ExtensionManager {
         final dynamicProviders = await bootstrap.getProviders();
 
         if (dynamicProviders.isEmpty) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint(
               "ExtensionManager: getProviders() returned empty list for ${plugin.packageName}",
             );
+          }
           talker.warning(
             "ExtensionManager: getProviders() returned empty list for ${plugin.packageName}",
           );
           return [];
         }
 
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint(
             "ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}",
           );
+        }
         talker.debug(
           "ExtensionManager: Got ${dynamicProviders.length} dynamic providers for ${plugin.packageName}",
         );
@@ -324,10 +359,11 @@ class ExtensionManager extends _$ExtensionManager {
             ),
           );
         }
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint(
             "ExtensionManager: Registered ${results.length} dynamic sub-providers for ${plugin.packageName}",
           );
+        }
         // No-ops since bootstrap already compiled the .qbc for this path.
         for (final p in results) {
           if (p is JsBasedProvider) p.precompile().ignore();
@@ -356,10 +392,11 @@ class ExtensionManager extends _$ExtensionManager {
             ),
           );
         }
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint(
             "ExtensionManager: Registered ${results.length} lazy sub-providers for ${plugin.packageName}",
           );
+        }
         // Pre-compile bytecode for each sub-provider (no-ops if already fresh).
         for (final p in results) {
           if (p is JsBasedProvider) p.precompile().ignore();
@@ -391,8 +428,9 @@ class ExtensionManager extends _$ExtensionManager {
       provider.precompile().ignore();
       return [provider];
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint("Failed to register plugin ${plugin.name}: $e");
+      }
       talker.error("Failed to register plugin ${plugin.name}: $e");
       return [];
     }

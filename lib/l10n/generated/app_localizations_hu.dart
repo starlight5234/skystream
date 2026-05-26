@@ -1137,6 +1137,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get subtitleAccounts => 'Felirat fiókok';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

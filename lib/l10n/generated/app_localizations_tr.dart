@@ -1145,6 +1145,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get subtitleAccounts => 'Altyazı hesapları';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

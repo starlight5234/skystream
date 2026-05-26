@@ -1144,6 +1144,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get subtitleAccounts => 'Akun subtitle';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

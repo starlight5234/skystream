@@ -1126,6 +1126,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get subtitleAccounts => 'Tài khoản phụ đề';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

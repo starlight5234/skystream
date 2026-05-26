@@ -176,8 +176,9 @@ class SubtitleSearch extends _$SubtitleSearch {
               }
             })
             .catchError((Object e) {
-              if (e is DioException && e.type == DioExceptionType.cancel)
+              if (e is DioException && e.type == DioExceptionType.cancel) {
                 return;
+              }
               if (kDebugMode) debugPrint("${provider.name} search failed: $e");
             })
             .whenComplete(() {
@@ -263,15 +264,17 @@ class SubtitleSearch extends _$SubtitleSearch {
         // ZIP archive (most common for SubDL and SubSource).
         // Decode + extract on a worker isolate so the player UI doesn't
         // freeze while the user is actively watching (audit B12).
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint("[SubtitleDownload] Detected ZIP archive, extracting...");
+        }
         final extractedPath = await compute(
           _extractSubtitleFromZip,
           _SubtitleZipArgs(Uint8List.fromList(bytes), tempDir.path),
         );
         if (extractedPath != null) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint("[SubtitleDownload] ✅ Extracted: $extractedPath");
+          }
           return extractedPath;
         }
         if (kDebugMode) {
@@ -281,8 +284,9 @@ class SubtitleSearch extends _$SubtitleSearch {
         }
       } else if (bytes.length > 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
         // GZIP compressed file — also offloaded to worker isolate.
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint("[SubtitleDownload] Detected GZIP, decompressing...");
+        }
         final decompressed = await compute(
           _decompressGzip,
           Uint8List.fromList(bytes),

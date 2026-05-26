@@ -1147,6 +1147,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get subtitleAccounts => 'Уліковыя запісы субцітраў';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

@@ -43,6 +43,8 @@ class HistoryItem {
               'movie',
         ),
         provider: map['provider'] as String?,
+        tmdbId: map['tmdbId'] as int?,
+        imdbId: map['imdbId'] as String?,
       ),
       position: (map['position'] as int?) ?? 0,
       duration: (map['duration'] as int?) ?? 0,
@@ -90,6 +92,19 @@ class HistoryRepository {
 
   Future<void> removeFromHistory(String url) async {
     await _storageService.removeFromHistory(url);
+  }
+
+  Future<void> updateHistoryItemTimestampAndPosition(
+    HistoryItem item,
+    int timestamp,
+    int position,
+  ) async {
+    await _storageService.updateHistoryItemTimestampAndPosition(
+      item.item.url,
+      item.lastEpisodeUrl,
+      timestamp,
+      position,
+    );
   }
 
   Future<void> clearAllHistory() async {

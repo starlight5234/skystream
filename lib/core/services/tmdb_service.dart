@@ -710,7 +710,7 @@ class TmdbService {
       queryParameters: {
         'api_key': TmdbConfig.apiKey,
         'language': language,
-        'append_to_response': 'videos,images,translations',
+        'append_to_response': 'videos,images,translations,external_ids',
         'include_image_language': '$language,null,en',
       },
     );
@@ -762,7 +762,7 @@ class TmdbService {
       queryParameters: {
         'api_key': TmdbConfig.apiKey,
         'language': language,
-        'append_to_response': 'videos,images,translations',
+        'append_to_response': 'videos,images,translations,external_ids',
         'include_image_language': '$language,null,en',
       },
     );

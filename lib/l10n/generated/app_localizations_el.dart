@@ -1151,6 +1151,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get subtitleAccounts => 'Λογαριασμοί υποτίτλων';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

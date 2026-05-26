@@ -1119,6 +1119,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get subtitleAccounts => '자막 계정';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => '로그인되지 않음';
 
   @override

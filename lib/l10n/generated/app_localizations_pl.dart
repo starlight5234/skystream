@@ -1133,6 +1133,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get subtitleAccounts => 'Konta napisów';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

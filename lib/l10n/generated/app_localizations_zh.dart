@@ -1107,6 +1107,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get subtitleAccounts => '字幕账户';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => '未登录';
 
   @override

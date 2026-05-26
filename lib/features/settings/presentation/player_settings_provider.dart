@@ -388,10 +388,12 @@ class PlayerSettingsNotifier extends _$PlayerSettingsNotifier {
     String? pass,
   }) async {
     await _repository.setPlayerSetting('player_subdl_key', apiKey);
-    if (email != null)
+    if (email != null) {
       await _repository.setPlayerSetting('player_subdl_email', email);
-    if (pass != null)
+    }
+    if (pass != null) {
       await _repository.setPlayerSetting('player_subdl_pass', pass);
+    }
 
     state = AsyncData(
       state.requireValue.copyWith(

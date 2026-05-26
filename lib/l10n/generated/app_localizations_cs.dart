@@ -1134,6 +1134,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get subtitleAccounts => 'Účty titulků';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

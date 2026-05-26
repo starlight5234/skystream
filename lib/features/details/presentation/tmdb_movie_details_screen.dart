@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -514,6 +515,8 @@ class _TmdbMovieDetailsScreenState
                 ProviderSearchSection(
                   query: title,
                   parentMediaType: isMovie ? 'movie' : 'tv',
+                  tmdbId: widget.movieId,
+                  imdbId: data?.imdbId,
                 ),
                 const SizedBox(height: 16),
                 Consumer(

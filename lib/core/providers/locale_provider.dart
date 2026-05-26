@@ -23,8 +23,9 @@ class LocaleNotifier extends _$LocaleNotifier {
     if (AppLocalizations.supportedLocales.contains(parsed)) return parsed;
     // Fall back to language-code-only match (e.g. 'en-US' → 'en')
     final languageOnly = Locale(parsed.languageCode);
-    if (AppLocalizations.supportedLocales.contains(languageOnly))
+    if (AppLocalizations.supportedLocales.contains(languageOnly)) {
       return languageOnly;
+    }
     return parsed;
   }
 

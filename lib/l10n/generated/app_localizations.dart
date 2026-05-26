@@ -2233,6 +2233,12 @@ abstract class AppLocalizations {
   /// **'Subtitle Accounts'**
   String get subtitleAccounts;
 
+  /// No description provided for @accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get accounts;
+
   /// No description provided for @notLoggedIn.
   ///
   /// In en, this message translates to:

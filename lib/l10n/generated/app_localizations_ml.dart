@@ -1148,6 +1148,9 @@ class AppLocalizationsMl extends AppLocalizations {
   String get subtitleAccounts => 'സബ്‌ടൈറ്റിൽ അക്കൗണ്ടുകൾ';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

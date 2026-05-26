@@ -1136,6 +1136,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get subtitleAccounts => 'حسابات الترجمة';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'غير مسجّل الدخول';
 
   @override

@@ -1152,6 +1152,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get subtitleAccounts => 'துணைத்தலைப்பு கணக்குகள்';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

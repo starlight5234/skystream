@@ -22,11 +22,17 @@ import '../../../../core/extensions/providers.dart';
 import '../../../../core/models/torrent_status.dart';
 import '../../../../core/storage/history_repository.dart';
 import '../../library/presentation/history_provider.dart';
+import '../../tracking/data/sync_manager.dart';
+import '../../tracking/domain/sync_progress_item.dart';
 import '../../../../core/providers/device_info_provider.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../settings/presentation/player_settings_provider.dart';
+import '../../settings/presentation/general_settings_provider.dart';
 import '../../../../core/services/local_proxy_service.dart';
 import '../../../../core/utils/stream_quality_sorter.dart';
+import '../../skip/data/intro_db_service.dart';
+import '../../skip/data/anime_skip_service.dart';
+import '../../tracking/data/sync_manager.dart';
 
 // Sentinel so copyWith can distinguish "not passed" from "explicitly null".
 const Object _keep = Object();
@@ -180,6 +186,7 @@ class PlayerState {
 
   /// Non-null when a saved position was found; shows resume prompt instead of seeking silently.
   final int? resumePromptPosition;
+  final double? resumePromptPercentage;
   final bool userSkippedOverlay;
 
   const PlayerState({
@@ -211,6 +218,7 @@ class PlayerState {
     this.currentAttemptIndex,
     this.sourceSessionId = 0,
     this.resumePromptPosition,
+    this.resumePromptPercentage,
     this.userSkippedOverlay = false,
   });
 
@@ -260,6 +268,7 @@ class PlayerState {
     Object? currentAttemptIndex = _keep,
     int? sourceSessionId,
     Object? resumePromptPosition = _keep,
+    Object? resumePromptPercentage = _keep,
     bool? userSkippedOverlay,
   }) {
     return PlayerState(
@@ -296,6 +305,9 @@ class PlayerState {
       resumePromptPosition: resumePromptPosition == _keep
           ? this.resumePromptPosition
           : resumePromptPosition as int?,
+      resumePromptPercentage: resumePromptPercentage == _keep
+          ? this.resumePromptPercentage
+          : resumePromptPercentage as double?,
       userSkippedOverlay: userSkippedOverlay ?? this.userSkippedOverlay,
     );
   }
@@ -337,6 +349,9 @@ class PlayerController extends Notifier<PlayerState> {
   bool _isPolling = false;
   bool _isInitialized = false;
   bool _isDisposed = false;
+
+  bool _hasScrobbleStarted = false;
+  bool _hasMarkedWatched = false;
 
   Player get player => _player;
   VideoController? get videoViewController => _videoViewController;
@@ -424,6 +439,7 @@ class PlayerController extends Notifier<PlayerState> {
   final List<DateTime> _bufferDepletionTimes = [];
   Timer? _stallTimer;
   int? _pendingResumeSeekPosition;
+  double? _pendingResumeSeekPercentage;
   bool _isApplyingPendingResumeSeek = false;
   double _lastNonZeroVolumeLevel = 1.0;
   final List<SubtitleFile> _userAddedExternalSubtitles = [];
@@ -682,6 +698,9 @@ class PlayerController extends Notifier<PlayerState> {
     _userAddedExternalSubtitles.clear();
     pendingVideoViewSubtitleIdsBeforeReload = null;
     selectNewestVideoViewSubtitleAfterReload = false;
+    _hasScrobbleStarted = false;
+    _hasMarkedWatched = false;
+    ref.read(syncManagerProvider).clearCache();
 
     _item = item;
 
@@ -747,9 +766,53 @@ class PlayerController extends Notifier<PlayerState> {
     );
 
     _isInitialized = true;
+    _fetchAndLogSkipSegments();
+
     await _initStream();
     if (_isDisposed) return;
     await applySubtitleSettings();
+  }
+
+  Future<void> _fetchAndLogSkipSegments() async {
+    if (_episode == null) return;
+    print('=============================================');
+    print('SKIP SEGMENTS (IntroDB/AnimeSkip)');
+
+    try {
+      final introDb = ref.read(introDbServiceProvider);
+      final segments = await introDb.getSkipSegments(
+        tmdbId: state.tmdbId,
+        imdbId: state.imdbId,
+        season: _episode!.season,
+        episode: _episode!.episode,
+      );
+      print('IntroDB returned ${segments.length} segments:');
+      for (final s in segments) {
+        print('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+      }
+    } catch (e) {
+      print('IntroDB error: $e');
+    }
+
+    try {
+      final anilistId =
+          _item.syncData?['anilistId'] ?? _item.syncData?['anilist_id'];
+      if (anilistId != null) {
+        final animeSkip = ref.read(animeSkipServiceProvider);
+        final segments = await animeSkip.getSkipSegments(
+          anilistId: int.tryParse(anilistId.toString()),
+          season: _episode!.season,
+          episode: _episode!.episode,
+        );
+        print('AnimeSkip returned ${segments.length} segments:');
+        for (final s in segments) {
+          print('  - ${s.type.name}: ${s.startTime} -> ${s.endTime}');
+        }
+      }
+    } catch (e) {
+      print('AnimeSkip error: $e');
+    }
+    print('=============================================');
   }
 
   void _setupVideoViewListeners() {
@@ -1870,19 +1933,53 @@ class PlayerController extends Notifier<PlayerState> {
   Future<void> play() async {
     if (state.useExoPlayer && _videoViewController != null) {
       _videoViewController!.play();
-      return;
+    } else {
+      await _player.play();
     }
 
-    await _player.play();
+    try {
+      final int pos;
+      final int dur;
+      if (state.useExoPlayer && _videoViewController != null) {
+        pos = _videoViewController!.position.value;
+        dur = _videoViewController!.mediaInfo.value?.duration ?? 0;
+      } else {
+        pos = _player.state.position.inMilliseconds;
+        dur = _player.state.duration.inMilliseconds;
+      }
+      final double progressDecimal = dur > 0 ? pos / dur : 0.0;
+      if (_hasScrobbleStarted && !_hasMarkedWatched) {
+        ref
+            .read(syncManagerProvider)
+            .scrobbleStart(_item, _resolveCurrentEpisode(), progressDecimal);
+      }
+    } catch (_) {}
   }
 
   Future<void> pause() async {
     if (state.useExoPlayer && _videoViewController != null) {
       _videoViewController!.pause();
-      return;
+    } else {
+      await _player.pause();
     }
 
-    await _player.pause();
+    try {
+      final int pos;
+      final int dur;
+      if (state.useExoPlayer && _videoViewController != null) {
+        pos = _videoViewController!.position.value;
+        dur = _videoViewController!.mediaInfo.value?.duration ?? 0;
+      } else {
+        pos = _player.state.position.inMilliseconds;
+        dur = _player.state.duration.inMilliseconds;
+      }
+      final double progressDecimal = dur > 0 ? pos / dur : 0.0;
+      if (_hasScrobbleStarted && !_hasMarkedWatched) {
+        ref
+            .read(syncManagerProvider)
+            .scrobblePause(_item, _resolveCurrentEpisode(), progressDecimal);
+      }
+    } catch (_) {}
   }
 
   bool get isPlaying {
@@ -2244,9 +2341,59 @@ class PlayerController extends Notifier<PlayerState> {
         savedPos = historyRepo.getPosition(_item.url);
       }
 
-      if (savedPos > 0) {
-        // Show prompt instead of seeking silently — user may want to start over.
+      int localTimestamp = 0;
+      final allHistory = historyRepo.getWatchHistory();
+      if (isSeries) {
+        final ep = _resolveCurrentEpisode();
+        final match = allHistory.where((h) => 
+            h.item.url == _item.url && 
+            h.season == ep?.season && 
+            h.episode == ep?.episode).firstOrNull;
+        if (match != null) localTimestamp = match.timestamp;
+      } else {
+        final match = allHistory.where((h) => h.item.url == _item.url).firstOrNull;
+        if (match != null) localTimestamp = match.timestamp;
+      }
+
+      double? syncedPct;
+      int syncedTimestamp = 0;
+      try {
+        final syncedProgressList = await ref.read(syncedProgressProvider.future);
+        if (syncedProgressList.isNotEmpty) {
+          SyncProgressItem? match;
+          if (isSeries) {
+            final ep = _resolveCurrentEpisode();
+            match = syncedProgressList.where((p) => 
+              p.type == MultimediaContentType.series &&
+              p.season == ep?.season &&
+              p.episode == ep?.episode &&
+              (p.tmdbId == _item.tmdbId?.toString() || p.imdbId == _item.imdbId || p.title.toLowerCase() == _item.title.toLowerCase())
+            ).firstOrNull;
+          } else {
+            match = syncedProgressList.where((p) =>
+              p.type == MultimediaContentType.movie &&
+              (p.tmdbId == _item.tmdbId?.toString() || p.imdbId == _item.imdbId || p.title.toLowerCase() == _item.title.toLowerCase())
+            ).firstOrNull;
+          }
+          if (match != null && match.progressPercentage > 0) {
+            syncedPct = match.progressPercentage;
+            syncedTimestamp = match.pausedAt.millisecondsSinceEpoch;
+          }
+        }
+      } catch (e) {
+        debugPrint("Failed to load synced progress: $e");
+      }
+
+      if (savedPos > 0 && syncedPct != null) {
+        if (syncedTimestamp > localTimestamp) {
+          state = state.copyWith(resumePromptPercentage: syncedPct);
+        } else {
+          state = state.copyWith(resumePromptPosition: savedPos);
+        }
+      } else if (savedPos > 0) {
         state = state.copyWith(resumePromptPosition: savedPos);
+      } else if (syncedPct != null) {
+        state = state.copyWith(resumePromptPercentage: syncedPct);
       }
     } catch (e) {
       if (sourceSessionId != null &&
@@ -2270,9 +2417,11 @@ class PlayerController extends Notifier<PlayerState> {
   /// Called when the user taps "Resume" in the resume prompt overlay.
   Future<void> confirmResume() async {
     final pos = state.resumePromptPosition;
-    state = state.copyWith(resumePromptPosition: null);
-    if (pos != null && pos > 0) {
+    final pct = state.resumePromptPercentage;
+    state = state.copyWith(resumePromptPosition: null, resumePromptPercentage: null);
+    if ((pos != null && pos > 0) || (pct != null && pct > 0)) {
       _pendingResumeSeekPosition = pos;
+      _pendingResumeSeekPercentage = pct;
       await _flushPendingResumeSeek();
     }
   }
@@ -2280,7 +2429,8 @@ class PlayerController extends Notifier<PlayerState> {
   /// Called when the user taps "Start Over" or the prompt auto-dismisses.
   void dismissResumePrompt() {
     _pendingResumeSeekPosition = null;
-    state = state.copyWith(resumePromptPosition: null);
+    _pendingResumeSeekPercentage = null;
+    state = state.copyWith(resumePromptPosition: null, resumePromptPercentage: null);
   }
 
   /// Jumps back to the live edge. For DVR streams, seeks to the end of the
@@ -2710,61 +2860,90 @@ class PlayerController extends Notifier<PlayerState> {
 
       if (dur < 30000) return;
 
-      final double progress = (pos / dur) * 100;
+      final double progressPercent = (pos / dur) * 100;
+      final double progressDecimal = pos / dur;
       final bool isSeries = _item.contentType == MultimediaContentType.series;
-      final historyNotifier = ref.read(watchHistoryProvider.notifier);
-
-      final pId =
-          _item.provider ??
-          ref.read(activeProviderProvider)?.packageName ??
-          'Unknown';
-      final itemToSave = _item.copyWith(provider: pId);
-
-      // Identify current episode if series
       final currentEpisode = _resolveCurrentEpisode();
+      final syncManager = ref.read(syncManagerProvider);
 
-      // Handle Completion / Next Episode Logic
-      if (progress >= 95) {
-        if (!isSeries) {
-          historyNotifier.removeFromHistory(_item.url);
-          return;
-        } else if (currentEpisode != null) {
-          // Find next episode
-          final currentIndex = _item.episodes!.indexOf(currentEpisode);
-          if (currentIndex != -1 && currentIndex < _item.episodes!.length - 1) {
-            final nextEpisode = _item.episodes![currentIndex + 1];
-            // Save NEXT episode as current progress (reset to 0)
-            historyNotifier.saveProgress(
-              itemToSave,
-              0,
-              0,
-              lastStreamUrl: null,
-              lastEpisodeUrl: nextEpisode.url,
-              season: nextEpisode.season,
-              episode: nextEpisode.episode,
-              episodeTitle: nextEpisode.name,
-            );
-            return;
-          } else {
-            // Last episode of the series completed
+      // 1. Scrobble Start (remote only, once per playback)
+      if (!_hasScrobbleStarted && pos > 0) {
+        syncManager.scrobbleStart(_item, currentEpisode, progressDecimal);
+        _hasScrobbleStarted = true;
+      }
+
+      // 2. Mark Watched (remote & local completion logic)
+      if (progressPercent >= 85) {
+        if (!_hasMarkedWatched) {
+          syncManager.markWatched(_item, currentEpisode);
+          _hasMarkedWatched = true;
+        }
+
+        final historyEnabled = ref
+            .read(generalSettingsProvider)
+            .watchHistoryEnabled;
+        if (historyEnabled) {
+          final historyNotifier = ref.read(watchHistoryProvider.notifier);
+          final pId =
+              _item.provider ??
+              ref.read(activeProviderProvider)?.packageName ??
+              'Unknown';
+          final itemToSave = _item.copyWith(provider: pId);
+
+          if (!isSeries) {
             historyNotifier.removeFromHistory(_item.url);
             return;
+          } else if (currentEpisode != null) {
+            // Find next episode
+            final currentIndex = _item.episodes!.indexOf(currentEpisode);
+            if (currentIndex != -1 &&
+                currentIndex < _item.episodes!.length - 1) {
+              final nextEpisode = _item.episodes![currentIndex + 1];
+              // Save NEXT episode as current progress (reset to 0)
+              historyNotifier.saveProgress(
+                itemToSave,
+                0,
+                0,
+                lastStreamUrl: null,
+                lastEpisodeUrl: nextEpisode.url,
+                season: nextEpisode.season,
+                episode: nextEpisode.episode,
+                episodeTitle: nextEpisode.name,
+              );
+              return;
+            } else {
+              // Last episode of the series completed
+              historyNotifier.removeFromHistory(_item.url);
+              return;
+            }
           }
         }
       }
 
-      // Normal Progress Saving
-      if (progress > 5 || isSeries) {
-        historyNotifier.saveProgress(
-          itemToSave,
-          pos,
-          dur,
-          lastStreamUrl: state.currentStream?.url,
-          lastEpisodeUrl: currentEpisode?.url ?? _videoUrl,
-          season: currentEpisode?.season,
-          episode: currentEpisode?.episode,
-          episodeTitle: currentEpisode?.name,
-        );
+      // 3. Normal Local Progress Saving (controlled by settings)
+      if (progressPercent > 5 || isSeries) {
+        final historyEnabled = ref
+            .read(generalSettingsProvider)
+            .watchHistoryEnabled;
+        if (historyEnabled) {
+          final pId =
+              _item.provider ??
+              ref.read(activeProviderProvider)?.packageName ??
+              'Unknown';
+          final itemToSave = _item.copyWith(provider: pId);
+          ref
+              .read(watchHistoryProvider.notifier)
+              .saveProgress(
+                itemToSave,
+                pos,
+                dur,
+                lastStreamUrl: state.currentStream?.url,
+                lastEpisodeUrl: currentEpisode?.url ?? _videoUrl,
+                season: currentEpisode?.season,
+                episode: currentEpisode?.episode,
+                episodeTitle: currentEpisode?.name,
+              );
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint("History save failed: $e");
@@ -2854,6 +3033,24 @@ class PlayerController extends Notifier<PlayerState> {
     // dir. Don't await — the player has to close fast, and the next launch
     // will catch any leftovers. Fixes audit finding H5.
     unawaited(_cleanupSubtitleTempFiles());
+
+    try {
+      final int pos;
+      final int dur;
+      if (state.useExoPlayer && _videoViewController != null) {
+        pos = _videoViewController!.position.value;
+        dur = _videoViewController!.mediaInfo.value?.duration ?? 0;
+      } else {
+        pos = _player.state.position.inMilliseconds;
+        dur = _player.state.duration.inMilliseconds;
+      }
+      final double progressDecimal = dur > 0 ? pos / dur : 0.0;
+      if (_hasScrobbleStarted && !_hasMarkedWatched) {
+        ref
+            .read(syncManagerProvider)
+            .scrobbleStop(_item, _resolveCurrentEpisode(), progressDecimal);
+      }
+    } catch (_) {}
 
     saveProgress();
     ref.read(torrentServiceProvider).stop();
@@ -3615,13 +3812,24 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> _flushPendingResumeSeek() async {
-    final pos = _pendingResumeSeekPosition;
+    int? pos = _pendingResumeSeekPosition;
+    final pct = _pendingResumeSeekPercentage;
+    if (pos == null && pct != null) {
+      int dur = state.useExoPlayer
+          ? _videoViewController?.mediaInfo.value?.duration ?? 0
+          : _player.state.duration.inMilliseconds;
+      if (dur > 0) {
+        pos = (dur * (pct / 100.0)).toInt();
+      }
+    }
+
     if (pos == null || pos <= 0 || _isApplyingPendingResumeSeek) return;
 
     _isApplyingPendingResumeSeek = true;
     try {
       await _safeSeekTo(pos);
       _pendingResumeSeekPosition = null;
+      _pendingResumeSeekPercentage = null;
     } finally {
       _isApplyingPendingResumeSeek = false;
     }

@@ -298,6 +298,9 @@ class TmdbDetailsDesktopHero extends ConsumerWidget {
                         child: ProviderSearchSection(
                           query: title,
                           compact: true,
+                          parentMediaType: isMovie ? 'movie' : 'tv',
+                          tmdbId: data.id,
+                          imdbId: data.imdbId,
                         ),
                       ),
                     ],

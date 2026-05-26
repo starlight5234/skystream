@@ -12,6 +12,7 @@ import 'widgets/settings_dialogs.dart';
 import 'player_settings_provider.dart';
 import 'general_settings_provider.dart';
 import 'app_version_provider.dart';
+import 'account_settings_screen.dart';
 
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../../core/providers/locale_provider.dart';
@@ -20,6 +21,8 @@ import '../../../core/router/app_router.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -301,35 +304,20 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: LayoutConstants.spacingLg),
             SettingsGroup(
-              title: l10n.subtitleAccounts,
+              title: l10n.accounts,
               children: [
                 SettingsTile(
-                  icon: Icons.subtitles_rounded,
-                  title: l10n.openSubtitles,
-                  subtitle: playerSettings.osUsername.isNotEmpty
-                      ? l10n.loggedInAs(playerSettings.osUsername)
-                      : l10n.notLoggedIn,
-                  onTap: () =>
-                      showOpenSubtitlesAuthDialog(context, ref, playerSettings),
-                ),
-                SettingsTile(
-                  icon: Icons.vpn_key_rounded,
-                  title: l10n.subDl,
-                  subtitle: playerSettings.subdlApiKey.isNotEmpty
-                      ? l10n.apiKeyConfigured
-                      : l10n.keyNotSet,
-                  onTap: () =>
-                      showSubDlAuthDialog(context, ref, playerSettings),
-                ),
-                SettingsTile(
-                  icon: Icons.vpn_key_rounded,
-                  title: l10n.subSource,
-                  subtitle: playerSettings.subsourceApiKey.isNotEmpty
-                      ? l10n.apiKeyConfigured
-                      : l10n.keyNotSet,
+                  icon: Icons.account_circle_rounded,
+                  title: 'Manage Accounts',
+                  subtitle: 'Configure Subtitles and Tracking Services',
                   isLast: true,
-                  onTap: () =>
-                      showSubSourceAuthDialog(context, ref, playerSettings),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AccountSettingsScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -373,6 +361,7 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         onTap: () => showDohProviderDialog(context, ref),
                       ),
+
                     SettingsTile(
                       icon: Icons.alt_route_rounded,
                       title: l10n.githubProxy,

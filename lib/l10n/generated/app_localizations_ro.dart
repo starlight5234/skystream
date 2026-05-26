@@ -1140,6 +1140,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get subtitleAccounts => 'Conturi de subtitrări';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

@@ -49,16 +49,18 @@ class UpdateService {
         }
 
         if (latestVersion > currentVersion) {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint(
               '[UpdateService] Update check RESULT: New version available ($latestVersion)',
             );
+          }
           return release;
         } else {
-          if (kDebugMode)
+          if (kDebugMode) {
             debugPrint(
               '[UpdateService] Update check RESULT: Already up to date',
             );
+          }
         }
       }
     } catch (e) {

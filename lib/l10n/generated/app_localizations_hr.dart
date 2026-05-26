@@ -1131,6 +1131,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get subtitleAccounts => 'Računi za titlove';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

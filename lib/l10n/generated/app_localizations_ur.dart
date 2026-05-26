@@ -1149,6 +1149,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get subtitleAccounts => 'سب ٹائٹل اکاؤنٹس';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

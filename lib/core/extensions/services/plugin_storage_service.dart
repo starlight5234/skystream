@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -46,28 +47,74 @@ Future<_InstallResult> _installPluginIsolate(_InstallArgs args) async {
   final repoId = args.explicitRepoId ?? 'UnknownRepo';
   final targetDir = Directory(p.join(args.pluginsRootPath, packageName));
 
-  if (await targetDir.exists()) {
-    await targetDir.delete(recursive: true);
+  // Atomic-ish install: extract to a temp sibling dir, then swap in.
+  // If extraction fails partway, the previous install stays intact
+  // (audit M14 — old code did `targetDir.delete(...)` BEFORE extraction,
+  // so any failure left the user with no plugin at all).
+  final stagingDir = Directory(
+    p.join(
+      args.pluginsRootPath,
+      '.tmp-install-$packageName-${DateTime.now().millisecondsSinceEpoch}',
+    ),
+  );
+  if (await stagingDir.exists()) {
+    await stagingDir.delete(recursive: true);
   }
-  await targetDir.create(recursive: true);
+  await stagingDir.create(recursive: true);
 
-  for (final entity in archive) {
-    if (entity.isFile) {
-      final filename = entity.name;
-      // Block zip-slip: refuse paths trying to escape the target dir.
-      if (filename.contains('..')) continue;
+  try {
+    for (final entity in archive) {
+      if (entity.isFile) {
+        final filename = entity.name;
+        // Block zip-slip: refuse paths trying to escape the staging dir.
+        if (filename.contains('..')) continue;
 
-      final data = entity.content as List<int>;
-      final outFile = File(p.join(targetDir.path, filename));
-      await outFile.parent.create(recursive: true);
-      await outFile.writeAsBytes(data);
+        final data = entity.content as List<int>;
+        final outFile = File(p.join(stagingDir.path, filename));
+        await outFile.parent.create(recursive: true);
+        await outFile.writeAsBytes(data);
+      }
     }
-  }
 
-  final metaFile = File(p.join(targetDir.path, 'meta.json'));
-  final metaData = Map<String, dynamic>.from(manifestMap);
-  metaData['repositoryId'] = args.explicitRepoId;
-  await metaFile.writeAsString(jsonEncode(metaData));
+    // Audit B5 / PR-08c — capture the install-time SHA-256 of the
+    // plugin's executable (plugin.js) so the runtime can detect tampering
+    // before evaluation. Tamper-evident, not tamper-proof — anyone with
+    // filesystem write access can change both the .js and the meta hash,
+    // but that's a higher bar than just dropping in a malicious .js.
+    final installedJs = File(p.join(stagingDir.path, 'plugin.js'));
+    String? installSha256;
+    if (await installedJs.exists()) {
+      final jsBytes = await installedJs.readAsBytes();
+      installSha256 = crypto.sha256.convert(jsBytes).toString();
+    }
+
+    final metaFile = File(p.join(stagingDir.path, 'meta.json'));
+    final metaData = Map<String, dynamic>.from(manifestMap);
+    metaData['repositoryId'] = args.explicitRepoId;
+    if (installSha256 != null) {
+      metaData['installSha256'] = installSha256;
+      metaData['installSha256At'] = DateTime.now().toIso8601String();
+    }
+    await metaFile.writeAsString(jsonEncode(metaData));
+
+    // Commit: swap staging → target. The brief window between delete and
+    // rename is the only point where the old version is gone; if the
+    // process is killed inside that window the user can re-install. There
+    // is no atomic dir-replace primitive in dart:io on Windows.
+    if (await targetDir.exists()) {
+      await targetDir.delete(recursive: true);
+    }
+    await stagingDir.rename(targetDir.path);
+  } catch (e) {
+    // Best-effort cleanup of the half-written staging dir. The previous
+    // install (if any) is still intact at targetDir.
+    try {
+      if (await stagingDir.exists()) {
+        await stagingDir.delete(recursive: true);
+      }
+    } catch (_) {}
+    rethrow;
+  }
 
   return _InstallResult(manifestMap, repoId);
 }
@@ -200,5 +247,65 @@ class PluginStorageService {
     // New Path: plugin/[packageName]/plugin.js
     final jsFile = File(p.join(rootDir.path, plugin.packageName, 'plugin.js'));
     return jsFile.path;
+  }
+
+  /// Verifies the on-disk `plugin.js` matches the SHA-256 captured at
+  /// install time (stored in meta.json's `installSha256` field). Returns:
+  ///
+  /// - `true` — hash matches, OR the manifest has no `installSha256`
+  ///   (legacy installs without a hash get a pass — they were installed
+  ///   before PR-08c so we have nothing to compare against).
+  /// - `false` — hash mismatch; refuse to load the plugin.
+  ///
+  /// Asset-bundled plugins (`repositoryId == 'LocalAssets'`) always pass
+  /// — they're shipped inside the signed APK / IPA.
+  /// Audit B5 / PR-08c.
+  Future<bool> verifyIntegrity(ExtensionPlugin plugin) async {
+    if (plugin.repositoryId == 'LocalAssets') return true;
+
+    final rootDir = await _pluginsDir;
+    final pluginDir = Directory(p.join(rootDir.path, plugin.packageName));
+    final metaFile = File(p.join(pluginDir.path, 'meta.json'));
+    if (!await metaFile.exists()) {
+      if (kDebugMode) {
+        debugPrint(
+          'verifyIntegrity(${plugin.packageName}): meta.json missing — '
+          'treating as legacy install (pass).',
+        );
+      }
+      return true;
+    }
+
+    final metaJson = jsonDecode(await metaFile.readAsString())
+        as Map<String, dynamic>;
+    final expected = metaJson['installSha256'] as String?;
+    if (expected == null || expected.isEmpty) {
+      // Legacy install pre-PR-08c — no recorded hash. Pass with a
+      // debug log so we know who's still on the older format.
+      if (kDebugMode) {
+        debugPrint(
+          'verifyIntegrity(${plugin.packageName}): no installSha256 in '
+          'meta.json — legacy install (pass).',
+        );
+      }
+      return true;
+    }
+
+    final jsFile = File(p.join(pluginDir.path, 'plugin.js'));
+    if (!await jsFile.exists()) return false;
+
+    final actual = crypto.sha256
+        .convert(await jsFile.readAsBytes())
+        .toString();
+    if (actual != expected) {
+      if (kDebugMode) {
+        debugPrint(
+          'verifyIntegrity(${plugin.packageName}): HASH MISMATCH. '
+          'expected=$expected actual=$actual',
+        );
+      }
+      return false;
+    }
+    return true;
   }
 }

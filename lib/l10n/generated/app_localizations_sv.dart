@@ -1136,6 +1136,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get subtitleAccounts => 'Undertextkonton';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

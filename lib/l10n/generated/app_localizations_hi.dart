@@ -1139,6 +1139,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get subtitleAccounts => 'उपशीर्षक खाते';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'लॉग इन नहीं है';
 
   @override

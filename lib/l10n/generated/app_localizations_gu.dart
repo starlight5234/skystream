@@ -1145,6 +1145,9 @@ class AppLocalizationsGu extends AppLocalizations {
   String get subtitleAccounts => 'સબટાઈટલ એકાઉન્ટ્સ';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'લોગ ઇન નથી';
 
   @override

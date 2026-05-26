@@ -1114,6 +1114,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get subtitleAccounts => '字幕アカウント';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'ログインしていません';
 
   @override

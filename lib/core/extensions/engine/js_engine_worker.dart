@@ -28,6 +28,12 @@ const _mCancelTag = 'ct'; // {ct:String}
 const _mBridgeResp = 'br'; // {br:1, bid:int, jsId:String, rj:String, err:bool}
 const _mDispose = 'dp';
 const _mGc = 'gc';
+const _mUnload = 'ul'; // {ul: String namespace}
+
+// Hard cap on a single JSON payload the worker will decode synchronously
+// (audit M24). jsonDecode is sync; a 10 MB blob was freezing this isolate
+// for ~1 s when a misbehaving plugin returned an oversized response.
+const int _kMaxJsonInputBytes = 10 * 1024 * 1024;
 
 // Worker → Main
 const _mReady = 'rd'; // {rd:SendPort}
@@ -133,6 +139,31 @@ class _JsWorkerRunner {
       _dispose();
     } else if (m.containsKey(_mGc)) {
       _rt.runGC();
+    } else if (m.containsKey(_mUnload)) {
+      _unload(m[_mUnload] as String);
+    }
+  }
+
+  // ── Unload ────────────────────────────────────────────────────────────────
+  //
+  // Drops the plugin's exports off `globalThis` and runs GC. Each plugin's
+  // IIFE wrapper assigns its API to `globalThis[namespace]` (see
+  // js_based_provider._buildIife); deleting that slot releases the closure
+  // references the plugin held on its sandboxed scope. The runtime itself
+  // is shared, so this isn't a full sandbox teardown — but it does free
+  // the per-plugin script bytecode + closures for the next GC pass.
+  // Audit H9.
+  void _unload(String namespace) {
+    if (namespace.isEmpty) return;
+    try {
+      // Use bracket access + try/catch to avoid runtime errors when the
+      // slot doesn't exist (idempotent on re-unload).
+      _rt.evaluate(
+        "try { delete globalThis[${jsonEncode(namespace)}]; } catch(e) {}",
+      );
+      _rt.runGC();
+    } catch (e) {
+      _tx.send({_mLog: 'unload($namespace) failed: $e', 'err': true});
     }
   }
 
@@ -514,6 +545,11 @@ class _JsWorkerRunner {
         final data = _toMap(args);
         final jsonStr = (data['json'] as String?) ?? '{}';
         final paths = (data['paths'] as List?) ?? [];
+        // Bound input — jsonDecode is synchronous on this isolate. Audit
+        // M24: a 10 MB string was freezing the worker ~1 s.
+        if (jsonStr.length > _kMaxJsonInputBytes) {
+          return null;
+        }
         final parsed = jsonDecode(jsonStr);
         final result = <String, dynamic>{};
         for (final path in paths) {
@@ -686,7 +722,14 @@ class _JsWorkerRunner {
 
   static Map<String, dynamic> _toMap(dynamic args) {
     if (args is Map) return Map<String, dynamic>.from(args);
-    return Map<String, dynamic>.from(jsonDecode(args.toString()) as Map);
+    final s = args.toString();
+    // Audit M24 — bound bridge-call payloads. Returns an empty map so
+    // downstream handlers fail gracefully via missing-key fallbacks
+    // rather than freezing the isolate on jsonDecode.
+    if (s.length > _kMaxJsonInputBytes) {
+      return const <String, dynamic>{};
+    }
+    return Map<String, dynamic>.from(jsonDecode(s) as Map);
   }
 
   static String _sanitize(dynamic args) {

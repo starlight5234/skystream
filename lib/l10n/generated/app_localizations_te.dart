@@ -1149,6 +1149,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get subtitleAccounts => 'సబ్‌టైటిల్ ఖాతాలు';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Not logged in';
 
   @override

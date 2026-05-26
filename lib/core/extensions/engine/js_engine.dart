@@ -59,6 +59,12 @@ class JsEngineService {
   final _cancelTokens = <int, CancelToken>{};
   // Maps invoke ID → JS callback ID (for HTTP cancel-token routing).
   final _invokeJsCbId = <int, String>{};
+  // Maps invoke ID → calling plugin's namespace, extracted from the
+  // dotted function name (e.g. "myPlugin.search" → "myPlugin"). Used by
+  // the storage / preference bridge handlers to enforce per-plugin key
+  // scoping — a plugin can no longer pass a forged `packageName` arg
+  // to read or write another plugin's data. Audit B5 / PR-08b.
+  final _invokeNamespaces = <int, String>{};
 
   int _nextId = 0;
 
@@ -128,6 +134,7 @@ class JsEngineService {
       final result = m['result'];
       _cancelTokens.remove(id);
       _invokeJsCbId.remove(id);
+      _invokeNamespaces.remove(id);
       final c = _pendingInvokes.remove(id);
       if (c != null && !c.isCompleted) {
         if (err != null) {
@@ -166,13 +173,16 @@ class JsEngineService {
     final argsJson = m['aj'] as String;
     final invokeJsCbId = m['iid'] as String?;
 
-    // Find the cancel token for this JS callback's parent invoke.
+    // Find the cancel token + invoking plugin's namespace for this JS
+    // callback's parent invoke.
     CancelToken? cancelToken;
+    String? invokingNamespace;
     if (invokeJsCbId != null) {
       // Reverse-lookup: find the invoke ID whose jsCbId matches.
       for (final entry in _invokeJsCbId.entries) {
         if (entry.value == invokeJsCbId) {
           cancelToken = _cancelTokens[entry.key];
+          invokingNamespace = _invokeNamespaces[entry.key];
           break;
         }
       }
@@ -180,7 +190,11 @@ class JsEngineService {
 
     switch (channel) {
       case 'http_request':
-        _handleHttp(argsJson, cancelToken: cancelToken)
+        _handleHttp(
+              argsJson,
+              cancelToken: cancelToken,
+              callerNamespace: invokingNamespace,
+            )
             .then((result) {
               final parsed = jsonDecode(argsJson) as Map<String, dynamic>;
               final jsId = parsed['id'] as String?;
@@ -246,7 +260,18 @@ class JsEngineService {
         final parsed = jsonDecode(argsJson) as Map<String, dynamic>;
         final jsId = parsed['id'] as String?;
         final key = parsed['key'] as String? ?? '';
-        final value = _storage.getExtensionData(key);
+        // Audit B5 / PR-08b — namespace storage by the invoking plugin so
+        // plugin A can't read keys written by plugin B. Reads fall back to
+        // the unprefixed key when the prefixed one is empty so legacy data
+        // is still visible to whichever plugin first reads it. New writes
+        // always go through the prefixed path (set_storage below).
+        String? value;
+        if (invokingNamespace != null) {
+          value = _storage.getExtensionData('$invokingNamespace::$key');
+          value ??= _storage.getExtensionData(key); // legacy fallback
+        } else {
+          value = _storage.getExtensionData(key);
+        }
         if (jsId != null) {
           _workerPort.send({
             _mBridgeResp: 1,
@@ -261,7 +286,10 @@ class JsEngineService {
         final parsed = jsonDecode(argsJson) as Map<String, dynamic>;
         final key = parsed['key'] as String? ?? '';
         final value = parsed['value'] as String?;
-        _storage.setExtensionData(key, value).ignore();
+        final effectiveKey = invokingNamespace != null
+            ? '$invokingNamespace::$key'
+            : key;
+        _storage.setExtensionData(effectiveKey, value).ignore();
 
       case 'get_preference':
         // Direct sendMessage('get_preference', ...) — sync bridge, returns null
@@ -269,7 +297,21 @@ class JsEngineService {
         // go through get_storage instead, which is async.
         final parsed = jsonDecode(argsJson) as Map<String, dynamic>;
         final jsId = parsed['id'] as String?;
-        final pkgName = parsed['packageName'] as String? ?? '';
+        // Audit B5 / PR-08b — ignore the JS-supplied packageName when we
+        // know the invoking plugin. Prevents plugin A from spoofing
+        // plugin B's namespace to read its preferences. Fall back to the
+        // JS-supplied value only for async callbacks where we've lost the
+        // invoke context (timers etc.) — those are rare and lower risk.
+        final pkgName =
+            invokingNamespace ?? (parsed['packageName'] as String? ?? '');
+        if (kDebugMode &&
+            invokingNamespace != null &&
+            parsed['packageName'] != invokingNamespace) {
+          debugPrint(
+            '[bridge] get_preference: ignoring JS-supplied packageName '
+            '"${parsed['packageName']}" — using invoker "$invokingNamespace"',
+          );
+        }
         final key = parsed['key'] as String? ?? '';
         final value = _storage.getExtensionData('$pkgName:$key');
         if (jsId != null) {
@@ -284,7 +326,16 @@ class JsEngineService {
 
       case 'set_preference':
         final parsed = jsonDecode(argsJson) as Map<String, dynamic>;
-        final pkgName = parsed['packageName'] as String? ?? '';
+        final pkgName =
+            invokingNamespace ?? (parsed['packageName'] as String? ?? '');
+        if (kDebugMode &&
+            invokingNamespace != null &&
+            parsed['packageName'] != invokingNamespace) {
+          debugPrint(
+            '[bridge] set_preference: ignoring JS-supplied packageName '
+            '"${parsed['packageName']}" — using invoker "$invokingNamespace"',
+          );
+        }
         final key = parsed['key'] as String? ?? '';
         final value = parsed['value'] as String?;
         _storage.setExtensionData('$pkgName:$key', value).ignore();
@@ -309,6 +360,9 @@ class JsEngineService {
   Future<Map<String, dynamic>> _handleHttp(
     String argsJson, {
     CancelToken? cancelToken,
+    // Calling plugin's namespace, threaded through so the CF bypass can
+    // scope its WebView cache per plugin. Audit H6 / PR-08d.
+    String? callerNamespace,
   }) async {
     final requestId =
         'req_${DateTime.now().microsecondsSinceEpoch.toString().substring(10)}';
@@ -367,6 +421,7 @@ class JsEngineService {
         }
         final cfResult = await CloudflareBypass.instance.solveAndFetch(
           url,
+          callerId: callerNamespace,
           onSolved: (host) => _injectCfCookies(host),
         );
         if (cfResult != null) {
@@ -479,6 +534,14 @@ class JsEngineService {
 
     _pendingInvokes[id] = invokeCompleter;
     _cancelTokens[id] = cancelToken;
+    // Capture the calling plugin's namespace from the function name
+    // ("$ns.search") so the storage/preference bridge handlers can later
+    // enforce that bridge calls only access this plugin's data, regardless
+    // of any `packageName` field the JS supplies. Audit PR-08b.
+    final dotIdx = functionName.indexOf('.');
+    if (dotIdx > 0) {
+      _invokeNamespaces[id] = functionName.substring(0, dotIdx);
+    }
 
     // We don't know the jsCbId until the worker sends 'ir' back, but for
     // HTTP cancel-token routing we track the mapping after _invoke sets jsCbId.
@@ -513,9 +576,11 @@ class JsEngineService {
       );
       _cancelTokens.remove(id);
       _invokeJsCbId.remove(id);
+      _invokeNamespaces.remove(id);
     } catch (e) {
       _cancelTokens.remove(id);
       _invokeJsCbId.remove(id);
+      _invokeNamespaces.remove(id);
       rethrow;
     }
 
@@ -558,11 +623,28 @@ class JsEngineService {
     _workerPort.send({_mCancelTag: tag});
   }
 
+  /// Removes a plugin's exports from the shared JS runtime. Each plugin
+  /// IIFE assigns its API to `globalThis[namespace]`, so deleting the
+  /// global slot drops the plugin's closures and lets the next GC reclaim
+  /// memory. Also cancels any pending evals tagged with the namespace so
+  /// in-flight work for the unloaded plugin doesn't race with reload.
+  ///
+  /// Audit H9 — was a TODO commented out in extension_manager because the
+  /// engine had no unload API. Now provided.
+  void unload(String namespace) {
+    if (namespace.isEmpty) return;
+    // Drop queued evals for this plugin first; they'd run on a globalThis
+    // slot that's about to vanish.
+    _workerPort.send({_mCancelTag: namespace});
+    _workerPort.send({_mUnload: namespace});
+  }
+
   void dispose() {
     for (final entry in _cancelTokens.entries) {
       if (!entry.value.isCancelled) entry.value.cancel('engine disposed');
     }
     _cancelTokens.clear();
+    _invokeNamespaces.clear();
     try {
       _workerPort.send({_mDispose: 1});
     } catch (_) {}
@@ -587,6 +669,7 @@ const _mCancelTag = 'ct';
 const _mBridgeResp = 'br';
 const _mDispose = 'dp';
 const _mGc = 'gc';
+const _mUnload = 'ul'; // {ul: String namespace}
 
 // Worker → Main
 const _mReady = 'rd';

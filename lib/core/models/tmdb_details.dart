@@ -34,6 +34,7 @@ class TmdbDetails extends MultimediaItem {
     required String overview,
     super.logoUrl,
     String? genresStr,
+    super.imdbId,
     dynamic sourceItem,
     required this.runtime,
     required this.certification,
@@ -223,6 +224,15 @@ class TmdbDetails extends MultimediaItem {
     final originalLanguage =
         (json['original_language'] as String?)?.toUpperCase() ?? 'EN';
 
+    // Extract IMDB ID
+    String? imdbId = json['imdb_id'] as String?;
+    if (imdbId == null || imdbId.isEmpty) {
+      final externalIds = json['external_ids'] as Map<String, dynamic>?;
+      if (externalIds != null) {
+        imdbId = externalIds['imdb_id'] as String?;
+      }
+    }
+
     return TmdbDetails(
       id: json['id'] as int? ?? 0,
       mediaType: mType,
@@ -250,6 +260,7 @@ class TmdbDetails extends MultimediaItem {
       originCountry: originCountry,
       originalLanguage: originalLanguage,
       releaseDateFull: date,
+      imdbId: imdbId,
     );
   }
 }

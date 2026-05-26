@@ -1151,6 +1151,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get subtitleAccounts => 'ಉಪಶೀರ್ಷಿಕೆ ಖಾತೆಗಳು';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'ಲಾಗಿನ್ ಆಗಿಲ್ಲ';
 
   @override

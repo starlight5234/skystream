@@ -1139,6 +1139,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get subtitleAccounts => 'Ondertitelaccounts';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Niet ingelogd';
 
   @override

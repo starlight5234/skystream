@@ -4,13 +4,15 @@ import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'hotstar_player_style.dart';
 
 class ResumePromptOverlay extends StatelessWidget {
-  final int positionMs;
+  final int? positionMs;
+  final double? percentage;
   final VoidCallback onResume;
   final VoidCallback onStartOver;
 
   const ResumePromptOverlay({
     super.key,
-    required this.positionMs,
+    this.positionMs,
+    this.percentage,
     required this.onResume,
     required this.onStartOver,
   });
@@ -29,10 +31,17 @@ class ResumePromptOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    String subtitle = "";
+    if (positionMs != null && positionMs! > 0) {
+      subtitle = l10n.pausedAt(_formatDuration(positionMs!));
+    } else if (percentage != null && percentage! > 0) {
+      subtitle = "Synced progress: ${percentage!.toStringAsFixed(0)}%";
+    }
+    
     return _CountdownButtonPlacement(
       child: CountdownFillButton(
         label: l10n.resumeNow,
-        subtitle: l10n.pausedAt(_formatDuration(positionMs)),
+        subtitle: subtitle,
         duration: const Duration(seconds: 8),
         onPressed: onResume,
         onTimeout: onStartOver,

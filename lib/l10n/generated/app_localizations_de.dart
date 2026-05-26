@@ -1150,6 +1150,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get subtitleAccounts => 'Untertitel-Konten';
 
   @override
+  String get accounts => 'Accounts';
+
+  @override
   String get notLoggedIn => 'Nicht angemeldet';
 
   @override

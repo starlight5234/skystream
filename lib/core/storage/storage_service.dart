@@ -275,6 +275,23 @@ class StorageService {
     return _settingsBox.get(key, defaultValue: defaultValue) as T?;
   }
 
+  // --- General Key-Value ---
+  Future<void> setString(String key, String? value) async {
+    if (value == null) {
+      await _settingsBox.delete(key);
+    } else {
+      await _settingsBox.put(key, value);
+    }
+  }
+
+  String? getString(String key) {
+    return _settingsBox.get(key) as String?;
+  }
+  
+  Future<void> remove(String key) async {
+    await _settingsBox.delete(key);
+  }
+
   // --- Watch History ---
 
   static const String kHistoryBox = 'history_box';
@@ -304,6 +321,8 @@ class StorageService {
       'description': item.description,
       'contentType': item.contentType.name,
       'provider': item.provider,
+      'tmdbId': item.tmdbId,
+      'imdbId': item.imdbId,
       'position': positionMillis,
       'duration': durationMillis,
       'lastStreamUrl': lastStreamUrl,
@@ -348,6 +367,34 @@ class StorageService {
     }
 
     _historyCacheDirty = true;
+  }
+
+  Future<void> updateHistoryItemTimestampAndPosition(
+    String url,
+    String? lastEpisodeUrl,
+    int timestamp,
+    int position,
+  ) async {
+    final mainKey = _getKey(url);
+    final entry = _historyBox.get(mainKey);
+    if (entry != null) {
+      final updatedEntry = Map<String, dynamic>.from(entry as Map);
+      updatedEntry['timestamp'] = timestamp;
+      updatedEntry['position'] = position;
+      await _historyBox.put(mainKey, updatedEntry);
+
+      if (lastEpisodeUrl != null) {
+        final episodeKey = "EP_${_getKey(lastEpisodeUrl)}";
+        final epEntry = _historyBox.get(episodeKey);
+        if (epEntry != null) {
+          final updatedEpEntry = Map<String, dynamic>.from(epEntry as Map);
+          updatedEpEntry['timestamp'] = timestamp;
+          updatedEpEntry['position'] = position;
+          await _historyBox.put(episodeKey, updatedEpEntry);
+        }
+      }
+      _historyCacheDirty = true;
+    }
   }
 
   Future<void> clearAllHistory() async {

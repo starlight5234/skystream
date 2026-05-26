@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/services.dart';
@@ -45,6 +46,43 @@ List<MultimediaItem> _parseSearchResults(dynamic result) {
   return [];
 }
 
+// ── Concurrency safety helpers (audit PR-07) ──────────────────────────────
+
+/// Max items kept in parallel for plugin-returned URL fanout (audit M23).
+/// A plugin that returns 100 stream URLs would otherwise launch 100
+/// concurrent compute() + LocalProxyService calls; this caps the burst.
+const int _kStreamFanoutConcurrency = 8;
+
+/// Hard ceiling on per-call result count returned from a plugin (audit
+/// M25). A malicious plugin returning a 1 M-entry list would otherwise
+/// pump the whole thing across the isolate boundary to compute().
+const int _kMaxResultListLength = 5000;
+
+/// Hard ceiling on stream URLs a single loadStreams call may yield.
+const int _kMaxStreamsPerCall = 200;
+
+/// Processes [items] in chunks of [concurrency] in parallel, preserving
+/// input order. Each chunk awaits before the next starts. Simpler than a
+/// full Semaphore and good enough for our O(10–100) item bursts.
+Future<List<R>> _processInChunks<T, R>(
+  Iterable<T> items,
+  int concurrency,
+  Future<R> Function(T item) work,
+) async {
+  final list = items.toList(growable: false);
+  final results = List<R?>.filled(list.length, null);
+  for (var i = 0; i < list.length; i += concurrency) {
+    final end = (i + concurrency).clamp(0, list.length);
+    final chunk = <Future<void>>[];
+    for (var j = i; j < end; j++) {
+      final idx = j;
+      chunk.add(work(list[idx]).then((r) => results[idx] = r));
+    }
+    await Future.wait(chunk);
+  }
+  return results.cast<R>();
+}
+
 class JsBasedProvider extends SkyStreamProvider {
   final JsEngineService _jsEngine;
   final String _scriptPath;
@@ -63,6 +101,35 @@ class JsBasedProvider extends SkyStreamProvider {
 
   Future<void>? _initFuture;
   final String? _customBaseUrl;
+
+  // Per-plugin invocation lock — serializes calls into THIS plugin's exported
+  // functions so concurrent invocations (e.g. search + getHome in parallel)
+  // can't race on plugin-local closure state. The shared JS runtime is
+  // single-threaded but async-yields between bridge calls; without this
+  // lock, two `search()` calls could interleave at every `await fetch(...)`
+  // point and clobber each other's local variables. Audit PR-07.
+  Future<void>? _invokeLock;
+
+  Future<T> _serializedInvoke<T>(Future<T> Function() body) async {
+    // Chain after the previous in-flight call.
+    while (_invokeLock != null) {
+      try {
+        await _invokeLock;
+      } catch (_) {
+        // Predecessor failed — that's their problem; we still want to run.
+      }
+    }
+    final c = Completer<void>();
+    _invokeLock = c.future;
+    try {
+      return await body();
+    } finally {
+      // Only release if we're still the holder; defensive against weird
+      // race shapes during hot-reload.
+      if (identical(_invokeLock, c.future)) _invokeLock = null;
+      c.complete();
+    }
+  }
   // Optional shared script loader injected by ExtensionManager to deduplicate
   // file reads across sub-providers that share the same JS file.
   final Future<String?> Function()? _scriptLoader;
@@ -196,15 +263,17 @@ class JsBasedProvider extends SkyStreamProvider {
       if (qbc != null && !await JsBytecodeCompiler.isStale(_scriptPath, qbc)) {
         final bytes = await File(qbc).readAsBytes();
         await _jsEngine.loadBytes(bytes, tag: _packageName);
-        if (kDebugMode)
+        if (kDebugMode) {
           talker.debug("JsBasedProvider: Loaded bytecode for $_packageName");
+        }
         return;
       }
 
       // Slow path: text eval, then compile bytecode in the background.
       await _jsEngine.loadScript(script, tag: _packageName);
-      if (kDebugMode)
+      if (kDebugMode) {
         talker.debug("JsBasedProvider: Loaded script for $_packageName");
+      }
 
       if (qbc != null) {
         // Fire-and-forget: compile bytecode for next launch.
@@ -218,10 +287,11 @@ class JsBasedProvider extends SkyStreamProvider {
       return;
     } catch (e) {
       _error = "Eval: $e";
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint(
           "JsBasedProvider: CRITICAL - Eval failed for $_packageName: $e",
         );
+      }
     }
   }
 
@@ -244,6 +314,17 @@ class JsBasedProvider extends SkyStreamProvider {
     }
     if (rawScript == null) return false;
     return JsBytecodeCompiler.compile(_buildIife(rawScript), qbc);
+  }
+
+  Future<void> deleteBytecode() async {
+    final qbc = _qbcPath;
+    if (qbc == null) return;
+    try {
+      final file = File(qbc);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
   }
 
   String _fn(String name) => _namespace != null ? '$_namespace.$name' : name;
@@ -335,37 +416,57 @@ class JsBasedProvider extends SkyStreamProvider {
   Future<List<PluginSubProvider>> getProviders() async {
     await _ensureReady();
     if (_error != null) return [];
-    try {
-      final result = await _jsEngine.invokeAsync(_fn('getProviders'));
-      if (result is List) {
-        return result
-            .whereType<Map<dynamic, dynamic>>()
-            .map(
-              (e) => PluginSubProvider.fromJson(Map<String, dynamic>.from(e)),
-            )
-            .where((p) => p.id.isNotEmpty)
-            .toList();
+    return _serializedInvoke(() async {
+      try {
+        final result = await _jsEngine.invokeAsync(_fn('getProviders'));
+        if (result is List) {
+          return result
+              .whereType<Map<dynamic, dynamic>>()
+              .map(
+                (e) =>
+                    PluginSubProvider.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .where((p) => p.id.isNotEmpty)
+              .toList();
+        }
+        if (kDebugMode) {
+          debugPrint(
+            'JsBasedProvider: getProviders returned unexpected type: ${result.runtimeType}',
+          );
+        }
+        return [];
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint(
+            'JsBasedProvider: getProviders error for $_packageName: $e',
+          );
+        }
+        return [];
       }
-      if (kDebugMode)
-        debugPrint(
-          'JsBasedProvider: getProviders returned unexpected type: ${result.runtimeType}',
-        );
-      return [];
-    } catch (e) {
-      if (kDebugMode)
-        debugPrint('JsBasedProvider: getProviders error for $_packageName: $e');
-      return [];
-    }
+    });
   }
 
   @override
   Future<Map<String, List<MultimediaItem>>> getHome() async {
     await _ensureReady();
     if (_error != null) throw JsPluginException("INIT_ERROR", _error!);
+    return _serializedInvoke(() async {
     try {
       final result = await _jsEngine.invokeAsync(_fn('getHome'));
       if (result is Map) {
-        final map = await compute(_parseHomeResults, result);
+        // Bound the per-section list size before crossing the isolate
+        // boundary. Audit M25 — a plugin returning 100k items per section
+        // would otherwise force compute() to serialise all of it.
+        final bounded = <dynamic, dynamic>{};
+        for (final entry in result.entries) {
+          final v = entry.value;
+          if (v is List && v.length > _kMaxResultListLength) {
+            bounded[entry.key] = v.sublist(0, _kMaxResultListLength);
+          } else {
+            bounded[entry.key] = v;
+          }
+        }
+        final map = await compute(_parseHomeResults, bounded);
         return map;
       }
       throw Exception("Extension returned invalid home data (not a map).");
@@ -378,6 +479,7 @@ class JsBasedProvider extends SkyStreamProvider {
       talker.error("Error in getHome: $e");
       throw Exception("Failed to load home content: $e");
     }
+    });
   }
 
   @override
@@ -387,23 +489,30 @@ class JsBasedProvider extends SkyStreamProvider {
   }) async {
     await _ensureReady();
     if (_error != null) throw JsPluginException("INIT_ERROR", _error!);
-    try {
-      final result = await _jsEngine.invokeAsync(_fn('search'), [
-        query,
-      ], cancelToken);
-      if (result is List) {
-        return await compute(_parseSearchResults, result);
+    return _serializedInvoke(() async {
+      try {
+        final result = await _jsEngine.invokeAsync(_fn('search'), [
+          query,
+        ], cancelToken);
+        if (result is List) {
+          // Cap before compute() so a malicious plugin can't force the
+          // isolate boundary to serialise an unbounded payload. Audit M25.
+          final bounded = result.length > _kMaxResultListLength
+              ? result.sublist(0, _kMaxResultListLength)
+              : result;
+          return await compute(_parseSearchResults, bounded);
+        }
+        return <MultimediaItem>[];
+      } on JsPluginException catch (e) {
+        if (kDebugMode) debugPrint("JsPluginException in search: $e");
+        talker.error("JsPluginException in search: $e");
+        rethrow;
+      } catch (e) {
+        if (kDebugMode) debugPrint("Error in search: $e");
+        talker.error("Error in search: $e");
+        return <MultimediaItem>[];
       }
-      return [];
-    } on JsPluginException catch (e) {
-      if (kDebugMode) debugPrint("JsPluginException in search: $e");
-      talker.error("JsPluginException in search: $e");
-      rethrow;
-    } catch (e) {
-      if (kDebugMode) debugPrint("Error in search: $e");
-      talker.error("Error in search: $e");
-      return [];
-    }
+    });
   }
 
   @override
@@ -437,11 +546,26 @@ class JsBasedProvider extends SkyStreamProvider {
     if (_error != null) throw JsPluginException("INIT_ERROR", _error!);
     await LocalProxyService.instance.startServer();
 
+    return _serializedInvoke(() async {
     try {
       final result = await _jsEngine.invokeAsync(_fn('loadStreams'), [url]);
       if (result is List) {
-        return Future.wait(
-          result.map((e) async {
+        // Cap the per-call result list. Audit M25 — a misbehaving plugin
+        // could otherwise stream tens of thousands of entries through the
+        // fanout below.
+        final bounded = result.length > _kMaxStreamsPerCall
+            ? result.sublist(0, _kMaxStreamsPerCall)
+            : result;
+        if (kDebugMode && result.length > _kMaxStreamsPerCall) {
+          debugPrint(
+            "[$_packageName] loadStreams returned ${result.length} entries — "
+            "capping to $_kMaxStreamsPerCall (audit M25).",
+          );
+        }
+        // Process in bounded-concurrency chunks. Audit M23 — was
+        // unbounded Future.wait, allowing N parallel compute() spawns +
+        // proxy fetches for an N-entry plugin response.
+        return _processInChunks(bounded, _kStreamFanoutConcurrency, (e) async {
             final map = Map<String, dynamic>.from(e as Map);
             String finalUrl = map['url'] as String;
 
@@ -534,8 +658,7 @@ class JsBasedProvider extends SkyStreamProvider {
               drmKey: map['drmKey'] as String?,
               licenseUrl: map['licenseUrl'] as String?,
             );
-          }),
-        );
+          });
       }
       return [];
     } on JsPluginException catch (e) {
@@ -545,8 +668,9 @@ class JsBasedProvider extends SkyStreamProvider {
     } catch (e) {
       if (kDebugMode) debugPrint("Error in loadStreams: $e");
       talker.error("Error in loadStreams: $e");
-      return [];
+      return <StreamResult>[];
     }
+    });
   }
 }
 

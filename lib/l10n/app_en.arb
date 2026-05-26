@@ -553,6 +553,7 @@
   "mobileQualityPreference": "Mobile Quality Preference",
   "anyNoPreference": "Any (no preference)",
   "subtitleAccounts": "Subtitle Accounts",
+  "accounts": "Accounts",
   "notLoggedIn": "Not logged in",
   "loggedInAs": "Logged in as {username}",
   "@loggedInAs": {
