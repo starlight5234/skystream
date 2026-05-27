@@ -367,25 +367,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         final suggestion = suggestionState.suggestions[index];
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: CardsWrapper(
-            onTap: () => _submitSearch(suggestion),
-            borderRadius: BorderRadius.circular(12),
-            child: Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                leading: const Icon(Icons.search_rounded),
-                title: Text(suggestion),
-                trailing: IconButton(
-                  tooltip: 'Fill query',
-                  icon: const Icon(Icons.north_west_rounded),
-                  focusNode: FocusNode(
-                    canRequestFocus: false,
-                  ), // Prevent stealing focus from D-pad
-                  onPressed: () => _fillSuggestion(suggestion),
-                ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              onTap: () => _submitSearch(suggestion),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              leading: const Icon(Icons.search_rounded),
+              title: Text(suggestion),
+              trailing: IconButton(
+                tooltip: 'Fill query',
+                icon: const Icon(Icons.north_west_rounded),
+                focusNode: FocusNode(
+                  canRequestFocus: false,
+                ), // Prevent stealing focus from D-pad
+                onPressed: () => _fillSuggestion(suggestion),
               ),
             ),
           ),
