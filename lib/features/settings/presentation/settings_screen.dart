@@ -52,7 +52,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            Expanded(child: _buildSettingsList(context, ref)),
+            Expanded(child: _buildSettingsList(context, ref, isTv)),
           ],
         ),
       );
@@ -62,11 +62,11 @@ class SettingsScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settings)),
-      body: _buildSettingsList(context, ref),
+      body: _buildSettingsList(context, ref, isTv),
     );
   }
 
-  Widget _buildSettingsList(BuildContext context, WidgetRef ref) {
+  Widget _buildSettingsList(BuildContext context, WidgetRef ref, bool isTv) {
     final versionAsync = ref.watch(appVersionProvider);
     final themeMode = ref.watch(appThemeModeProvider);
     final generalSettings = ref.watch(generalSettingsProvider);
@@ -76,6 +76,12 @@ class SettingsScreen extends ConsumerWidget {
         const PlayerSettings();
 
     final l10n = AppLocalizations.of(context)!;
+
+    final platform = Theme.of(context).platform;
+    final isDesktopOS = platform == TargetPlatform.windows ||
+        platform == TargetPlatform.macOS ||
+        platform == TargetPlatform.linux;
+    final isTouchDevice = !isTv && !isDesktopOS;
 
     return Center(
       child: ConstrainedBox(
@@ -156,60 +162,62 @@ class SettingsScreen extends ConsumerWidget {
                     playerSettings.preferredPlayer,
                   ),
                 ),
-                SettingsTile(
-                  icon: Icons.swipe_vertical_rounded,
-                  title: l10n.leftGesture,
-                  subtitle: getGestureLabel(playerSettings.leftGesture, l10n),
-                  onTap: () => showGestureDialog(
-                    context,
-                    ref,
-                    true,
-                    playerSettings.leftGesture,
+                if (isTouchDevice) ...[
+                  SettingsTile(
+                    icon: Icons.swipe_vertical_rounded,
+                    title: l10n.leftGesture,
+                    subtitle: getGestureLabel(playerSettings.leftGesture, l10n),
+                    onTap: () => showGestureDialog(
+                      context,
+                      ref,
+                      true,
+                      playerSettings.leftGesture,
+                    ),
                   ),
-                ),
-                SettingsTile(
-                  icon: Icons.swipe_vertical_rounded,
-                  title: l10n.rightGesture,
-                  subtitle: getGestureLabel(playerSettings.rightGesture, l10n),
-                  onTap: () => showGestureDialog(
-                    context,
-                    ref,
-                    false,
-                    playerSettings.rightGesture,
+                  SettingsTile(
+                    icon: Icons.swipe_vertical_rounded,
+                    title: l10n.rightGesture,
+                    subtitle: getGestureLabel(playerSettings.rightGesture, l10n),
+                    onTap: () => showGestureDialog(
+                      context,
+                      ref,
+                      false,
+                      playerSettings.rightGesture,
+                    ),
                   ),
-                ),
-                SettingsTile(
-                  icon: Icons.touch_app_rounded,
-                  title: l10n.doubleTapToSeek,
-                  subtitle: playerSettings.doubleTapEnabled
-                      ? l10n.enabled
-                      : l10n.disabled,
-                  trailing: Switch(
-                    value: playerSettings.doubleTapEnabled,
-                    onChanged: (val) => ref
+                  SettingsTile(
+                    icon: Icons.touch_app_rounded,
+                    title: l10n.doubleTapToSeek,
+                    subtitle: playerSettings.doubleTapEnabled
+                        ? l10n.enabled
+                        : l10n.disabled,
+                    trailing: Switch(
+                      value: playerSettings.doubleTapEnabled,
+                      onChanged: (val) => ref
+                          .read(playerSettingsProvider.notifier)
+                          .setDoubleTapEnabled(val),
+                    ),
+                    onTap: () => ref
                         .read(playerSettingsProvider.notifier)
-                        .setDoubleTapEnabled(val),
+                        .setDoubleTapEnabled(!playerSettings.doubleTapEnabled),
                   ),
-                  onTap: () => ref
-                      .read(playerSettingsProvider.notifier)
-                      .setDoubleTapEnabled(!playerSettings.doubleTapEnabled),
-                ),
-                SettingsTile(
-                  icon: Icons.swipe_rounded,
-                  title: l10n.swipeToSeek,
-                  subtitle: playerSettings.swipeSeekEnabled
-                      ? l10n.enabled
-                      : l10n.disabled,
-                  trailing: Switch(
-                    value: playerSettings.swipeSeekEnabled,
-                    onChanged: (val) => ref
+                  SettingsTile(
+                    icon: Icons.swipe_rounded,
+                    title: l10n.swipeToSeek,
+                    subtitle: playerSettings.swipeSeekEnabled
+                        ? l10n.enabled
+                        : l10n.disabled,
+                    trailing: Switch(
+                      value: playerSettings.swipeSeekEnabled,
+                      onChanged: (val) => ref
+                          .read(playerSettingsProvider.notifier)
+                          .setSwipeSeekEnabled(val),
+                    ),
+                    onTap: () => ref
                         .read(playerSettingsProvider.notifier)
-                        .setSwipeSeekEnabled(val),
+                        .setSwipeSeekEnabled(!playerSettings.swipeSeekEnabled),
                   ),
-                  onTap: () => ref
-                      .read(playerSettingsProvider.notifier)
-                      .setSwipeSeekEnabled(!playerSettings.swipeSeekEnabled),
-                ),
+                ],
                 SettingsTile(
                   icon: Icons.av_timer_rounded,
                   title: l10n.seekDuration,
