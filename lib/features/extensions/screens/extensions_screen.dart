@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/layout_constants.dart';
 import '../../../core/extensions/models/extension_plugin.dart';
@@ -17,44 +16,7 @@ class ExtensionsScreen extends ConsumerStatefulWidget {
 }
 
 class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
-  final ScrollController _scrollController = ScrollController();
-  final ValueNotifier<bool> _isFabExtended = ValueNotifier<bool>(true);
-  final FocusNode _addRepoFocusNode = FocusNode();
-  final Map<String, FocusNode> _repoDeleteFocusNodes = {};
   bool _didEnsureInit = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.userScrollDirection ==
-            ScrollDirection.reverse &&
-        _isFabExtended.value) {
-      _isFabExtended.value = false;
-    } else if (_scrollController.position.userScrollDirection ==
-            ScrollDirection.forward &&
-        !_isFabExtended.value) {
-      _isFabExtended.value = true;
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _isFabExtended.dispose();
-    _addRepoFocusNode.dispose();
-    for (final node in _repoDeleteFocusNodes.values) {
-      node.dispose();
-    }
-    super.dispose();
-  }
-
-  FocusNode _getRepoDeleteFocusNode(String url) {
-    return _repoDeleteFocusNodes.putIfAbsent(url, () => FocusNode());
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,13 +58,8 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
             ExtensionsLoading(repositories: []) => const Center(
               child: CircularProgressIndicator(),
             ),
-            ExtensionsState()
-                when state.repositories.isEmpty &&
-                    state.installedPlugins.isEmpty =>
-              Center(child: Text(l10n.noReposFound)),
             _ => ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.only(bottom: 80), // Fab space
+              padding: const EdgeInsets.only(bottom: 24),
               addAutomaticKeepAlives:
                   false, // Fixes D-pad focus traversal crash when ExpansionTiles are cached off-screen
               itemCount: _calculateItemCount(state),
@@ -124,98 +81,103 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                     )
                     .toList();
                 final hasInstalledOnly = installedOnlyPlugins.isNotEmpty;
+                final isEmpty = state.repositories.isEmpty && state.installedPlugins.isEmpty;
 
-                // Render Debug Section
-                if (hasDebug && index == 0) {
-                  return _buildDebugSection(context, debugPlugins);
+                int currentIndex = 0;
+
+                // 1. Debug Section
+                if (hasDebug) {
+                  if (index == currentIndex) {
+                    return _buildDebugSection(context, debugPlugins);
+                  }
+                  currentIndex++;
                 }
 
-                // Render Installed Extensions section
-                if (hasInstalledOnly && index == (hasDebug ? 1 : 0)) {
-                  return _buildInstalledOnlySection(
+                // 2. Installed Only Section
+                if (hasInstalledOnly) {
+                  if (index == currentIndex) {
+                    return _buildInstalledOnlySection(
+                      context,
+                      ref,
+                      installedOnlyPlugins,
+                      hasRepos: state.repositories.isNotEmpty,
+                    );
+                  }
+                  currentIndex++;
+                }
+
+                // 3. Empty State Text
+                if (isEmpty) {
+                  if (index == currentIndex) {
+                    return Padding(
+                      padding: const EdgeInsets.all(LayoutConstants.spacingLg),
+                      child: Center(child: Text(l10n.noReposFound)),
+                    );
+                  }
+                  currentIndex++;
+                }
+
+                // 4. Repositories
+                if (index >= currentIndex && index < currentIndex + state.repositories.length) {
+                  final repoIndex = index - currentIndex;
+                  final repo = state.repositories[repoIndex];
+                  final plugins = state.availablePlugins[repo.url] ?? [];
+                  return _buildRepositoryCard(
                     context,
                     ref,
-                    installedOnlyPlugins,
-                    hasRepos: state.repositories.isNotEmpty,
+                    state,
+                    repo,
+                    plugins,
+                    l10n,
+                  );
+                }
+                currentIndex += state.repositories.length;
+
+                // 5. Add Repository Button (Always at the end)
+                if (index == currentIndex) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: LayoutConstants.spacingMd,
+                      vertical: LayoutConstants.spacingSm,
+                    ),
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      elevation: 0,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.05),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.add_circle_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        title: Text(
+                          l10n.addRepo,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onTap: () => _showAddRepoDialog(context, ref),
+                      ),
+                    ),
                   );
                 }
 
-                // Repositories
-                final repoIndex =
-                    index - (hasDebug ? 1 : 0) - (hasInstalledOnly ? 1 : 0);
-                final repo = state.repositories[repoIndex];
-                final plugins = state.availablePlugins[repo.url] ?? [];
-
-                return _buildRepositoryCard(
-                  context,
-                  ref,
-                  state,
-                  repo,
-                  plugins,
-                  l10n,
-                );
+                return const SizedBox.shrink();
               },
             ),
           },
         ),
-      ),
-      floatingActionButton: ValueListenableBuilder<bool>(
-        valueListenable: _isFabExtended,
-        builder: (context, isFabExtended, _) {
-          return Material(
-            elevation: 4,
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              focusNode: _addRepoFocusNode,
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => _showAddRepoDialog(context, ref),
-              child: Container(
-                height: 56,
-                constraints: const BoxConstraints(minWidth: 56),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isFabExtended ? LayoutConstants.spacingMd : 0,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.add,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: SizedBox(
-                        width: isFabExtended ? null : 0,
-                        child: isFabExtended
-                            ? Padding(
-                                padding: const EdgeInsets.only(
-                                  left: LayoutConstants.spacingSm,
-                                ),
-                                child: Text(
-                                  l10n.addRepo,
-                                  style: TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: false,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -354,9 +316,12 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     final hasInstalledOnly = state.installedPlugins.any(
       (p) => !p.isDebug && !allAvailablePackageNames.contains(p.packageName),
     );
+    final isEmpty = state.repositories.isEmpty && state.installedPlugins.isEmpty;
 
     return (hasDebug ? 1 : 0) +
         (hasInstalledOnly ? 1 : 0) +
+        (isEmpty ? 1 : 0) + // Empty state text
+        1 + // Add Repository tile
         state.repositories.length;
   }
 
@@ -433,10 +398,13 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
           ],
         ),
         children: [
-          // Repository Actions (Download All / Delete) moved inside children 
+          // Repository Actions (Download All / Delete) moved inside children
           // to prevent D-pad focus conflicts with the ExpansionTile header.
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: LayoutConstants.spacingMd, vertical: LayoutConstants.spacingXs),
+            padding: const EdgeInsets.symmetric(
+              horizontal: LayoutConstants.spacingMd,
+              vertical: LayoutConstants.spacingXs,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -453,12 +421,18 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                   // Download-all / all-installed indicator.
                   TextButton.icon(
                     icon: Icon(
-                      allInstalled ? Icons.check_circle_outline : Icons.download,
+                      allInstalled
+                          ? Icons.check_circle_outline
+                          : Icons.download,
                       color: allInstalled
                           ? Theme.of(context).colorScheme.primary
                           : null,
                     ),
-                    label: Text(allInstalled ? 'All installed' : l10n.downloadAllProviders),
+                    label: Text(
+                      allInstalled
+                          ? 'All installed'
+                          : l10n.downloadAllProviders,
+                    ),
                     onPressed: allInstalled || plugins.isEmpty
                         ? null
                         : () {
@@ -466,13 +440,15 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                               final installed = state.installedPlugins
                                   .cast<ExtensionPlugin?>()
                                   .firstWhere(
-                                    (inst) => inst?.packageName == p.packageName,
+                                    (inst) =>
+                                        inst?.packageName == p.packageName,
                                     orElse: () => null,
                                   );
                               // Only install if it's missing or if we have a newer version
-                              return installed == null || p.version > installed.version;
+                              return installed == null ||
+                                  p.version > installed.version;
                             }).toList();
-                            
+
                             if (pluginsToInstall.isNotEmpty) {
                               ref
                                   .read(extensionsControllerProvider.notifier)
@@ -482,7 +458,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                   ),
                   const SizedBox(width: LayoutConstants.spacingSm),
                   TextButton.icon(
-                    focusNode: _getRepoDeleteFocusNode(repo.url),
                     icon: const Icon(Icons.delete_outline),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
                     label: Text(l10n.delete),
@@ -503,7 +478,9 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                     height: 1,
                     indent: 56,
                     endIndent: 16,
-                    color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).dividerColor.withValues(alpha: 0.5),
                   ),
               ],
             );
@@ -545,7 +522,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
     ).then((_) {
       if (context.mounted) {
-        _getRepoDeleteFocusNode(repo.url).requestFocus();
+        // Automatically handled by framework
       }
     });
   }
@@ -562,8 +539,16 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
         content: CustomTextField(
           controller: controller,
           hintText: l10n.repoUrlOrShortcode,
-          autofocus: false,
+          autofocus: true,
           textInputAction: TextInputAction.done,
+          onSubmitted: (value) {
+            if (value.isNotEmpty) {
+              ref
+                  .read(extensionsControllerProvider.notifier)
+                  .addRepository(value);
+              Navigator.pop(context);
+            }
+          },
         ),
         actions: [
           CustomButton(
@@ -577,9 +562,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
           ),
           const SizedBox(width: LayoutConstants.spacingXs),
           CustomButton(
-            autofocus: true,
             isPrimary: true,
-
             onPressed: () {
               if (controller.text.isNotEmpty) {
                 ref
@@ -594,7 +577,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
     ).then((_) {
       if (context.mounted) {
-        _addRepoFocusNode.requestFocus();
+        // Automatically handled by framework
       }
     });
   }
@@ -690,7 +673,9 @@ class _PluginTileState extends ConsumerState<_PluginTile> {
     final isInstalled = installedPlugin != null;
     final updateAvailable = state.availableUpdates[widget.plugin.packageName];
 
-    final isInstalling = state.installingPlugins.contains(widget.plugin.packageName);
+    final isInstalling = state.installingPlugins.contains(
+      widget.plugin.packageName,
+    );
 
     return ListTile(
       leading: Container(
