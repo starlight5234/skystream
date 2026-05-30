@@ -336,6 +336,10 @@ class _CustomButtonState extends State<CustomButton> {
   late FocusNode _focusNode;
   bool _isFocused = false;
   late final VoidCallback _focusListener;
+  // Tracks whether focus was last driven by keyboard/D-pad (traditional) vs a
+  // touch tap, so the focus ring only appears for directional navigation.
+  FocusHighlightMode _highlightMode =
+      FocusManager.instance.highlightMode;
 
   @override
   void initState() {
@@ -345,6 +349,11 @@ class _CustomButtonState extends State<CustomButton> {
       if (mounted) setState(() => _isFocused = _focusNode.hasFocus);
     };
     _focusNode.addListener(_focusListener);
+    FocusManager.instance.addHighlightModeListener(_onHighlightModeChange);
+  }
+
+  void _onHighlightModeChange(FocusHighlightMode mode) {
+    if (mounted) setState(() => _highlightMode = mode);
   }
 
   @override
@@ -353,6 +362,7 @@ class _CustomButtonState extends State<CustomButton> {
     // which case it outlives this state and would otherwise hold a reference
     // to a disposed closure target.
     _focusNode.removeListener(_focusListener);
+    FocusManager.instance.removeHighlightModeListener(_onHighlightModeChange);
     if (widget.focusNode == null) {
       _focusNode.dispose();
     }
@@ -362,7 +372,12 @@ class _CustomButtonState extends State<CustomButton> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final showHighlight = widget.showFocusHighlight && _isFocused;
+    // Show the focus ring only when navigating by keyboard/remote — never for a
+    // touch tap that incidentally moves focus to the button.
+    final showHighlight =
+        widget.showFocusHighlight &&
+        _isFocused &&
+        _highlightMode != FocusHighlightMode.touch;
 
     Widget core;
     if (widget.isPrimary) {
@@ -436,22 +451,29 @@ class _CustomButtonState extends State<CustomButton> {
           ? inner
           : BorderRadius.circular(12);
     } else {
+      // No explicit shape → Material 3 buttons default to a pill (StadiumBorder),
+      // so trace a fully-rounded ring rather than a squarish 12px corner.
       outerShape = BoxShape.rectangle;
-      outerBorderRadius = BorderRadius.circular(12);
+      outerBorderRadius = BorderRadius.circular(999);
     }
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       decoration: BoxDecoration(
         shape: outerShape,
         borderRadius: outerBorderRadius,
+        // Subtle accent ring + soft glow (the keyboard/D-pad focus cue).
         border: showHighlight
-            ? Border.all(color: primaryColor, width: 2)
+            ? Border.all(
+                color: primaryColor.withValues(alpha: 0.9),
+                width: 1.5,
+              )
             : null,
         boxShadow: showHighlight
             ? [
                 BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.2),
-                  blurRadius: 8,
+                  color: primaryColor.withValues(alpha: 0.35),
+                  blurRadius: 14,
+                  spreadRadius: 0.5,
                 ),
               ]
             : null,
