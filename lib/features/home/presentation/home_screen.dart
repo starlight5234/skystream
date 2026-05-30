@@ -63,9 +63,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _isWidescreenForScroll() {
     final profile = ref.read(deviceProfileProvider).asData?.value;
     final isTv = profile?.isTv == true || context.isTv;
-    return isTv ||
-        profile?.isLargeScreen == true ||
-        context.isTabletOrLarger;
+    return isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
   }
 
   void _onScroll() {
@@ -121,7 +119,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // Use profile?.isLargeScreen so this matches AppScaffold's sidebar
     // decision even when the HomeScreen's context width is narrowed
     // by the sidebar (e.g. iPad portrait).
-    final isWidescreen = isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
+    final isWidescreen =
+        isTv || profile?.isLargeScreen == true || context.isTabletOrLarger;
 
     // On widescreen: no AppBar, no FAB — we use the DashboardHeaderBar instead.
     // The header lives outside the scroll view in a plain Column so there is
@@ -221,7 +220,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           return Material(
             elevation: 4,
             color: Theme.of(context).brightness == Brightness.dark
-                ? Theme.of(context).dialogTheme.backgroundColor
+                ? Theme.of(context).colorScheme.surfaceDim
                 : Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
@@ -350,7 +349,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           SliverToBoxAdapter(child: _buildListShimmer(context)),
         ],
       ),
-      HomeNoProvider() => _buildNoProviderState(context, l10n, isWidescreen: isWidescreen),
+      HomeNoProvider() => _buildNoProviderState(
+        context,
+        l10n,
+        isWidescreen: isWidescreen,
+      ),
       HomeOffline() => _buildErrorState(context, l10n.noInternetError, ref),
       HomeError(:final message) => _buildErrorState(context, message, ref),
       HomeSuccess(:final data) => RefreshIndicator(
@@ -358,7 +361,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
-
             if (data.containsKey('Trending'))
               SliverToBoxAdapter(
                 child: ExploreCarousel(
@@ -938,7 +940,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final heroHeight = size.height * 0.60;
     final isDesktop =
         size.width > LayoutConstants.exploreCarouselDesktopBreakpoint;
-    
+
     if (isDesktop) {
       return Padding(
         padding: const EdgeInsets.symmetric(
@@ -985,44 +987,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 : LayoutConstants.spacingMd,
             LayoutConstants.spacingSm,
           ),
-            child: ShimmerPlaceholder.rectangular(
-              width: 150,
-              height: 24,
-              borderRadius: 4,
-            ),
+          child: ShimmerPlaceholder.rectangular(
+            width: 150,
+            height: 24,
+            borderRadius: 4,
           ),
-          const SizedBox(height: LayoutConstants.spacingMd),
-          // List Placeholder
-          SizedBox(
-            height: listHeight,
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(
-                horizontal: isDesktop
-                    ? LayoutConstants.dashboardContentPadding
-                    : LayoutConstants.spacingMd,
-              ),
-              scrollDirection: Axis.horizontal,
-              itemCount: 10,
-              separatorBuilder: (_, _) => SizedBox(
-                width: isDesktop
-                    ? LayoutConstants.spacingLg
-                    : LayoutConstants.spacingSm,
-              ),
-              itemBuilder: (context, index) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ShimmerPlaceholder.rectangular(
-                      width: cardWidth,
-                      height: imageHeight,
-                      borderRadius: 12,
-                    ),
-                  ],
-                );
-              },
+        ),
+        const SizedBox(height: LayoutConstants.spacingMd),
+        // List Placeholder
+        SizedBox(
+          height: listHeight,
+          child: ListView.separated(
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop
+                  ? LayoutConstants.dashboardContentPadding
+                  : LayoutConstants.spacingMd,
             ),
+            scrollDirection: Axis.horizontal,
+            itemCount: 10,
+            separatorBuilder: (_, _) => SizedBox(
+              width: isDesktop
+                  ? LayoutConstants.spacingLg
+                  : LayoutConstants.spacingSm,
+            ),
+            itemBuilder: (context, index) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShimmerPlaceholder.rectangular(
+                    width: cardWidth,
+                    height: imageHeight,
+                    borderRadius: 12,
+                  ),
+                ],
+              );
+            },
           ),
-        ],
-      );
+        ),
+      ],
+    );
   }
 }
