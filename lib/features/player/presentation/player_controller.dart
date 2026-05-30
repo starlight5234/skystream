@@ -3194,6 +3194,13 @@ class PlayerController extends Notifier<PlayerState> {
       _episode = nextEpisode;
       _userAddedExternalSubtitles.clear();
       _resetPerEpisodeState();
+
+      // Refetch intro/outro/recap (IntroDB / AnimeSkip) for the new episode.
+      // _resetPerEpisodeState() cleared the previous episode's segments, so
+      // without this the next episode has no skip data — the same call that
+      // loadEpisode() already makes. _episode now points to nextEpisode.
+      unawaited(_fetchAndLogSkipSegments());
+
       state = state.copyWith(
         playerTitle: "${_item.title} - ${nextEpisode.name}",
         showNextEpisodeOverlay: false,

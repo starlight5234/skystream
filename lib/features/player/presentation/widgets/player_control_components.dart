@@ -84,19 +84,30 @@ class PlayerTopBar extends StatelessWidget {
 /// [leading] (playback) pinned left, a [Spacer], then [actions] (everything
 /// else) on the right. All buttons are direct siblings of one [Row].
 ///
+/// The [leading] group is pinned left; the [actions] group lives in a
+/// horizontal scroll view that is right-anchored when it fits and scrolls to
+/// reveal overflow when there are more buttons than fit (otherwise the extras
+/// were simply clipped and unreachable).
+///
 /// On TV, Left/Right are driven explicitly by reading-order focus traversal
 /// ([FocusNode.nextFocus]/[previousFocus]) within the row's own
-/// [FocusTraversalGroup]. Geometric directional traversal proved unreliable at
-/// crossing the wide flexible [Spacer] between the left and right groups, so
-/// focus could get stranded on one side. Up/Down still bubble out to move
-/// between the scrubber / controls / top-bar rows. (Off TV the handler is null,
-/// so desktop keyboard arrows keep their seek/volume behaviour.) Paints its own
-/// bottom scrim.
+/// [FocusTraversalGroup]; the handler consumes the arrows *before* the inner
+/// [Scrollable] sees them, so focus moves cleanly across the whole row (and the
+/// scroll view follows focus via the framework's ensureVisible) with no scroll
+/// trap. Up/Down still bubble out to move between the scrubber / controls /
+/// top-bar rows. (Off TV the handler is null, so desktop keyboard arrows keep
+/// their seek/volume behaviour and touch just scrolls.) Paints its own scrim.
 class PlayerBottomBar extends StatelessWidget {
   final Widget progressBar;
   final List<Widget> leading;
   final List<Widget> actions;
   final bool isTv;
+
+  /// On touch the [actions] go in a finger-scrollable strip (so a long list is
+  /// reachable); on TV/desktop they stay a fixed right-aligned group navigated
+  /// by D-pad. A keyboard [Scrollable] would re-introduce the focus trap, so it
+  /// is used only where there's no directional focus (touch).
+  final bool isTouch;
 
   const PlayerBottomBar({
     super.key,
@@ -104,6 +115,7 @@ class PlayerBottomBar extends StatelessWidget {
     this.leading = const [],
     this.actions = const [],
     this.isTv = false,
+    this.isTouch = false,
   });
 
   KeyEventResult _handleRowKey(FocusNode node, KeyEvent event) {
@@ -146,11 +158,26 @@ class PlayerBottomBar extends StatelessWidget {
                   onKeyEvent: isTv ? _handleRowKey : null,
                   child: Row(
                     children: [
-                      // Left group: play/pause, lock, next.
+                      // Left group: play/pause, lock, next — always visible.
                       ...leading,
-                      const Spacer(),
-                      // Right group: actions + utilities.
-                      ...actions,
+                      if (isTouch)
+                        // Touch: right-anchored finger-scroll strip so a long
+                        // action list is never clipped out of reach.
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            reverse: true,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: actions,
+                            ),
+                          ),
+                        )
+                      else ...[
+                        // TV/desktop: fixed right-aligned group (D-pad nav).
+                        const Spacer(),
+                        ...actions,
+                      ],
                     ],
                   ),
                 ),

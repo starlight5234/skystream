@@ -1058,7 +1058,7 @@ class SkyStreamPlayerControlsState
                       return const SizedBox.shrink();
                     }
                     return Align(
-                      alignment: Alignment(_isSeekingLeft ? -0.84 : 0.84, -0.1),
+                      alignment: Alignment(_isSeekingLeft ? -0.84 : 0.84, 0.0),
                       child: _buildKickAnimation(),
                     );
                   },
@@ -1451,6 +1451,7 @@ class SkyStreamPlayerControlsState
                 _absorbGestures(
                   PlayerBottomBar(
                     isTv: _isTv,
+                    isTouch: isTouch,
                     progressBar: PlayerProgressBar(
                       player: widget.player,
                       videoViewController: widget.videoViewController,
