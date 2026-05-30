@@ -103,6 +103,10 @@ SkyStream is a modern, media streaming client. It draws inspiration from the ver
 - 📑 **Episode Overlay** – Browse and switch episodes inside the player  
 - 🔍 **Detailed Loading Insights** – View source details while content loads
 
+### 🔗 Integrations & Tracking
+- 🔄 **Multi-Tracker Sync** – Keep your watch list and progress synchronized across **Trakt**, **Simkl**, **MyAnimeList (MAL)**, and **AniList**
+- ⏭️ **Smart Skip (Intro/Outro)** – Seamlessly skip intro and outro sequences using **IntroDB** and **Anime Skip** integration
+
 ### 🌐 Multi-Provider & Plugin System
 - 🔌 **Plugin-Based Architecture** – Extend functionality with custom plugins  
 - 🔁 **Multi-Provider Support** – Access multiple content sources within a single plugin  
@@ -147,7 +151,7 @@ SkyStream is a modern, media streaming client. It draws inspiration from the ver
 Download the latest version from the **[Releases Page](https://github.com/akashdh11/skystream/releases/latest)**.
 
 ### 🤖 Android / Android TV
-1. Download the `skystream-android-arm64-v8a-v2.3.2.apk` (recommended for most modern phones) or `skystream-android-armeabi-v7a-v2.3.2.apk` (for TV) from Releases.
+1. Download the `skystream-android-arm64-v8a-v2.5.0.apk` (recommended for most modern phones) or `skystream-android-armeabi-v7a-v2.5.0.apk` (for TV) from Releases.
 2. Open the file and tap **Install**.
    - *Note: You may need to allow "Install from Unknown Sources" in your browser settings.*
 3. Open SkyStream and install extensions via **Settings > Extensions**.
@@ -165,7 +169,7 @@ SkyStream is not on the App Store. You must **sideload** it using a computer.
 - [Sideloadly Video Guide](https://www.youtube.com/watch?v=vqTsavQc3lQ)
 
 **Steps:**
-1. Download `skystream-ios-unsigned-v2.3.2.ipa` from the [Releases Page](https://github.com/akashdh11/skystream/releases/latest).
+1. Download `skystream-ios-unsigned-v2.5.0.ipa` from the [Releases Page](https://github.com/akashdh11/skystream/releases/latest).
 2. Open **Impactor** or **Sideloadly** on your computer.
 3. Connect your iPhone/iPad via USB.
 4. Drag the `.ipa` file into the Sideloadly window.
