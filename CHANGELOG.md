@@ -1,4 +1,4 @@
-## Changelogs - v2.5.0
+# Changelogs - v2.5.0
 
 ### ✨ *New Features*
 - 🔗 *Multi-tracker Integration* – Full synchronization support for **Trakt**, **Simkl**, **MyAnimeList (MAL)**, and **AniList** to keep your watch progress in sync across platforms.

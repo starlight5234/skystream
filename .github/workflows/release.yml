@@ -527,7 +527,7 @@ jobs:
           dart pub global activate fastforge
 
           # Build .deb (AppImage is currently disabled due to tool-level file collision bugs)
-          fastforge package --platform linux --targets deb --build-dart-define-from-file=dart-defines.json
+          fastforge package --platform linux --targets deb --flutter-build-args=--dart-define-from-file=dart-defines.json
 
           # Rename .deb file to match tar.gz convention
           mv dist/*/*.deb "skystream-linux-${{ matrix.arch }}-${VERSION}.deb"
