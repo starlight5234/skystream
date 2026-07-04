@@ -69,6 +69,11 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                     .toList();
                 final hasDebug = debugPlugins.isNotEmpty;
 
+                final installedPlugins = state.installedPlugins
+                    .where((p) => !p.isDebug)
+                    .toList();
+                final hasInstalled = installedPlugins.isNotEmpty;
+
                 final allAvailablePackageNames = state.availablePlugins.values
                     .expand((list) => list)
                     .map((p) => p.packageName)
@@ -89,6 +94,14 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                 if (hasDebug) {
                   if (index == currentIndex) {
                     return _buildDebugSection(context, debugPlugins);
+                  }
+                  currentIndex++;
+                }
+
+                // 1.5. Installed Section
+                if (hasInstalled) {
+                  if (index == currentIndex) {
+                    return _buildInstalledSection(context, ref, installedPlugins);
                   }
                   currentIndex++;
                 }
@@ -178,6 +191,71 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
             ),
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildInstalledSection(
+    BuildContext context,
+    WidgetRef ref,
+    List<ExtensionPlugin> plugins,
+  ) {
+    return Card(
+      margin: const EdgeInsets.all(LayoutConstants.spacingMd),
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        initiallyExpanded: true,
+        backgroundColor: Colors.transparent,
+        collapsedBackgroundColor: Colors.transparent,
+        tilePadding: const EdgeInsets.symmetric(
+          horizontal: LayoutConstants.spacingMd,
+          vertical: LayoutConstants.spacingXs,
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
+            const SizedBox(width: LayoutConstants.spacingSm),
+            Text(
+              'Installed Extensions',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        children: plugins.asMap().entries.map((entry) {
+          final isLast = entry.key == plugins.length - 1;
+          return Column(
+            children: [
+              if (entry.key == 0)
+                Divider(
+                  height: 1,
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                ),
+              _PluginTile(plugin: entry.value),
+              if (!isLast)
+                Divider(
+                  height: 1,
+                  indent: 56,
+                  endIndent: 16,
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -309,6 +387,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
 
   int _calculateItemCount(ExtensionsState state) {
     final hasDebug = state.installedPlugins.any((p) => p.isDebug);
+    final hasInstalled = state.installedPlugins.any((p) => !p.isDebug);
     final allAvailablePackageNames = state.availablePlugins.values
         .expand((list) => list)
         .map((p) => p.packageName)
@@ -319,6 +398,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     final isEmpty = state.repositories.isEmpty && state.installedPlugins.isEmpty;
 
     return (hasDebug ? 1 : 0) +
+        (hasInstalled ? 1 : 0) +
         (hasInstalledOnly ? 1 : 0) +
         (isEmpty ? 1 : 0) + // Empty state text
         1 + // Add Repository tile
