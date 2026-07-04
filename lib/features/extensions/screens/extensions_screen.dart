@@ -72,7 +72,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                 final installedPlugins = state.installedPlugins
                     .where((p) => !p.isDebug)
                     .toList();
-                final hasInstalled = installedPlugins.isNotEmpty;
 
                 final allAvailablePackageNames = state.availablePlugins.values
                     .expand((list) => list)
@@ -98,13 +97,11 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                   currentIndex++;
                 }
 
-                // 1.5. Installed Section
-                if (hasInstalled) {
-                  if (index == currentIndex) {
-                    return _buildInstalledSection(context, ref, installedPlugins);
-                  }
-                  currentIndex++;
+                // 1.5. Installed Section (Always present)
+                if (index == currentIndex) {
+                  return _buildInstalledSection(context, ref, installedPlugins);
                 }
+                currentIndex++;
 
                 // 2. Installed Only Section
                 if (hasInstalledOnly) {
@@ -210,9 +207,10 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        key: const PageStorageKey('installed_extensions'),
         shape: const Border(),
         collapsedShape: const Border(),
-        initiallyExpanded: true,
+        initiallyExpanded: plugins.isNotEmpty,
         backgroundColor: Colors.transparent,
         collapsedBackgroundColor: Colors.transparent,
         tilePadding: const EdgeInsets.symmetric(
@@ -236,26 +234,48 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
             ),
           ],
         ),
-        children: plugins.asMap().entries.map((entry) {
-          final isLast = entry.key == plugins.length - 1;
-          return Column(
-            children: [
-              if (entry.key == 0)
+        children: plugins.isEmpty
+            ? [
                 Divider(
                   height: 1,
                   color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
                 ),
-              _PluginTile(plugin: entry.value),
-              if (!isLast)
-                Divider(
-                  height: 1,
-                  indent: 56,
-                  endIndent: 16,
-                  color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                Padding(
+                  padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                  child: Center(
+                    child: Text(
+                      'No extensions installed',
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ),
-            ],
-          );
-        }).toList(),
+              ]
+            : plugins.asMap().entries.map((entry) {
+                final isLast = entry.key == plugins.length - 1;
+                return Column(
+                  children: [
+                    if (entry.key == 0)
+                      Divider(
+                        height: 1,
+                        color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                      ),
+                    _PluginTile(plugin: entry.value),
+                    if (!isLast)
+                      Divider(
+                        height: 1,
+                        indent: 56,
+                        endIndent: 16,
+                        color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                      ),
+                  ],
+                );
+              }).toList(),
       ),
     );
   }
@@ -277,6 +297,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        key: const PageStorageKey('installed_only_extensions'),
         shape: const Border(),
         collapsedShape: const Border(),
         initiallyExpanded: true,
@@ -350,6 +371,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        key: const PageStorageKey('debug_extensions'),
         shape: const Border(),
         collapsedShape: const Border(),
         initiallyExpanded: true,
@@ -387,7 +409,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
 
   int _calculateItemCount(ExtensionsState state) {
     final hasDebug = state.installedPlugins.any((p) => p.isDebug);
-    final hasInstalled = state.installedPlugins.any((p) => !p.isDebug);
     final allAvailablePackageNames = state.availablePlugins.values
         .expand((list) => list)
         .map((p) => p.packageName)
@@ -398,7 +419,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     final isEmpty = state.repositories.isEmpty && state.installedPlugins.isEmpty;
 
     return (hasDebug ? 1 : 0) +
-        (hasInstalled ? 1 : 0) +
+        1 + // Always show Installed Extensions tile
         (hasInstalledOnly ? 1 : 0) +
         (isEmpty ? 1 : 0) + // Empty state text
         1 + // Add Repository tile
@@ -440,6 +461,7 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        key: PageStorageKey('repo_${repo.url}'),
         shape: const Border(),
         collapsedShape: const Border(),
         // Start collapsed — repos can be individually expanded.

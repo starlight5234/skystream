@@ -409,9 +409,6 @@ class ExtensionsController extends _$ExtensionsController {
         orElse: () => throw Exception("Repo not found"),
       );
 
-      // Capture plugin provided by this repo BEFORE removing it from state
-      final repoPluginsToCheck = state.availablePlugins[url] ?? [];
-
       currentRepos.removeWhere((r) => r.url == url);
 
       final currentAvailable = Map<String, List<ExtensionPlugin>>.from(
@@ -419,7 +416,7 @@ class ExtensionsController extends _$ExtensionsController {
       );
       currentAvailable.remove(url);
 
-      // Update State with Repo Removed
+      // Update State with Repo Removed (keeping installedPlugins intact)
       state = ExtensionsSuccess(
         installedPlugins: state.installedPlugins,
         repositories: currentRepos,
@@ -434,54 +431,8 @@ class ExtensionsController extends _$ExtensionsController {
       urls.remove(url);
       await prefs.setStringList('extension_repo_urls', urls);
 
-      // Identify plugin to delete
-      final pluginsToDelete = <ExtensionPlugin>[];
-
-      for (final repoPlugin in repoPluginsToCheck) {
-        final match = state.installedPlugins
-            .cast<ExtensionPlugin?>()
-            .firstWhere(
-              (p) => p?.packageName == repoPlugin.packageName,
-              orElse: () => null,
-            );
-        if (match != null) {
-          pluginsToDelete.add(match);
-        }
-      }
-
-      // Also try strict ID match just in case
-      final strictMatches = state.installedPlugins.where(
-        (p) => p.repositoryId == repoToRemove.packageName,
-      );
-      for (final p in strictMatches) {
-        if (!pluginsToDelete.contains(p)) {
-          // check equality by reference or Package Name
-          if (!pluginsToDelete.any(
-            (existing) => existing.packageName == p.packageName,
-          )) {
-            pluginsToDelete.add(p);
-          }
-        }
-      }
-
-      final storageService = ref.read(pluginStorageServiceProvider);
-      for (final plugin in pluginsToDelete) {
-        await storageService.deletePlugin(plugin);
-      }
-
-      // Final State Update
-      final newInstalled = state.installedPlugins
-          .where(
-            (p) => !pluginsToDelete.any((d) => d.packageName == p.packageName),
-          )
-          .toList();
-      state = ExtensionsSuccess(
-        installedPlugins: newInstalled,
-        repositories: state.repositories,
-        availablePlugins: state.availablePlugins,
-        availableUpdates: state.availableUpdates,
-        installingPlugins: state.installingPlugins,
-      );
+      // Reload installed plugins to update the UI
+      await loadInstalledPlugins();
     } catch (e) {
       state = ExtensionsError(
         "Failed to remove repository: $e",
