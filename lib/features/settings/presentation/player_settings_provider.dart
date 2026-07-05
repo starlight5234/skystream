@@ -18,6 +18,13 @@ enum QualityPreference {
   q4k, // 4K / UHD / 2160p
 }
 
+/// Controls how the quality preference threshold is applied when streams are loaded.
+enum QualityFilterMode {
+  any,        // Sort only — show everything (current behaviour)
+  atOrAbove,  // Hide sources strictly below the preferred quality tier
+  atOrBelow,  // Hide sources strictly above the preferred tier (data-saver mode)
+}
+
 class PlayerSettings {
   final PlayerGesture leftGesture;
   final PlayerGesture rightGesture;
@@ -40,6 +47,10 @@ class PlayerSettings {
 
   /// Quality to prefer when on mobile data. Default: 1080p.
   final QualityPreference mobileQuality;
+
+  /// Controls whether streams below/above the quality preference are hidden.
+  /// Default: [QualityFilterMode.any] (sort only, no filtering).
+  final QualityFilterMode qualityFilterMode;
 
   /// When true, the progress-bar time header shows the remaining time
   /// (e.g. "-1:23:45 / 2:00:00") instead of the elapsed time. Sticky
@@ -79,6 +90,7 @@ class PlayerSettings {
     this.subtitlePosition = 100.0,
     this.wifiQuality = QualityPreference.q4k,
     this.mobileQuality = QualityPreference.q1080,
+    this.qualityFilterMode = QualityFilterMode.any,
     this.showRemainingTime = false,
     this.defaultPlaybackSpeed = 1.0,
     this.osUsername = '',
@@ -108,6 +120,7 @@ class PlayerSettings {
     double? subtitlePosition,
     QualityPreference? wifiQuality,
     QualityPreference? mobileQuality,
+    QualityFilterMode? qualityFilterMode,
     bool? showRemainingTime,
     double? defaultPlaybackSpeed,
     String? osUsername,
@@ -139,6 +152,7 @@ class PlayerSettings {
       subtitlePosition: subtitlePosition ?? this.subtitlePosition,
       wifiQuality: wifiQuality ?? this.wifiQuality,
       mobileQuality: mobileQuality ?? this.mobileQuality,
+      qualityFilterMode: qualityFilterMode ?? this.qualityFilterMode,
       showRemainingTime: showRemainingTime ?? this.showRemainingTime,
       defaultPlaybackSpeed: defaultPlaybackSpeed ?? this.defaultPlaybackSpeed,
       osUsername: osUsername ?? this.osUsername,
@@ -247,6 +261,9 @@ class PlayerSettingsNotifier extends _$PlayerSettingsNotifier {
     final dlPass = storage.getPlayerSetting<String>('player_subdl_pass') ?? '';
     final dlKey = storage.getPlayerSetting<String>('player_subdl_key') ?? '';
     final ssKey = storage.getPlayerSetting<String>('player_ss_key') ?? '';
+    final filterMode = _parseFilterMode(
+      storage.getPlayerSetting<String>('player_quality_filter_mode'),
+    );
 
     return PlayerSettings(
       leftGesture: _parse(l),
@@ -265,6 +282,7 @@ class PlayerSettingsNotifier extends _$PlayerSettingsNotifier {
       subtitlePosition: subPos,
       wifiQuality: wifiQ,
       mobileQuality: mobileQ,
+      qualityFilterMode: filterMode,
       showRemainingTime: showRemaining,
       defaultPlaybackSpeed: defaultSpeed,
       osUsername: osUser,
@@ -393,6 +411,14 @@ class PlayerSettingsNotifier extends _$PlayerSettingsNotifier {
     state = AsyncData(state.requireValue.copyWith(mobileQuality: q));
   }
 
+  Future<void> setQualityFilterMode(QualityFilterMode mode) async {
+    await _repository.setPlayerSetting(
+      'player_quality_filter_mode',
+      mode.name,
+    );
+    state = AsyncData(state.requireValue.copyWith(qualityFilterMode: mode));
+  }
+
   Future<void> setShowRemainingTime(bool val) async {
     await _repository.setPlayerSetting('player_show_remaining', val);
     state = AsyncData(state.requireValue.copyWith(showRemainingTime: val));
@@ -504,6 +530,14 @@ class PlayerSettingsNotifier extends _$PlayerSettingsNotifier {
     return QualityPreference.values.firstWhere(
       (e) => e.name == s,
       orElse: () => fallback,
+    );
+  }
+
+  QualityFilterMode _parseFilterMode(String? s) {
+    if (s == null) return QualityFilterMode.any;
+    return QualityFilterMode.values.firstWhere(
+      (e) => e.name == s,
+      orElse: () => QualityFilterMode.any,
     );
   }
 }

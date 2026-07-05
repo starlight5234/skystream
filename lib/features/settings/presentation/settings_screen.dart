@@ -297,7 +297,6 @@ class SettingsScreen extends ConsumerWidget {
                     playerSettings.mobileQuality,
                     l10n,
                   ),
-                  isLast: true,
                   onTap: () => showQualityDialog(
                     context,
                     ref,
@@ -306,6 +305,22 @@ class SettingsScreen extends ConsumerWidget {
                     onChanged: ref
                         .read(playerSettingsProvider.notifier)
                         .setMobileQuality,
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.filter_list_rounded,
+                  title: 'Quality Filter Mode',
+                  subtitle: _qualityFilterModeLabel(
+                    playerSettings.qualityFilterMode,
+                  ),
+                  isLast: true,
+                  onTap: () => showQualityFilterModeDialog(
+                    context,
+                    ref,
+                    current: playerSettings.qualityFilterMode,
+                    onChanged: ref
+                        .read(playerSettingsProvider.notifier)
+                        .setQualityFilterMode,
                   ),
                 ),
               ],
@@ -484,5 +499,16 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+String _qualityFilterModeLabel(QualityFilterMode mode) {
+  switch (mode) {
+    case QualityFilterMode.any:
+      return 'Show all (sort only)';
+    case QualityFilterMode.atOrAbove:
+      return 'Hide sources below preference';
+    case QualityFilterMode.atOrBelow:
+      return 'Hide sources above preference';
   }
 }

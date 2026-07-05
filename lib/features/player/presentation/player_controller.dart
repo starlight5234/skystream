@@ -197,6 +197,10 @@ class PlayerState {
   final int? currentAttemptIndex;
   final int sourceSessionId;
 
+  /// True when the quality filter was active but no streams matched — the
+  /// Sources tab should show a fallback banner in this case.
+  final bool qualityFilteredFallback;
+
   /// Non-null when a saved position was found; shows resume prompt instead of seeking silently.
   final int? resumePromptPosition;
   final double? resumePromptPercentage;
@@ -234,6 +238,7 @@ class PlayerState {
     this.sourceAttempts = const [],
     this.currentAttemptIndex,
     this.sourceSessionId = 0,
+    this.qualityFilteredFallback = false,
     this.resumePromptPosition,
     this.resumePromptPercentage,
     this.userSkippedOverlay = false,
@@ -288,6 +293,7 @@ class PlayerState {
     List<SourceAttemptEntry>? sourceAttempts,
     Object? currentAttemptIndex = _keep,
     int? sourceSessionId,
+    bool? qualityFilteredFallback,
     Object? resumePromptPosition = _keep,
     Object? resumePromptPercentage = _keep,
     bool? userSkippedOverlay,
@@ -327,6 +333,8 @@ class PlayerState {
           ? this.currentAttemptIndex
           : currentAttemptIndex as int?,
       sourceSessionId: sourceSessionId ?? this.sourceSessionId,
+      qualityFilteredFallback:
+          qualityFilteredFallback ?? this.qualityFilteredFallback,
       resumePromptPosition: resumePromptPosition == _keep
           ? this.resumePromptPosition
           : resumePromptPosition as int?,
@@ -1868,19 +1876,26 @@ class PlayerController extends Notifier<PlayerState> {
         final rawStreams = await activeProvider.loadStreams(_videoUrl);
         if (!_isCurrentSourceSession(sourceSessionId)) return;
         if (rawStreams.isNotEmpty) {
-          // Sort streams by quality preference based on current network type.
-          // Wi-Fi → wifiQuality preference, mobile/other → mobileQuality.
-          // Sources with unrecognised quality labels go to the end (best-effort).
+          // Filter then sort streams by quality preference based on network type.
+          // Wi-Fi → wifiQuality, mobile/other → mobileQuality.
+          // If the filter leaves nothing, falls back to all streams + sets
+          // qualityFilteredFallback so the Sources tab can show a banner.
           final settings = ref.read(playerSettingsProvider).asData?.value;
+          bool didFallback = false;
           final streams = settings == null
               ? rawStreams
-              : await _sortedByQuality(rawStreams, settings);
+              : await _processStreams(
+                  rawStreams,
+                  settings,
+                  onFallback: (v) => didFallback = v,
+                );
           if (!_isCurrentSourceSession(sourceSessionId)) return;
 
           final initialIndex = _findSavedStreamIndex(streams);
           state = state.copyWith(
             streams: streams,
             currentStreamIndex: initialIndex,
+            qualityFilteredFallback: didFallback,
           );
           final checkCount = streams.length > 3 ? 3 : streams.length;
 
@@ -3670,13 +3685,20 @@ class PlayerController extends Notifier<PlayerState> {
     return start; // Fallback to initial
   }
 
-  Future<List<StreamResult>> _sortedByQuality(
+  Future<List<StreamResult>> _processStreams(
     List<StreamResult> streams,
-    PlayerSettings settings,
-  ) async {
+    PlayerSettings settings, {
+    void Function(bool)? onFallback,
+  }) async {
     final onWifi = await isOnWifi();
     final preference = onWifi ? settings.wifiQuality : settings.mobileQuality;
-    return sortStreamsByQuality(streams, preference);
+    final filtered = filterStreamsByQuality(
+      streams,
+      preference,
+      settings.qualityFilterMode,
+      onFallback: onFallback,
+    );
+    return sortStreamsByQuality(filtered, preference);
   }
 
   String _getProviderDisplayName(String providerName) {

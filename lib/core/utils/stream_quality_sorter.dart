@@ -187,3 +187,65 @@ List<StreamResult> sortStreamsByQuality(
 
   return indexed.map((e) => e.stream).toList();
 }
+
+/// Filters [streams] to only those satisfying [mode] relative to [preference].
+///
+/// - [QualityFilterMode.atOrAbove]: keeps streams at or above the preferred tier.
+/// - [QualityFilterMode.atOrBelow]: keeps streams at or below the preferred tier.
+/// - [QualityFilterMode.any]: returns [streams] unchanged.
+///
+/// If the filter would produce an empty list the original [streams] list is
+/// returned unchanged and [didFallback] (if provided) is set to `true`. This
+/// prevents showing an empty Sources tab when the plugin returns no source that
+/// matches the preference.
+List<StreamResult> filterStreamsByQuality(
+  List<StreamResult> streams,
+  QualityPreference preference,
+  QualityFilterMode mode, {
+  void Function(bool)? onFallback,
+}) {
+  if (mode == QualityFilterMode.any ||
+      preference == QualityPreference.any ||
+      streams.isEmpty) {
+    onFallback?.call(false);
+    return streams;
+  }
+
+  final prefRank = preference.rank;
+
+  final filtered = streams.where((s) {
+    final tier = _detectTier(s.source);
+    if (tier == _QualityTier.unknown) return true; // always keep auto/unknown
+    final r = tier.rank;
+    if (mode == QualityFilterMode.atOrAbove) return r >= prefRank;
+    if (mode == QualityFilterMode.atOrBelow) return r <= prefRank;
+    return true;
+  }).toList();
+
+  if (filtered.isEmpty) {
+    onFallback?.call(true);
+    return streams; // fallback: show all rather than empty list
+  }
+
+  onFallback?.call(false);
+  return filtered;
+}
+
+/// Returns a short human-readable quality label for [stream] suitable for
+/// display as a badge in the Sources tab (e.g. "1080p", "720p", "Auto").
+String qualityBadgeLabel(StreamResult stream) {
+  switch (_detectTier(stream.source)) {
+    case _QualityTier.q4k:
+      return '4K';
+    case _QualityTier.q1080:
+      return '1080p';
+    case _QualityTier.q720:
+      return '720p';
+    case _QualityTier.q480:
+      return '480p';
+    case _QualityTier.q360:
+      return '360p';
+    case _QualityTier.unknown:
+      return 'Auto';
+  }
+}

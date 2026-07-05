@@ -14,6 +14,7 @@ import '../subtitle_search_provider.dart';
 import '../../domain/entity/subtitle_model.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import 'hotstar_player_style.dart';
+import '../../../../core/utils/stream_quality_sorter.dart';
 
 class _TrackDialogResult {
   final String? audioId;
@@ -220,6 +221,9 @@ class PlayerBottomSheets {
                                 streams: sourceOptions,
                                 selectedStream: selectedStream,
                                 emptyText: l10n.noResultsFound,
+                                qualityFilteredFallback: ref
+                                    .read(playerControllerProvider)
+                                    .qualityFilteredFallback,
                                 onSelected: (stream) => setState(() {
                                   selectedStream = stream;
                                   if (!_isSameStream(stream, currentStream)) {
@@ -1754,27 +1758,64 @@ class PlayerBottomSheets {
   }
 }
 
-class _HotstarSourcesTab extends StatelessWidget {
+class _HotstarSourcesTab extends StatefulWidget {
   final List<StreamResult> streams;
   final StreamResult? selectedStream;
   final String emptyText;
   final ValueChanged<StreamResult> onSelected;
+  final bool qualityFilteredFallback;
 
   const _HotstarSourcesTab({
     required this.streams,
     required this.selectedStream,
     required this.emptyText,
     required this.onSelected,
+    this.qualityFilteredFallback = false,
   });
+
+  @override
+  State<_HotstarSourcesTab> createState() => _HotstarSourcesTabState();
+}
+
+class _HotstarSourcesTabState extends State<_HotstarSourcesTab> {
+  /// The quality badge label the user has tapped to filter by, or null = show all.
+  String? _activeFilter;
+
+  /// Returns the quality badge label for a stream.
+  String _badge(StreamResult s) => qualityBadgeLabel(s);
+
+  /// Distinct quality tiers that appear in the stream list (smart: only present tiers).
+  List<String> get _presentTiers {
+    final seen = <String>{};
+    final tiers = <String>[];
+    for (final s in widget.streams) {
+      final b = _badge(s);
+      if (seen.add(b)) tiers.add(b);
+    }
+    // Sort in a sensible display order
+    const order = ['4K', '1080p', '720p', '480p', '360p', 'Auto'];
+    tiers.sort((a, b) {
+      final ai = order.indexOf(a);
+      final bi = order.indexOf(b);
+      return (ai == -1 ? 99 : ai).compareTo(bi == -1 ? 99 : bi);
+    });
+    return tiers;
+  }
+
+  List<StreamResult> get _visibleStreams {
+    if (_activeFilter == null) return widget.streams;
+    return widget.streams.where((s) => _badge(s) == _activeFilter).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final isCompact = size.shortestSide < 600;
-    if (streams.isEmpty) {
+
+    if (widget.streams.isEmpty) {
       return Center(
         child: Text(
-          emptyText,
+          widget.emptyText,
           style: const TextStyle(
             color: HotstarPlayerStyle.secondaryText,
             fontSize: 18,
@@ -1784,30 +1825,123 @@ class _HotstarSourcesTab extends StatelessWidget {
       );
     }
 
-    return ListView.separated(
-      padding: EdgeInsets.only(
-        top: isCompact ? 2 : 8,
-        right: isCompact ? 0 : 24,
-      ),
-      itemCount: streams.length,
-      separatorBuilder: (_, _) => SizedBox(height: isCompact ? 8 : 18),
-      itemBuilder: (context, index) {
-        final stream = streams[index];
-        final selected =
-            selectedStream != null &&
-            selectedStream!.url == stream.url &&
-            selectedStream!.source == stream.source;
+    final tiers = _presentTiers;
+    final visible = _visibleStreams;
 
-        return _HotstarOptionRow(
-          label: stream.source,
-          metadata: selected ? 'Current source' : null,
-          selected: selected,
-          onTap: () => onSelected(stream),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Fallback banner ─────────────────────────────────────────────────
+        if (widget.qualityFilteredFallback)
+          Container(
+            margin: EdgeInsets.only(bottom: isCompact ? 10 : 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.filter_alt_off_rounded,
+                    color: Colors.amber, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No sources matched your quality filter — showing all sources. '
+                    'Try a different filter in Settings.',
+                    style: TextStyle(
+                      color: Colors.amber.shade200,
+                      fontSize: isCompact ? 12 : 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Quality filter chips ─────────────────────────────────────────────
+        if (tiers.length > 1) ...[
+          SizedBox(
+            height: isCompact ? 34 : 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 8),
+              itemCount: tiers.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final tier = tiers[i];
+                final selected = _activeFilter == tier;
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _activeFilter = selected ? null : tier),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? HotstarPlayerStyle.accent
+                          : HotstarPlayerStyle.panelElevated,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: selected
+                            ? HotstarPlayerStyle.accent
+                            : HotstarPlayerStyle.divider,
+                      ),
+                    ),
+                    child: Text(
+                      tier,
+                      style: TextStyle(
+                        color: selected
+                            ? Colors.white
+                            : HotstarPlayerStyle.secondaryText,
+                        fontSize: isCompact ? 12 : 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          SizedBox(height: isCompact ? 10 : 16),
+        ],
+
+        // ── Stream list ──────────────────────────────────────────────────────
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.only(
+              top: isCompact ? 2 : 4,
+              right: isCompact ? 0 : 24,
+            ),
+            itemCount: visible.length,
+            separatorBuilder: (_, _) => SizedBox(height: isCompact ? 8 : 18),
+            itemBuilder: (context, index) {
+              final stream = visible[index];
+              final selected =
+                  widget.selectedStream != null &&
+                  widget.selectedStream!.url == stream.url &&
+                  widget.selectedStream!.source == stream.source;
+              final badge = _badge(stream);
+
+              return _HotstarOptionRow(
+                label: stream.source,
+                metadata: selected ? 'Current source' : null,
+                selected: selected,
+                badge: badge != 'Auto' ? badge : null,
+                onTap: () => widget.onSelected(stream),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
+
 
 class _PendingSourceTracksMessage extends StatelessWidget {
   const _PendingSourceTracksMessage();
@@ -2026,12 +2160,15 @@ class _HotstarOptionRow extends StatefulWidget {
   final String? metadata;
   final bool selected;
   final VoidCallback onTap;
+  /// Optional quality badge shown as a small pill on the right (e.g. "1080p").
+  final String? badge;
 
   const _HotstarOptionRow({
     required this.label,
     required this.selected,
     required this.onTap,
     this.metadata,
+    this.badge,
   });
 
   @override
@@ -2132,6 +2269,29 @@ class _HotstarOptionRowState extends State<_HotstarOptionRow> {
                     ),
                   ),
                 ),
+                if (widget.badge != null) ...
+                  [
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: HotstarPlayerStyle.panelElevated,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: HotstarPlayerStyle.divider, width: 0.8),
+                      ),
+                      child: Text(
+                        widget.badge!,
+                        style: TextStyle(
+                          color: HotstarPlayerStyle.secondaryText,
+                          fontSize: isCompact ? 10 : 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
               ],
             ),
           ),

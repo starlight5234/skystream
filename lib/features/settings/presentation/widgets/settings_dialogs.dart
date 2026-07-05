@@ -1064,6 +1064,99 @@ void showQualityDialog(
   );
 }
 
+/// Shows a dialog to pick a [QualityFilterMode].
+/// Controls whether sources that don't match the quality preference are hidden.
+void showQualityFilterModeDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required QualityFilterMode current,
+  required Future<void> Function(QualityFilterMode) onChanged,
+}) {
+  const _options = [
+    (
+      mode: QualityFilterMode.any,
+      label: 'Show all (sort only)',
+      subtitle: 'Sources are sorted by your quality preference but none are hidden.',
+    ),
+    (
+      mode: QualityFilterMode.atOrAbove,
+      label: 'Hide sources below preference',
+      subtitle:
+          'Only sources at or above your preferred quality are shown. '
+          'Falls back to all sources if nothing qualifies.',
+    ),
+    (
+      mode: QualityFilterMode.atOrBelow,
+      label: 'Hide sources above preference',
+      subtitle:
+          'Only sources at or below your preferred quality are shown '
+          '(data-saver mode).',
+    ),
+  ];
+
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Quality Filter Mode'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RadioGroup<QualityFilterMode>(
+              groupValue: current,
+              onChanged: (val) {
+                if (val == null) return;
+                onChanged(val);
+                Navigator.pop<void>(ctx);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _options.map((opt) {
+                  return ListTile(
+                    title: Text(opt.label),
+                    subtitle: Text(opt.subtitle),
+                    leading: Radio<QualityFilterMode>(value: opt.mode),
+                    onTap: () {
+                      onChanged(opt.mode);
+                      Navigator.pop<void>(ctx);
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+            const Divider(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'The quality preference (Wi-Fi / Mobile) controls '
+                      'which tier is used as the threshold for this filter.',
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Shows a dialog to enter OpenSubtitles.com credentials.
 /// Shows a dialog to enter OpenSubtitles.com credentials.
 void showOpenSubtitlesAuthDialog(
