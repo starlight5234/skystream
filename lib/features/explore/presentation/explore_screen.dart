@@ -243,14 +243,39 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   }
 
   Widget _buildScrollView(BuildContext context) {
+    final heroMoviesAsync = ref.watch(exploreHeroMovieProvider);
+    final isNone = heroMoviesAsync.maybeWhen(
+      data: (list) => list.isEmpty,
+      error: (_, __) => true,
+      orElse: () => false,
+    );
+    final topPadding = isNone ? (MediaQuery.paddingOf(context).top + kToolbarHeight) : 0.0;
+
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        ..._buildContentSlivers(context),
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        if (topPadding > 0)
+          SliverToBoxAdapter(child: SizedBox(height: topPadding)),
+        ..._buildContentSlivers(context).map((sliver) {
+          return SliverSafeArea(
+            top: false,
+            bottom: false,
+            left: true,
+            right: true,
+            sliver: sliver,
+          );
+        }),
+        const SliverSafeArea(
+          top: false,
+          left: true,
+          right: true,
+          sliver: SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ),
       ],
     );
   }
+
+
 
   List<Widget> _buildContentSlivers(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
