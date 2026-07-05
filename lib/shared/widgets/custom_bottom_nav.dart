@@ -63,6 +63,14 @@ class CustomBottomNavBar extends StatelessWidget {
             label: AppLocalizations.of(context)!.library,
           ),
           NavigationDestination(
+            icon: const Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(
+              Icons.people_alt,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            label: 'Watch Party',
+          ),
+          NavigationDestination(
             icon: const Icon(Icons.settings_outlined),
             selectedIcon: Icon(
               Icons.settings,

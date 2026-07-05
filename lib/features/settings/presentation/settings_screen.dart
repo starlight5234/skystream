@@ -11,6 +11,7 @@ import 'widgets/settings_widgets.dart';
 import 'widgets/settings_dialogs.dart';
 import 'player_settings_provider.dart';
 import 'general_settings_provider.dart';
+import '../../../core/storage/settings_repository.dart';
 import 'app_version_provider.dart';
 import 'account_settings_screen.dart';
 
@@ -411,6 +412,45 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: LayoutConstants.spacingLg),
             SettingsGroup(
+              title: 'Watch Party Settings',
+              children: [
+                SettingsTile(
+                  icon: Icons.cloud_queue_rounded,
+                  title: 'Supabase Project ID',
+                  subtitle: generalSettings.watchPartyProjectId.isNotEmpty
+                      ? generalSettings.watchPartyProjectId
+                      : 'Not Configured',
+                  onTap: () => showWatchPartyDbIdDialog(context, ref),
+                ),
+                SettingsTile(
+                  icon: Icons.vpn_key_rounded,
+                  title: 'Supabase Anon Key',
+                  subtitle: generalSettings.watchPartyAnonKey.isNotEmpty
+                      ? '••••••••••••••••'
+                      : 'Not Configured',
+                  onTap: () => showWatchPartyAnonKeyDialog(context, ref),
+                ),
+                SettingsTile(
+                  icon: Icons.vpn_lock_rounded,
+                  title: 'Watch Party TURN Username',
+                  subtitle: generalSettings.watchPartyTurnUsername.isNotEmpty
+                      ? generalSettings.watchPartyTurnUsername
+                      : 'Not Configured (TURN bypassed)',
+                  onTap: () => showWatchPartyTurnUsernameDialog(context, ref),
+                ),
+                SettingsTile(
+                  icon: Icons.password_rounded,
+                  title: 'Watch Party TURN Password',
+                  subtitle: generalSettings.watchPartyTurnPassword.isNotEmpty
+                      ? '••••••••••••••••'
+                      : 'Not Configured (TURN bypassed)',
+                  isLast: true,
+                  onTap: () => showWatchPartyTurnPasswordDialog(context, ref),
+                ),
+              ],
+            ),
+            const SizedBox(height: LayoutConstants.spacingLg),
+            SettingsGroup(
               title: l10n.extensions,
               children: [
                 SettingsTile(
@@ -511,4 +551,178 @@ String _qualityFilterModeLabel(QualityFilterMode mode) {
     case QualityFilterMode.atOrBelow:
       return 'Hide sources above preference';
   }
+}
+
+InputDecoration _dialogInputDecoration(BuildContext context, String hint) {
+  final primaryColor = Theme.of(context).colorScheme.primary;
+  return InputDecoration(
+    hintText: hint,
+    border: const OutlineInputBorder(),
+    focusedBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: primaryColor, width: 2.0),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: primaryColor, width: 1.5),
+    ),
+  );
+}
+
+void showWatchPartyDbIdDialog(BuildContext context, WidgetRef ref) {
+  final current = ref.read(generalSettingsProvider).watchPartyProjectId;
+  final controller = TextEditingController(text: current);
+  
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Supabase Project ID'),
+      content: TextField(
+        controller: controller,
+        decoration: _dialogInputDecoration(context, 'Enter Project ID (e.g. vjzlwkzrgjzpsgxgrhgk)'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref
+                .read(generalSettingsProvider.notifier)
+                .setWatchPartyProjectId(controller.text.trim());
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+void showWatchPartyAnonKeyDialog(BuildContext context, WidgetRef ref) {
+  final current = ref.read(generalSettingsProvider).watchPartyAnonKey;
+  final controller = TextEditingController(text: current);
+  
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Supabase Anon Key'),
+      content: TextField(
+        controller: controller,
+        decoration: _dialogInputDecoration(context, 'Enter Anon Key (sb_publishable_...)'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref
+                .read(generalSettingsProvider.notifier)
+                .setWatchPartyAnonKey(controller.text.trim());
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
+  final current = ref.read(generalSettingsProvider).watchPartyUsername;
+  final controller = TextEditingController(text: current);
+  
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Watch Party Display Name'),
+      content: TextField(
+        controller: controller,
+        decoration: _dialogInputDecoration(context, 'Enter your name (e.g. Alice)'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref
+                .read(generalSettingsProvider.notifier)
+                .setWatchPartyUsername(controller.text.trim());
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+void showWatchPartyTurnUsernameDialog(BuildContext context, WidgetRef ref) {
+  final current = ref.read(generalSettingsProvider).watchPartyTurnUsername;
+  final controller = TextEditingController(text: current);
+  
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Watch Party TURN Username'),
+      content: TextField(
+        controller: controller,
+        decoration: _dialogInputDecoration(context, 'Enter TURN username'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref
+                .read(generalSettingsProvider.notifier)
+                .setWatchPartyTurnUsername(controller.text.trim());
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+void showWatchPartyTurnPasswordDialog(BuildContext context, WidgetRef ref) {
+  final current = ref.read(generalSettingsProvider).watchPartyTurnPassword;
+  final controller = TextEditingController(text: current);
+  
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Watch Party TURN Password'),
+      content: TextField(
+        controller: controller,
+        decoration: _dialogInputDecoration(context, 'Enter TURN password/credential'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref
+                .read(generalSettingsProvider.notifier)
+                .setWatchPartyTurnPassword(controller.text.trim());
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
 }

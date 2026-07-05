@@ -52,8 +52,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
         return 2;
       case '/library':
         return 3;
-      case '/settings':
+      case '/watchparty':
         return 4;
+      case '/settings':
+        return 5;
       default:
         return 0;
     }

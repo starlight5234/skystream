@@ -113,7 +113,11 @@ jobs:
             "MAL_CLIENT_ID": "${{ secrets.MAL_CLIENT_ID }}",
             "MAL_CLIENT_SECRET": "${{ secrets.MAL_CLIENT_SECRET }}",
             "ANILIST_CLIENT_ID": "${{ secrets.ANILIST_CLIENT_ID }}",
-            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}"
+            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}",
+            "SUPABASE_PROJECT_ID": "${{ secrets.SUPABASE_PROJECT_ID }}",
+            "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}",
+            "TURN_USERNAME": "${{ secrets.TURN_USERNAME }}",
+            "TURN_PASSWORD": "${{ secrets.TURN_PASSWORD }}"
           }
           JSON_EOF
 
@@ -196,7 +200,11 @@ jobs:
             "MAL_CLIENT_ID": "${{ secrets.MAL_CLIENT_ID }}",
             "MAL_CLIENT_SECRET": "${{ secrets.MAL_CLIENT_SECRET }}",
             "ANILIST_CLIENT_ID": "${{ secrets.ANILIST_CLIENT_ID }}",
-            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}"
+            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}",
+            "SUPABASE_PROJECT_ID": "${{ secrets.SUPABASE_PROJECT_ID }}",
+            "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}",
+            "TURN_USERNAME": "${{ secrets.TURN_USERNAME }}",
+            "TURN_PASSWORD": "${{ secrets.TURN_PASSWORD }}"
           }
           JSON_EOF
 
@@ -272,7 +280,11 @@ jobs:
             "MAL_CLIENT_ID": "${{ secrets.MAL_CLIENT_ID }}",
             "MAL_CLIENT_SECRET": "${{ secrets.MAL_CLIENT_SECRET }}",
             "ANILIST_CLIENT_ID": "${{ secrets.ANILIST_CLIENT_ID }}",
-            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}"
+            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}",
+            "SUPABASE_PROJECT_ID": "${{ secrets.SUPABASE_PROJECT_ID }}",
+            "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}",
+            "TURN_USERNAME": "${{ secrets.TURN_USERNAME }}",
+            "TURN_PASSWORD": "${{ secrets.TURN_PASSWORD }}"
           }
           JSON_EOF
 
@@ -421,7 +433,11 @@ jobs:
             "MAL_CLIENT_ID": "${{ secrets.MAL_CLIENT_ID }}",
             "MAL_CLIENT_SECRET": "${{ secrets.MAL_CLIENT_SECRET }}",
             "ANILIST_CLIENT_ID": "${{ secrets.ANILIST_CLIENT_ID }}",
-            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}"
+            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}",
+            "SUPABASE_PROJECT_ID": "${{ secrets.SUPABASE_PROJECT_ID }}",
+            "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}",
+            "TURN_USERNAME": "${{ secrets.TURN_USERNAME }}",
+            "TURN_PASSWORD": "${{ secrets.TURN_PASSWORD }}"
           }
           JSON_EOF
 
@@ -516,7 +532,11 @@ jobs:
             "MAL_CLIENT_ID": "${{ secrets.MAL_CLIENT_ID }}",
             "MAL_CLIENT_SECRET": "${{ secrets.MAL_CLIENT_SECRET }}",
             "ANILIST_CLIENT_ID": "${{ secrets.ANILIST_CLIENT_ID }}",
-            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}"
+            "ANIMESKIP_CLIENT_ID": "${{ secrets.ANIMESKIP_CLIENT_ID }}",
+            "SUPABASE_PROJECT_ID": "${{ secrets.SUPABASE_PROJECT_ID }}",
+            "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}",
+            "TURN_USERNAME": "${{ secrets.TURN_USERNAME }}",
+            "TURN_PASSWORD": "${{ secrets.TURN_PASSWORD }}"
           }
           JSON_EOF
 

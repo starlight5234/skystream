@@ -175,6 +175,14 @@ class StorageService {
     return _settingsBox.get('dev_load_assets', defaultValue: false) as bool;
   }
 
+  Future<void> setWatchPartyDebugEnabled(bool enabled) async {
+    await _settingsBox.put('watchparty_debug_logs', enabled);
+  }
+
+  bool getWatchPartyDebugEnabled() {
+    return _settingsBox.get('watchparty_debug_logs', defaultValue: false) as bool;
+  }
+
   // --- Active Provider ---
 
   Future<void> setActiveProviderId(String? id) async {

@@ -5,6 +5,7 @@ import 'package:skystream/features/home/presentation/home_screen.dart';
 import 'package:skystream/features/search/presentation/search_screen.dart';
 import '../../features/explore/presentation/explore_screen.dart';
 import 'package:skystream/features/library/presentation/library_screen.dart';
+import 'package:skystream/features/watchparty/presentation/watchparty_screen.dart';
 import 'package:skystream/features/settings/presentation/settings_screen.dart';
 import '../../features/extensions/screens/extensions_screen.dart';
 import '../../features/settings/presentation/developer_options_screen.dart';
@@ -36,6 +37,11 @@ part 'app_router.g.dart';
     ),
     TypedStatefulShellBranch<LibraryBranchData>(
       routes: [TypedGoRoute<LibraryRoute>(path: '/library')],
+    ),
+    TypedStatefulShellBranch<WatchPartyBranchData>(
+      routes: [
+        TypedGoRoute<WatchPartyRoute>(path: '/watchparty'),
+      ],
     ),
     TypedStatefulShellBranch<SettingsBranchData>(
       routes: [
@@ -104,6 +110,20 @@ class LibraryRoute extends GoRouteData with $LibraryRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) =>
       const LibraryScreen();
+}
+
+class WatchPartyBranchData extends StatefulShellBranchData {
+  const WatchPartyBranchData();
+}
+
+class WatchPartyRoute extends GoRouteData with $WatchPartyRoute {
+  const WatchPartyRoute({this.host, this.code});
+  final String? host;
+  final String? code;
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) =>
+      WatchPartyScreen(host: host, code: code);
 }
 
 class SettingsBranchData extends StatefulShellBranchData {
@@ -261,7 +281,37 @@ GoRouter appRouter(Ref ref) {
     initialLocation: initial,
     navigatorKey: rootNavigatorKey,
     debugLogDiagnostics: kDebugMode,
-    routes: $appRoutes,
+    redirect: (context, state) {
+      final uri = state.uri;
+      if (uri.scheme == 'skystream') {
+        final String path;
+        if (uri.host.isEmpty) {
+          path = uri.path;
+        } else {
+          path = '/${uri.host}${uri.path}';
+        }
+        var normalizedPath = path;
+        if (normalizedPath.endsWith('/') && normalizedPath.length > 1) {
+          normalizedPath = normalizedPath.substring(0, normalizedPath.length - 1);
+        }
+        final query = uri.query;
+        final target = '$normalizedPath${query.isNotEmpty ? '?$query' : ''}';
+        talker.debug('[Router] Redirecting custom scheme $uri -> $target');
+        return target;
+      }
+      return null;
+    },
+    routes: [
+      ...$appRoutes,
+      GoRoute(
+        path: '/join',
+        builder: (context, state) {
+          final host = state.uri.queryParameters['host'];
+          final code = state.uri.queryParameters['code'];
+          return WatchPartyScreen(host: host, code: code);
+        },
+      ),
+    ],
   );
 }
 

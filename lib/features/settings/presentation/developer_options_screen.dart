@@ -13,6 +13,7 @@ import '../../../core/router/app_router.dart';
 import 'widgets/settings_widgets.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../../core/services/notification_service.dart';
+import 'general_settings_provider.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -89,7 +90,6 @@ class _DeveloperOptionsScreenState
                 icon: Icons.bug_report_rounded,
                 title: l10n.viewLogs,
                 subtitle: l10n.viewLogsSubtitle,
-                isLast: true,
                 onTap: () {
                   if (kDebugMode) {
                     unawaited(const AppLogsRoute().push<void>(context));
@@ -100,6 +100,28 @@ class _DeveloperOptionsScreenState
                           'Log tracking requires a debug build to work',
                         );
                   }
+                },
+              ),
+              SettingsTile(
+                icon: Icons.analytics_rounded,
+                title: 'Watch Party Debug Logs',
+                subtitle: ref.watch(generalSettingsProvider).watchPartyDebugEnabled
+                    ? l10n.enabled
+                    : l10n.disabled,
+                isLast: true,
+                trailing: Switch(
+                  value: ref.watch(generalSettingsProvider).watchPartyDebugEnabled,
+                  onChanged: (val) {
+                    ref
+                        .read(generalSettingsProvider.notifier)
+                        .setWatchPartyDebugEnabled(val);
+                  },
+                ),
+                onTap: () {
+                  final curr = ref.read(generalSettingsProvider).watchPartyDebugEnabled;
+                  ref
+                      .read(generalSettingsProvider.notifier)
+                      .setWatchPartyDebugEnabled(!curr);
                 },
               ),
             ],

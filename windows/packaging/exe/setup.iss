@@ -37,3 +37,11 @@ Name: "{autodesktop}\SkyStream"; Filename: "{app}\skystream.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\skystream.exe"; Description: "{cm:LaunchProgram,SkyStream}"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+Root: HKCR; Subkey: "skystream"; ValueType: string; ValueName: ""; ValueData: "URL:SkyStream Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "skystream"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "skystream\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\skystream.exe,0"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "skystream\shell"; ValueType: string; ValueName: ""; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "skystream\shell\open"; ValueType: string; ValueName: ""; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "skystream\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\skystream.exe"" ""%1"""; Flags: uninsdeletekey

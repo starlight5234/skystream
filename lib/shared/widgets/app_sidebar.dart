@@ -13,7 +13,7 @@ import 'package:skystream/core/providers/device_info_provider.dart';
 /// Number of destinations rendered by [AppSidebar]. Used by [AppScaffold] to
 /// size its own FocusNode list so the two stay in sync — change this and the
 /// destinations list together.
-const int kSidebarDestinationCount = 5;
+const int kSidebarDestinationCount = 6;
 
 class AppSidebar extends ConsumerStatefulWidget {
   final int currentIndex;
@@ -77,6 +77,7 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
       (Icons.search, Icons.search, l10n.search),
       (Icons.explore_outlined, Icons.explore, l10n.explore),
       (Icons.video_library_outlined, Icons.video_library, l10n.library),
+      (Icons.people_alt_outlined, Icons.people_alt, 'Watch Party'),
       (Icons.settings_outlined, Icons.settings, l10n.settings),
     ];
     assert(
