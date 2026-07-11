@@ -305,10 +305,18 @@ GoRouter appRouter(Ref ref) {
       ...$appRoutes,
       GoRoute(
         path: '/join',
-        builder: (context, state) {
+        redirect: (context, state) {
           final host = state.uri.queryParameters['host'];
           final code = state.uri.queryParameters['code'];
-          return WatchPartyScreen(host: host, code: code);
+          final params = <String>[];
+          if (host != null) {
+            params.add('host=${Uri.encodeComponent(host)}');
+          }
+          if (code != null) {
+            // Keep the code parameter URL-safe
+            params.add('code=${Uri.encodeComponent(code)}');
+          }
+          return '/watchparty${params.isNotEmpty ? '?${params.join('&')}' : ''}';
         },
       ),
     ],

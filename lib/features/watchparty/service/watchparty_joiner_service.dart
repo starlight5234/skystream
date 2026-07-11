@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../data/watchparty_database.dart';
 import '../../settings/presentation/general_settings_provider.dart';
@@ -9,10 +10,18 @@ import 'watchparty_crypto.dart';
 class WatchPartyJoinerService extends WatchPartyConnectionService {
   String? _activeHostName;
   String? _activeGuestName;
+  StreamSubscription<Map<String, dynamic>?>? _lobbySubscription;
+  Timer? _pollTimer;
 
   WatchPartyJoinerService(super.settings, super.database);
 
-  Future<void> startJoining(String hostName, String guestName, String passcode) async {
+  Future<void> startJoining(
+    String hostName,
+    String guestName,
+    String passcode, {
+    String? customTurnUsername,
+    String? customTurnPassword,
+  }) async {
     resetState();
     isLoading = true;
     _activeHostName = hostName;
@@ -26,27 +35,30 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
         throw Exception('Database configuration is invalid.');
       }
 
-      // 1. Fetch Host Offer
-      logMessage('Fetching host SDP offer from database...');
+      // 1. Fetch Host Lobby to verify its existence
+      logMessage('Verifying host lobby on database...');
       final lobby = await database.getLobby(hostName: hostName);
       if (!isLoading) return;
       if (lobby == null) {
         throw Exception('Lobby not found.');
       }
 
-      final encryptedOffer = lobby['sdp_offer'] as String;
-      logMessage('Decrypting host SDP offer...');
-      final hostOffer = WatchPartyCrypto.decrypt(encryptedOffer, passcode, hostName);
-      logMessage('Host Offer decrypted successfully.');
-      logSdpDiagnostics(hostOffer, 'Remote');
-
       // 2. Create PeerConnection
       logMessage('Creating PeerConnection...');
-      final config = WebRTCConnectionManager.getIceConfiguration(settings);
+      final config = WebRTCConnectionManager.getIceConfiguration(
+        settings,
+        customTurnUsername: customTurnUsername,
+        customTurnPassword: customTurnPassword,
+      );
       logMessage('ICE Server list size: ${(config['iceServers'] as List<dynamic>).length}');
-      logMessage('TURN Username: ${settings.watchPartyTurnUsername.isNotEmpty ? settings.watchPartyTurnUsername : "NONE (Bypassed)"}');
+      logMessage('TURN Username: ${(customTurnUsername ?? settings.watchPartyTurnUsername).isNotEmpty ? (customTurnUsername ?? settings.watchPartyTurnUsername) : "NONE (Bypassed)"}');
       
-      final pc = await WebRTCConnectionManager.createConnection(settings, logCallback: logMessage);
+      final pc = await WebRTCConnectionManager.createConnection(
+        settings,
+        customTurnUsername: customTurnUsername,
+        customTurnPassword: customTurnPassword,
+        logCallback: logMessage,
+      );
       if (!isLoading) {
         unawaited(pc.dispose());
         return;
@@ -54,23 +66,21 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       peerConnection = pc;
       setupConnectionListeners(pc);
 
-      // 3. Guest listens to host's data channel
-      logMessage('Listening for host data channel...');
-      pc.onDataChannel = (dc) {
-        logMessage('Data channel received from host.');
-        dataChannel = dc;
-        setupDataChannelListeners(dc);
-      };
+      // 3. Guest creates the DataChannel locally so it is negotiated in the SDP offer
+      logMessage('Creating data channel "chat" (Guest-Initiated)...');
+      final dcInit = RTCDataChannelInit()..binaryType = 'text';
+      final dc = await pc.createDataChannel('chat', dcInit);
+      if (!isLoading || peerConnection == null) {
+        unawaited(dc.close());
+        return;
+      }
+      dataChannel = dc;
+      setupDataChannelListeners(dc);
+      logMessage('Data channel "chat" initialized.');
 
-      // 4. Set Host Offer as Remote Description
-      logMessage('Setting remote description (Host Offer)...');
-      await pc.setRemoteDescription(RTCSessionDescription(hostOffer, 'offer'));
-      if (!isLoading || peerConnection == null) return;
-      logMessage('Remote description set successfully.');
-
-      // 5. Create Guest Answer
-      logMessage('Creating SDP answer...');
-      final answer = await pc.createAnswer({
+      // 4. Create SDP offer
+      logMessage('Creating local SDP offer...');
+      final offer = await pc.createOffer({
         'mandatory': {
           'OfferToReceiveAudio': false,
           'OfferToReceiveVideo': false,
@@ -79,11 +89,11 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       });
       if (!isLoading || peerConnection == null) return;
       
-      logMessage('Setting local description (answer)...');
-      await pc.setLocalDescription(answer);
+      logMessage('Setting local description (Offer)...');
+      await pc.setLocalDescription(offer);
       if (!isLoading || peerConnection == null) return;
 
-      // 6. Wait for ICE candidate gathering
+      // 5. Wait for ICE candidate gathering
       statusMessage = 'Gathering guest network paths...';
       logMessage('Waiting for local ICE candidate gathering...');
       await waitForIceGatheringCompletion();
@@ -91,33 +101,60 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
 
       final localDesc = await pc.getLocalDescription();
       if (!isLoading || peerConnection == null) return;
-      final fullSdp = localDesc?.sdp ?? answer.sdp;
+      final fullSdp = localDesc?.sdp ?? offer.sdp;
       logSdpDiagnostics(fullSdp!, 'Local');
 
-      // 7. Write Answer to database
+      // 6. Write Offer to database signaling queue
       statusMessage = 'Registering with host...';
-      logMessage('Encrypting and uploading SDP answer to database...');
-      final encryptedAnswer = WatchPartyCrypto.encrypt(fullSdp, passcode, hostName);
+      logMessage('Encrypting and uploading SDP offer to database...');
+      final encryptedOffer = WatchPartyCrypto.encrypt(fullSdp, passcode, hostName);
+      final passcodeHash = WatchPartyCrypto.hashPasscode(passcode, hostName);
       await database.joinLobby(
         hostName: hostName,
         guestName: guestName,
-        sdpAnswer: encryptedAnswer,
+        sdpOffer: encryptedOffer,
+        passcodeHash: passcodeHash,
       );
       if (!isLoading || peerConnection == null) return;
-      logMessage('SDP answer registered successfully.');
+      logMessage('SDP offer registered successfully.');
 
-      statusMessage = 'Negotiating connection...';
-      logMessage('Lobby handshake complete. Negotiating ICE connection...');
-      notifyListeners();
+      // 7. Subscribe to database lobby and wait for Host Answer
+      statusMessage = 'Waiting for host response...';
+      logMessage('Subscribing to database lobby for host answer...');
+
+      _lobbySubscription = database.subscribeToLobby(hostName: hostName).listen((row) {
+        if (row == null) return;
+        final signaling = _parseSignaling(row['signaling']);
+        if (signaling.isNotEmpty) {
+          _processHostAnswer(signaling, passcode);
+        }
+      });
+
+      // 7b. Polling fallback
+      _pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+        try {
+          if (_lobbySubscription == null || peerConnection == null || connectionSuccess || error != null) {
+            timer.cancel();
+            return;
+          }
+          final row = await database.getLobby(hostName: hostName);
+          if (row != null && _lobbySubscription != null) {
+            final signaling = _parseSignaling(row['signaling']);
+            if (signaling.isNotEmpty) {
+              _processHostAnswer(signaling, passcode);
+            }
+          }
+        } catch (e) {
+          logMessage('[Poll] Polling fallback error: $e');
+        }
+      });
 
       // Start 60-second connection timeout
       unawaited(Future.delayed(const Duration(seconds: 60), () {
         if (isLoading && !connectionSuccess && error == null) {
           logMessage('ICE Connection Timeout (60s) reached.');
-
           final summary = getFailureSummary();
           logMessage(summary);
-
           error = 'Connection timed out. Router firewall blocked P2P.\n\n'
               'Please verify your TURN server configuration credentials in settings if you are connecting across separate networks.\n\n'
               '$summary';
@@ -131,6 +168,54 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       error = cleanMsg;
       cleanup();
     }
+  }
+
+  void _processHostAnswer(List<dynamic> signaling, String passcode) {
+    // Find the signaling entry for this specific guest
+    final entry = signaling.firstWhere(
+      (element) => Map<String, dynamic>.from(element as Map)['guest_name'] == _activeGuestName,
+      orElse: () => null,
+    );
+
+    if (entry == null) return;
+
+    final guestData = Map<String, dynamic>.from(entry as Map);
+    final encryptedAnswer = guestData['host_answer'] as String?;
+
+    // If host hasn't answered yet, keep waiting
+    if (encryptedAnswer == null) return;
+
+    logMessage('Host answer received. Decrypting...');
+
+    String hostAnswerSdp;
+    try {
+      hostAnswerSdp = WatchPartyCrypto.decrypt(encryptedAnswer, passcode, _activeHostName!);
+    } catch (e) {
+      logMessage('Warning: Failed to decrypt SDP answer from host. Ignoring.');
+      return;
+    }
+
+    // Cancel database listening and polling now that valid host answer is parsed
+    _lobbySubscription?.cancel();
+    _lobbySubscription = null;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+
+    logSdpDiagnostics(hostAnswerSdp, 'Remote');
+    statusMessage = 'Negotiating connection...';
+
+    final pc = peerConnection;
+    if (pc == null) return;
+
+    logMessage('Setting remote description (Host Answer)...');
+    unawaited(pc.setRemoteDescription(RTCSessionDescription(hostAnswerSdp, 'answer')).then((_) {
+      logMessage('Remote description set successfully. Starting ICE negotiation...');
+      notifyListeners();
+    }).catchError((e) {
+      logMessage('ERROR setting remote description: $e');
+      error = 'Connection failed: remote description mismatch.';
+      cleanup();
+    }));
   }
 
   void cancelJoining() {
@@ -148,6 +233,24 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
         guestName: _activeGuestName!,
       ).catchError((_) {}));
     }
+    if (_lobbySubscription != null) {
+      unawaited(_lobbySubscription!.cancel());
+      _lobbySubscription = null;
+    }
+    _pollTimer?.cancel();
+    _pollTimer = null;
     super.cleanup();
+  }
+
+  List<dynamic> _parseSignaling(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) return raw;
+    if (raw is String) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) return decoded;
+      } catch (_) {}
+    }
+    return [];
   }
 }

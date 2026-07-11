@@ -3,10 +3,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/storage/settings_repository.dart';
+import '../../settings/presentation/general_settings_provider.dart';
 import 'watchparty_database.dart';
 
 final watchPartyDatabaseProvider = Provider<WatchPartyDatabase>((ref) {
-  return SupabaseWatchPartyDatabase(ref.watch(settingsRepositoryProvider));
+  final settings = ref.watch(generalSettingsProvider);
+  return SupabaseWatchPartyDatabase(
+    ref.watch(settingsRepositoryProvider),
+    customId: settings.watchPartyProjectId,
+    customKey: settings.watchPartyAnonKey,
+  );
 });
 
 class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
@@ -58,7 +64,7 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
     required String hostName,
     required String deviceType,
     required int maxGuests,
-    required String sdpOffer,
+    required String passcodeHash,
   }) async {
     final client = _client;
     if (client == null) throw Exception('Database not configured.');
@@ -69,17 +75,24 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
       'max_guests': maxGuests,
       'current_guest_count': 0,
       'allow_joins': true,
-      'sdp_offer': sdpOffer,
-      'sdp_answers': [],
+      'passcode_hash': passcodeHash,
+      'signaling': [],
     });
   }
 
   @override
-  Future<void> deleteLobby({required String hostName}) async {
+  Future<void> deleteLobby({
+    required String hostName,
+    required String passcodeHash,
+  }) async {
     final client = _client;
     if (client == null) return;
 
-    await client.from('watchparties').delete().eq('host_name', hostName);
+    await client
+        .from('watchparties')
+        .delete()
+        .eq('host_name', hostName)
+        .eq('passcode_hash', passcodeHash);
   }
 
   @override
@@ -116,6 +129,29 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
   Future<void> joinLobby({
     required String hostName,
     required String guestName,
+    required String sdpOffer,
+    required String passcodeHash,
+  }) async {
+    final client = _client;
+    if (client == null) throw Exception('Database not configured.');
+
+    // Call the transaction-safe Postgres RPC function to safely check bounds and join
+    final response = await client.rpc('join_watchparty', params: {
+      'target_host_name': hostName,
+      'joining_guest_name': guestName,
+      'guest_offer': sdpOffer,
+      'joining_passcode_hash': passcodeHash,
+    });
+
+    if (response == null) {
+      throw Exception('Failed to join lobby.');
+    }
+  }
+
+  @override
+  Future<void> respondToLobby({
+    required String hostName,
+    required String guestName,
     required String sdpAnswer,
   }) async {
     final client = _client;
@@ -126,40 +162,27 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
       throw Exception('Lobby not found.');
     }
 
-    final maxGuests = response['max_guests'] as int;
-    final allowJoins = response['allow_joins'] as bool;
-    final currentList = _parseSdpAnswers(response['sdp_answers']);
-
-    if (!allowJoins) {
-      throw Exception('Lobby is currently closed for new joins.');
-    }
-
-    final int currentCount = response['current_guest_count'] as int? ?? currentList.length;
-    if (currentCount >= maxGuests) {
-      throw Exception('Lobby is full.');
-    }
-
+    final signalingList = _parseSignaling(response['signaling']);
     final updatedList = List<Map<String, dynamic>>.from(
-      currentList.map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>)),
+      signalingList.map((e) => Map<String, dynamic>.from(e as Map)),
     );
-    
-    updatedList.removeWhere((element) => element['guestName'] == guestName);
-    
-    updatedList.add({
-      'guestName': guestName,
-      'answer': sdpAnswer,
-    });
 
-    final updateResponse = await client.from('watchparties').update({
-      'sdp_answers': updatedList,
-      'current_guest_count': updatedList.length,
-    }).eq('host_name', hostName)
-      .eq('current_guest_count', currentCount)
-      .select();
-
-    if (updateResponse.isEmpty) {
-      throw Exception('Lobby join race condition. Lobby was updated by another guest.');
+    bool found = false;
+    for (final entry in updatedList) {
+      if (entry['guest_name'] == guestName) {
+        entry['host_answer'] = sdpAnswer;
+        found = true;
+        break;
+      }
     }
+
+    if (!found) {
+      throw Exception('Guest not found in signaling list.');
+    }
+
+    await client.from('watchparties').update({
+      'signaling': updatedList,
+    }).eq('host_name', hostName);
   }
 
   @override
@@ -171,15 +194,15 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
       final response = await getLobby(hostName: hostName);
       if (response == null) return;
 
-      final currentList = _parseSdpAnswers(response['sdp_answers']);
+      final signalingList = _parseSignaling(response['signaling']);
       final updatedList = List<Map<String, dynamic>>.from(
-        currentList.map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>)),
+        signalingList.map((e) => Map<String, dynamic>.from(e as Map)),
       );
 
-      updatedList.removeWhere((element) => element['guestName'] == guestName);
+      updatedList.removeWhere((element) => element['guest_name'] == guestName);
 
       await client.from('watchparties').update({
-        'sdp_answers': updatedList,
+        'signaling': updatedList,
         'current_guest_count': updatedList.length,
       }).eq('host_name', hostName);
     } catch (e) {
@@ -189,7 +212,7 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
     }
   }
 
-  List<dynamic> _parseSdpAnswers(dynamic raw) {
+  List<dynamic> _parseSignaling(dynamic raw) {
     if (raw == null) return [];
     if (raw is List) return raw;
     if (raw is String) {

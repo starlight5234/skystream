@@ -5,9 +5,13 @@ import '../config/watchparty_ice_config.dart';
 
 class WebRTCConnectionManager {
   /// Generates the ICE Server configuration with fallback STUNs and regional TURN TCP/TLS relays.
-  static Map<String, dynamic> getIceConfiguration(GeneralSettings settings) {
-    final turnUser = settings.watchPartyTurnUsername.trim();
-    final turnPass = settings.watchPartyTurnPassword.trim();
+  static Map<String, dynamic> getIceConfiguration(
+    GeneralSettings settings, {
+    String? customTurnUsername,
+    String? customTurnPassword,
+  }) {
+    final turnUser = (customTurnUsername ?? settings.watchPartyTurnUsername).trim();
+    final turnPass = (customTurnPassword ?? settings.watchPartyTurnPassword).trim();
 
     final List<Map<String, dynamic>> iceServers = [];
 
@@ -45,9 +49,15 @@ class WebRTCConnectionManager {
   /// Creates a peer connection with the correct ICE settings.
   static Future<RTCPeerConnection> createConnection(
     GeneralSettings settings, {
+    String? customTurnUsername,
+    String? customTurnPassword,
     void Function(String)? logCallback,
   }) async {
-    final config = getIceConfiguration(settings);
+    final config = getIceConfiguration(
+      settings,
+      customTurnUsername: customTurnUsername,
+      customTurnPassword: customTurnPassword,
+    );
     return await createPeerConnection(config);
   }
 

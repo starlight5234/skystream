@@ -13,6 +13,8 @@ import '../config/watchparty_config.dart';
 import '../../../core/storage/settings_repository.dart';
 import '../service/watchparty_creator_service.dart';
 import '../service/watchparty_joiner_service.dart';
+import '../service/watchparty_crypto.dart';
+import 'package:go_router/go_router.dart';
 import 'watchparty_chat_screen.dart';
 
 class WatchPartyScreen extends ConsumerStatefulWidget {
@@ -46,13 +48,21 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   @override
   void initState() {
     super.initState();
-    _guestName = 'Guest_${DateTime.now().millisecondsSinceEpoch % 1000}';
+    _guestName = 'Guest_${Random().nextInt(10000)}';
     
-    // Auto-trigger join if deep link code is provided
-    if (widget.host != null && widget.code != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.host != null && widget.code != null) {
         _handleDeepLinkJoin();
-      });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(WatchPartyScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.host != null && widget.code != null &&
+        (widget.host != oldWidget.host || widget.code != oldWidget.code)) {
+      _handleDeepLinkJoin();
     }
   }
 
@@ -164,134 +174,245 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
         _creatorService = null;
         _joinerService = null;
       });
+      if (mounted) {
+        context.go('/watchparty');
+      }
     }));
   }
 
-  Future<void> _handleDeepLinkJoin() async {
-    final host = widget.host!;
-    final code = widget.code!;
+  Future<void> _handleDeepLinkJoin({String? host, String? code}) async {
+    final targetHost = host ?? widget.host!;
+    final targetCode = code ?? widget.code!;
     
-    setState(() {
-      _isLoading = true;
-      _isHosting = false;
-      _statusMessage = 'Connecting to database...';
-    });
-
-    String db;
-    String key;
-    String passcode;
-    try {
-      final decodedJson = utf8.decode(base64Url.decode(code));
-      final parsed = jsonDecode(decodedJson) as Map<String, dynamic>;
-      db = parsed['db'] as String;
-      key = parsed['key'] as String;
-      passcode = parsed['pass'] as String;
-      _lobbyPasscode = passcode;
-    } catch (e) {
-      _showError('Invalid invite code: $e');
-      return;
-    }
-
-    final settings = ref.read(generalSettingsProvider);
+    // We do NOT set loading to true yet, because we need to ask for the passcode first.
+    final passcodeController = TextEditingController();
+    bool obscureText = true;
+    String? dialogErrorText;
     
-    WatchPartyDatabase dbProvider;
-    if (settings.watchPartyProjectId.trim() == db.trim() && settings.watchPartyAnonKey.trim() == key.trim()) {
-      dbProvider = ref.read(watchPartyDatabaseProvider);
-    } else {
-      dbProvider = SupabaseWatchPartyDatabase(
-        ref.read(settingsRepositoryProvider),
-        customId: db,
-        customKey: key,
-      );
-    }
+    if (!mounted) return;
+    
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          surfaceTintColor: Colors.transparent,
+          title: Text('Join $targetHost\'s Lobby'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter the 6-character room passcode to decrypt the database connection settings and join:',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passcodeController,
+                obscureText: obscureText,
+                decoration: InputDecoration(
+                  labelText: 'Lobby Passcode',
+                  errorText: dialogErrorText,
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outline,
+                      width: 1.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2.0,
+                    ),
+                  ),
+                  labelStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscureText ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscureText = !obscureText;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isLoading = false;
+                });
+                if (mounted) {
+                  context.go('/watchparty');
+                }
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final passcode = passcodeController.text.trim();
+                if (passcode.isEmpty) {
+                  setDialogState(() {
+                    dialogErrorText = 'Passcode cannot be empty.';
+                  });
+                  return;
+                }
 
-    if (!dbProvider.isConfigured()) {
-      _showError('Failed to initialize database client from link.');
-      return;
-    }
+                setDialogState(() {
+                  dialogErrorText = null;
+                });
 
-    _activeDatabase = dbProvider;
-    _isHosting = false;
-    _isLoading = true;
-    _statusMessage = 'Joining lobby...';
-    setState(() {});
+                try {
+                  // Decrypt the code from the link using the passcode
+                  final decryptedJson = WatchPartyCrypto.decrypt(targetCode, passcode, targetHost);
+                  final parsed = jsonDecode(decryptedJson) as Map<String, dynamic>;
+                  
+                  final db = parsed['db'] as String;
+                  final key = parsed['key'] as String;
+                  final turnUser = parsed['turn_user'] as String?;
+                  final turnPass = parsed['turn_pass'] as String?;
+                  _lobbyPasscode = passcode;
 
-    _joinerService?.removeListener(_onJoinerUpdate);
-    _joinerService?.dispose();
+                  Navigator.pop(context);
+                  
+                  setState(() {
+                    _isLoading = true;
+                    _isHosting = false;
+                    _statusMessage = 'Connecting to database...';
+                  });
 
-    _joinerService = WatchPartyJoinerService(settings, dbProvider);
-    _joinerService!.addListener(_onJoinerUpdate);
-    unawaited(_joinerService!.startJoining(
-      host,
-      settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : _guestName,
-      passcode,
-    ));
+                  final settings = ref.read(generalSettingsProvider);
+                  
+                  final dbProvider = SupabaseWatchPartyDatabase(
+                    ref.read(settingsRepositoryProvider),
+                    customId: db,
+                    customKey: key,
+                  );
+
+                  if (!dbProvider.isConfigured()) {
+                    _showError('Failed to initialize database client from link.');
+                    return;
+                  }
+
+                  _activeDatabase = dbProvider;
+                  setState(() {
+                    _isLoading = true;
+                    _statusMessage = 'Joining lobby...';
+                  });
+
+                  _joinerService?.removeListener(_onJoinerUpdate);
+                  _joinerService?.dispose();
+
+                  _joinerService = WatchPartyJoinerService(settings, dbProvider);
+                  _joinerService!.addListener(_onJoinerUpdate);
+                  unawaited(_joinerService!.startJoining(
+                    targetHost,
+                    settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : _guestName,
+                    passcode,
+                    customTurnUsername: turnUser,
+                    customTurnPassword: turnPass,
+                  ));
+                } catch (e) {
+                  setDialogState(() {
+                    dialogErrorText = 'Incorrect passcode. Please try again.';
+                  });
+                }
+              },
+              child: const Text('Join'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _startHost() {
     final passcodeController = TextEditingController();
+    bool obscureText = true;
+    
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        surfaceTintColor: Colors.transparent,
-        title: const Text('Host WatchParty'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Set a custom passcode (6-8 characters) or leave blank to auto-generate one.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: passcodeController,
-              decoration: InputDecoration(
-                labelText: 'Passcode (Optional)',
-                hintText: 'e.g. MYPARTY',
-                border: const OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.outline,
-                    width: 1.0,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2.0,
-                  ),
-                ),
-                labelStyle: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          surfaceTintColor: Colors.transparent,
+          title: const Text('Host WatchParty'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Set a custom passcode (6-8 characters) or leave blank to auto-generate one.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(8),
-              ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: passcodeController,
+                obscureText: obscureText,
+                decoration: InputDecoration(
+                  labelText: 'Passcode (Optional)',
+                  hintText: 'e.g. MYPARTY',
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outline,
+                      width: 1.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2.0,
+                    ),
+                  ),
+                  labelStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscureText ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscureText = !obscureText;
+                      });
+                    },
+                  ),
+                ),
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(8),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final passcode = passcodeController.text.trim();
+                if (passcode.isNotEmpty && (passcode.length < 6 || passcode.length > 8)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passcode must be between 6 and 8 characters.')),
+                  );
+                  return;
+                }
+                Navigator.pop(context);
+                _executeStartHost(passcode.isEmpty ? null : passcode);
+              },
+              child: const Text('Host'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final passcode = passcodeController.text.trim();
-              if (passcode.isNotEmpty && (passcode.length < 6 || passcode.length > 8)) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Passcode must be between 6 and 8 characters.')),
-                );
-                return;
-              }
-              Navigator.pop(context);
-              _executeStartHost(passcode.isEmpty ? null : passcode);
-            },
-            child: const Text('Host'),
-          ),
-        ],
       ),
     );
   }
@@ -333,15 +454,8 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
           throw Exception('Missing required invite link parameters.');
         }
 
-        unawaited(Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (context) => WatchPartyScreen(
-              host: host,
-              code: code,
-            ),
-          ),
-        ));
+        // Run join logic directly in place on this screen instead of pushing a replacement!
+        unawaited(_handleDeepLinkJoin(host: host, code: code));
       } catch (e) {
         _showError('Invalid invite link: $e');
       }
@@ -352,65 +466,82 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
 
   void _showPasscodePromptAndJoin(String hostName) {
     final passcodeController = TextEditingController();
+    bool obscureText = true;
+    String? dialogErrorText;
+    
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        surfaceTintColor: Colors.transparent,
-        title: Text('Join $hostName\'s Lobby'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This lobby is secure. Please enter the passcode to decrypt the signaling handshake.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: passcodeController,
-              decoration: InputDecoration(
-                labelText: 'Lobby Passcode',
-                border: const OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.outline,
-                    width: 1.0,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          surfaceTintColor: Colors.transparent,
+          title: Text('Join $hostName\'s Lobby'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This lobby is secure. Please enter the passcode to decrypt the signaling handshake.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passcodeController,
+                obscureText: obscureText,
+                decoration: InputDecoration(
+                  labelText: 'Lobby Passcode',
+                  errorText: dialogErrorText,
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outline,
+                      width: 1.0,
+                    ),
                   ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2.0,
+                    ),
+                  ),
+                  labelStyle: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
-                    width: 2.0,
                   ),
-                ),
-                labelStyle: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscureText ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscureText = !obscureText;
+                      });
+                    },
+                  ),
                 ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final passcode = passcodeController.text.trim();
+                if (passcode.isEmpty) {
+                  setDialogState(() {
+                    dialogErrorText = 'Passcode cannot be empty.';
+                  });
+                  return;
+                }
+                Navigator.pop(context);
+                _lobbyPasscode = passcode;
+                _executeUsernameJoin(hostName, passcode);
+              },
+              child: const Text('Join'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final passcode = passcodeController.text.trim();
-              if (passcode.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Passcode cannot be empty.')),
-                );
-                return;
-              }
-              Navigator.pop(context);
-              _lobbyPasscode = passcode;
-              _executeUsernameJoin(hostName, passcode);
-            },
-            child: const Text('Join'),
-          ),
-        ],
       ),
     );
   }
@@ -448,6 +579,9 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     setState(() {
       _isLoading = false;
     });
+    if (mounted && (widget.host != null || widget.code != null)) {
+      context.go('/watchparty');
+    }
   }
 
   void _showError(String message) {
@@ -477,10 +611,13 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     final jsonStr = jsonEncode({
       'db': settings.watchPartyProjectId.trim(),
       'key': settings.watchPartyAnonKey.trim(),
-      'pass': passcode,
+      'turn_user': settings.watchPartyTurnUsername.trim(),
+      'turn_pass': settings.watchPartyTurnPassword.trim(),
     });
-    final code = base64Url.encode(utf8.encode(jsonStr));
-    final inviteUrl = '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(hostName)}&code=$code';
+    
+    // Encrypt the credentials JSON using the passcode
+    final encryptedCode = WatchPartyCrypto.encrypt(jsonStr, passcode, hostName);
+    final inviteUrl = '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(hostName)}&code=${Uri.encodeComponent(encryptedCode)}';
 
     unawaited(Clipboard.setData(ClipboardData(text: inviteUrl)));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -518,40 +655,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!isDbConfigured) ...[
-                  Card(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingMd),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.warning_amber_rounded,
-                            color: Theme.of(context).colorScheme.onErrorContainer,
-                            size: 40,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Supabase Configuration Required',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onErrorContainer,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Please configure your private Supabase Project ID and Anon Key in Settings to use Watch Parties.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onErrorContainer,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ] else if (_isLoading) ...[
+                if (_isLoading) ...[
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(LayoutConstants.spacingMd),
@@ -724,6 +828,43 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
+                  if (!isDbConfigured) ...[
+                    Card(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Theme.of(context).colorScheme.onErrorContainer,
+                              size: 32,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Supabase Keys Unconfigured',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Hosting is disabled. You can still join a friend\'s party by pasting their link below.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.onErrorContainer,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Host Card
                   Card(
                     child: Padding(
@@ -744,7 +885,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
-                            onPressed: _startHost,
+                            onPressed: isDbConfigured ? _startHost : null,
                             icon: const Icon(Icons.connected_tv_rounded),
                             label: Text(
                               settings.watchPartyUsername.isNotEmpty
@@ -760,6 +901,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
                   // Join Card
                   Card(
                     child: Padding(

@@ -3,14 +3,24 @@ abstract class WatchPartyDatabase {
     required String hostName,
     required String deviceType,
     required int maxGuests,
-    required String sdpOffer,
+    required String passcodeHash,
   });
 
-  Future<void> deleteLobby({required String hostName});
+  Future<void> deleteLobby({
+    required String hostName,
+    required String passcodeHash,
+  });
 
   Future<void> leaveLobby({required String hostName, required String guestName});
 
   Future<void> joinLobby({
+    required String hostName,
+    required String guestName,
+    required String sdpOffer,
+    required String passcodeHash,
+  });
+
+  Future<void> respondToLobby({
     required String hostName,
     required String guestName,
     required String sdpAnswer,

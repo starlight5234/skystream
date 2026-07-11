@@ -12,12 +12,19 @@ class WatchPartyCrypto {
     return List.generate(6, (index) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  /// Hashes `passcode + hostName` using SHA-256 to generate a 256-bit key.
+  /// Hashes 'passcode + hostName' using SHA-256 to generate a 256-bit key.
   static encrypt_lib.Key deriveKey(String passcode, String hostName) {
     // Salt with hostName to prevent cross-room precomputation attacks.
     final saltInput = '$passcode:$hostName';
     final hashed = sha256.convert(utf8.encode(saltInput));
     return encrypt_lib.Key(Uint8List.fromList(hashed.bytes));
+  }
+
+  /// Hashes 'passcode + hostName' using SHA-256 to generate the secure database verification hash.
+  static String hashPasscode(String passcode, String hostName) {
+    // Salt with hostName and specific hash label to isolate from the encryption key.
+    final saltInput = '$passcode:$hostName:hash';
+    return sha256.convert(utf8.encode(saltInput)).toString();
   }
 
   /// Encrypts plain text using AES-256-CBC and returns "$ivBase64:$ciphertextBase64".

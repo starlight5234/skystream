@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../data/watchparty_database.dart';
+import 'watchparty_crypto.dart';
 
 class WatchPartyChatService extends ChangeNotifier {
   final RTCPeerConnection _peerConnection;
@@ -11,6 +12,7 @@ class WatchPartyChatService extends ChangeNotifier {
   final bool _isHost;
   final String _hostName;
   final String _userName;
+  final String _passcode;
 
   final List<Map<String, dynamic>> _messages = [];
   bool _connectionClosed = false;
@@ -23,12 +25,14 @@ class WatchPartyChatService extends ChangeNotifier {
     required bool isHost,
     required String hostName,
     required String userName,
+    required String passcode,
   })  : _peerConnection = peerConnection,
         _dataChannel = dataChannel,
         _database = database,
         _isHost = isHost,
         _hostName = hostName,
-        _userName = userName {
+        _userName = userName,
+        _passcode = passcode {
     _setupListeners();
     _setupDbListener();
   }
@@ -111,7 +115,8 @@ class WatchPartyChatService extends ChangeNotifier {
     } catch (_) {}
     if (_isHost) {
       try {
-        await _database.deleteLobby(hostName: _hostName);
+        final hash = WatchPartyCrypto.hashPasscode(_passcode, _hostName);
+        await _database.deleteLobby(hostName: _hostName, passcodeHash: hash);
       } catch (_) {}
     } else {
       try {

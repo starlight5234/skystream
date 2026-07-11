@@ -11,6 +11,7 @@ import '../data/watchparty_database.dart';
 import '../data/supabase_watchparty_database.dart';
 import '../config/watchparty_config.dart';
 import '../service/watchparty_chat_service.dart';
+import '../service/watchparty_crypto.dart';
 
 class WatchPartyChatScreen extends ConsumerStatefulWidget {
   final RTCPeerConnection peerConnection;
@@ -53,6 +54,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
       isHost: widget.isHost,
       hostName: widget.hostName,
       userName: widget.userName,
+      passcode: widget.passcode,
     );
     _chatService.addListener(_onChatServiceUpdate);
   }
@@ -173,10 +175,11 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
     final jsonStr = jsonEncode({
       'db': settings.watchPartyProjectId.trim(),
       'key': settings.watchPartyAnonKey.trim(),
-      'pass': widget.passcode,
+      'turn_user': settings.watchPartyTurnUsername.trim(),
+      'turn_pass': settings.watchPartyTurnPassword.trim(),
     });
-    final code = base64Url.encode(utf8.encode(jsonStr));
-    return '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(widget.hostName)}&code=$code';
+    final encryptedCode = WatchPartyCrypto.encrypt(jsonStr, widget.passcode, widget.hostName);
+    return '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(widget.hostName)}&code=${Uri.encodeComponent(encryptedCode)}';
   }
 
   void _copyInviteLink() {
