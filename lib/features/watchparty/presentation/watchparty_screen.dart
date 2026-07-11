@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,10 +90,10 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       return;
     }
 
-    if (service.connectionSuccess) {
+    if (service.lobbyReady) {
       _onP2PConnected(
-        peerConnection: service.peerConnection!,
-        dataChannel: service.dataChannel!,
+        peerConnection: null,
+        dataChannel: null,
         isHost: true,
         hostName: _activeHostName ?? 'Host',
       );
@@ -135,8 +136,8 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _onP2PConnected({
-    required RTCPeerConnection peerConnection,
-    required RTCDataChannel dataChannel,
+    RTCPeerConnection? peerConnection,
+    RTCDataChannel? dataChannel,
     required bool isHost,
     required String hostName,
   }) {
@@ -158,6 +159,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
         builder: (context) => WatchPartyChatScreen(
           peerConnection: peerConnection,
           dataChannel: dataChannel,
+          creatorService: isHost ? _creatorService : null,
           database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
           isHost: isHost,
           hostName: hostName,

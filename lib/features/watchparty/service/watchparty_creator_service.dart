@@ -7,6 +7,7 @@ import '../../settings/presentation/general_settings_provider.dart';
 import 'watchparty_connection_service.dart';
 import 'webrtc_connection_manager.dart';
 import 'watchparty_crypto.dart';
+import 'watchparty_message_broker.dart';
 
 class WatchPartyCreatorService extends WatchPartyConnectionService {
   bool _lobbyReady = false;
@@ -15,7 +16,25 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   String? _activeHostName;
   String? _roomPasscode;
 
-  WatchPartyCreatorService(super.settings, super.database);
+  final Map<String, RTCPeerConnection> activeConnections = {};
+  final Map<String, RTCDataChannel> activeDataChannels = {};
+  final Set<String> _pendingGuests = {};
+  late final WatchPartyMessageBroker messageBroker;
+
+  void Function(String guestName, RTCDataChannel channel)? onGuestConnected;
+  void Function(String guestName)? onGuestDisconnected;
+
+  WatchPartyCreatorService(super.settings, super.database) {
+    messageBroker = WatchPartyMessageBroker(activeDataChannels);
+    messageBroker.onGuestTimeout = (guestName) {
+      logMessage('Guest "$guestName" keep-alive timed out. Disconnecting...');
+      _disconnectGuest(guestName);
+    };
+    messageBroker.onGuestLeaveRequest = (guestName) {
+      logMessage('Guest "$guestName" requested to leave. Disconnecting...');
+      _disconnectGuest(guestName);
+    };
+  }
 
   bool get lobbyReady => _lobbyReady;
   String? get roomPasscode => _roomPasscode;
@@ -32,7 +51,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       _roomPasscode = WatchPartyCrypto.generatePasscode();
     }
 
-    statusMessage = 'Initializing WebRTC connection...';
+    statusMessage = 'Initializing database room...';
     logMessage('Host session started by user: "$hostName" (passcode: "$_roomPasscode")');
 
     try {
@@ -40,68 +59,41 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
         throw Exception('Database configuration is invalid.');
       }
 
-      // 1. Create PeerConnection
-      logMessage('Initializing PeerConnection...');
-      final config = WebRTCConnectionManager.getIceConfiguration(settings);
-      logMessage('ICE Server list size: ${(config['iceServers'] as List<dynamic>).length}');
-      logMessage('TURN Username: ${settings.watchPartyTurnUsername.isNotEmpty ? settings.watchPartyTurnUsername : "NONE (Bypassed)"}');
-      
-      final pc = await WebRTCConnectionManager.createConnection(settings, logCallback: logMessage);
-      if (!isLoading) {
-        unawaited(pc.dispose());
-        return;
-      }
-      peerConnection = pc;
-      setupConnectionListeners(pc);
-
-      // 2. Set up Data Channel listener (Guest initiates data channel creation)
-      pc.onDataChannel = (dc) {
-        logMessage('Data channel received from guest.');
-        dataChannel = dc;
-        setupDataChannelListeners(dc);
-      };
-
-      // 3. Upload lobby structure to Supabase
-      statusMessage = 'Creating room on database...';
-      logMessage('Creating database lobby (Guest-Initiated)...');
-      
       // Determine device limit based on platform
       final isDesktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux);
       final maxGuests = isDesktop ? 5 : 1;
       final deviceType = isDesktop ? 'PC' : 'Mobile';
-
       final passcodeHash = WatchPartyCrypto.hashPasscode(_roomPasscode!, hostName);
 
+      // Create room in database
       await database.createLobby(
         hostName: hostName,
         deviceType: deviceType,
         maxGuests: maxGuests,
         passcodeHash: passcodeHash,
       );
-      if (!isLoading || peerConnection == null) {
-        unawaited(database.deleteLobby(hostName: hostName, passcodeHash: passcodeHash).catchError((_) {}));
-        return;
-      }
-      logMessage('Lobby created successfully. Key: $hostName (Max Guests: $maxGuests)');
 
-      // 4. Listen for guest offers
-      statusMessage = 'Waiting for guest to join...';
+      logMessage('Lobby created successfully on database. Key: $hostName (Max Guests: $maxGuests)');
+
+      // Transition to chat screen immediately
       _lobbyReady = true;
+      isLoading = false;
       notifyListeners();
-      logMessage('Subscribing to database lobby for offers...');
 
+      // Begin listening for guest offers in the background
+      logMessage('Subscribing to database lobby for guest offers...');
       _lobbySubscription = database.subscribeToLobby(hostName: hostName).listen((row) {
         if (row == null) return;
         final signaling = _parseSignaling(row['signaling']);
         if (signaling.isNotEmpty) {
-          _processGuestOffer(signaling);
+          _processGuestOffers(signaling);
         }
       });
 
-      // 4b. Periodic polling fallback
+      // Periodic polling fallback
       _pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
         try {
-          if (_lobbySubscription == null || peerConnection == null || connectionSuccess || error != null) {
+          if (_lobbySubscription == null || error != null) {
             timer.cancel();
             return;
           }
@@ -109,7 +101,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
           if (row != null && _lobbySubscription != null) {
             final signaling = _parseSignaling(row['signaling']);
             if (signaling.isNotEmpty) {
-              _processGuestOffer(signaling);
+              _processGuestOffers(signaling);
             }
           }
         } catch (e) {
@@ -127,105 +119,127 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     }
   }
 
-  void _processGuestOffer(List<dynamic> signaling) {
+  void _processGuestOffers(List<dynamic> signaling) {
     if (signaling.isEmpty) return;
 
-    // Handle the first guest offer in the array
-    final guestData = Map<String, dynamic>.from(signaling.first as Map);
-    final encryptedOffer = guestData['guest_offer'] as String;
-    final guestName = guestData['guest_name'] as String;
-    final hostAnswer = guestData['host_answer'] as String?;
+    for (final rawItem in signaling) {
+      final guestData = Map<String, dynamic>.from(rawItem as Map);
+      final encryptedOffer = guestData['guest_offer'] as String;
+      final guestName = guestData['guest_name'] as String;
+      final hostAnswer = guestData['host_answer'] as String?;
 
-    // If we've already answered this guest, skip processing to avoid loops
-    if (hostAnswer != null) return;
+      if (hostAnswer != null) continue;
+      if (activeConnections.containsKey(guestName) || _pendingGuests.contains(guestName)) continue;
 
-    logMessage('Guest offer received from user: "$guestName". Decrypting...');
+      _pendingGuests.add(guestName);
+      logMessage('Guest offer received from "$guestName". Processing connection in background...');
 
-    String guestOfferSdp;
-    try {
-      guestOfferSdp = WatchPartyCrypto.decrypt(encryptedOffer, _roomPasscode!, _activeHostName!);
-    } catch (e) {
-      logMessage('Warning: Failed to decrypt SDP offer from guest "$guestName". Ignoring.');
+      unawaited(Future(() async {
+        try {
+          final guestOfferSdp = WatchPartyCrypto.decrypt(encryptedOffer, _roomPasscode!, _activeHostName!);
+          logMessage('Initializing PeerConnection for guest "$guestName"...');
+
+          final pc = await WebRTCConnectionManager.createConnection(settings, logCallback: logMessage);
+          activeConnections[guestName] = pc;
+          _setupGuestConnectionListeners(guestName, pc);
+
+          pc.onDataChannel = (dc) {
+            logMessage('Data channel received from guest: "$guestName"');
+            activeDataChannels[guestName] = dc;
+            messageBroker.registerGuest(guestName, dc);
+
+            dc.onDataChannelState = (state) {
+              final strState = state.toString().split('.').last;
+              logMessage('Guest data channel state for "$guestName" changed to: $strState');
+              if (state == RTCDataChannelState.RTCDataChannelClosed) {
+                _disconnectGuest(guestName);
+              }
+            };
+
+            onGuestConnected?.call(guestName, dc);
+            notifyListeners();
+          };
+
+          logMessage('Setting remote description (Guest Offer) for "$guestName"...');
+          await pc.setRemoteDescription(RTCSessionDescription(guestOfferSdp, 'offer'));
+
+          logMessage('Creating local SDP answer for "$guestName"...');
+          final answer = await pc.createAnswer({
+            'mandatory': {
+              'OfferToReceiveAudio': false,
+              'OfferToReceiveVideo': false,
+            },
+            'optional': [],
+          });
+
+          logMessage('Setting local description (Answer) for "$guestName"...');
+          await pc.setLocalDescription(answer);
+
+          logMessage('Waiting for local ICE candidate gathering for "$guestName"...');
+          await _waitForGuestIceGatheringCompletion(pc);
+
+          final localDesc = await pc.getLocalDescription();
+          final fullSdp = localDesc?.sdp ?? answer.sdp;
+
+          logMessage('Encrypting and writing SDP answer for "$guestName" to database...');
+          final encryptedAnswer = WatchPartyCrypto.encrypt(fullSdp!, _roomPasscode!, _activeHostName!);
+          await database.respondToLobby(
+            hostName: _activeHostName!,
+            guestName: guestName,
+            sdpAnswer: encryptedAnswer,
+          );
+          logMessage('SDP answer registered successfully for "$guestName".');
+        } catch (e) {
+          logMessage('ERROR handshaking with guest "$guestName": $e');
+          _disconnectGuest(guestName);
+        } finally {
+          _pendingGuests.remove(guestName);
+        }
+      }));
+    }
+  }
+
+  Future<void> _waitForGuestIceGatheringCompletion(RTCPeerConnection pc) async {
+    if (pc.iceGatheringState == RTCIceGatheringState.RTCIceGatheringStateComplete) {
       return;
     }
-
-    // Cancel database listening and polling now that valid guest offer is parsed
-    _lobbySubscription?.cancel();
-    _lobbySubscription = null;
-    _pollTimer?.cancel();
-    _pollTimer = null;
-
-    logSdpDiagnostics(guestOfferSdp, 'Remote');
-    statusMessage = 'Answering guest handshake...';
-
-    final pc = peerConnection;
-    if (pc == null) return;
-
-    unawaited(Future(() async {
-      try {
-        logMessage('Setting remote description (Guest Offer)...');
-        await pc.setRemoteDescription(RTCSessionDescription(guestOfferSdp, 'offer'));
-        if (!isLoading || peerConnection == null) return;
-
-        logMessage('Creating local SDP answer...');
-        final answer = await pc.createAnswer({
-          'mandatory': {
-            'OfferToReceiveAudio': false,
-            'OfferToReceiveVideo': false,
-          },
-          'optional': [],
-        });
-        if (!isLoading || peerConnection == null) return;
-
-        logMessage('Setting local description (Answer)...');
-        await pc.setLocalDescription(answer);
-        if (!isLoading || peerConnection == null) return;
-
-        // Wait for ICE candidate gathering
-        logMessage('Waiting for local ICE candidate gathering...');
-        await waitForIceGatheringCompletion();
-        if (!isLoading || peerConnection == null) return;
-
-        final localDesc = await pc.getLocalDescription();
-        if (!isLoading || peerConnection == null) return;
-        final fullSdp = localDesc?.sdp ?? answer.sdp;
-        logSdpDiagnostics(fullSdp!, 'Local');
-
-        // Write answer back to database signaling queue
-        logMessage('Encrypting and writing SDP answer to database signaling queue...');
-        final encryptedAnswer = WatchPartyCrypto.encrypt(fullSdp, _roomPasscode!, _activeHostName!);
-        await database.respondToLobby(
-          hostName: _activeHostName!,
-          guestName: guestName,
-          sdpAnswer: encryptedAnswer,
-        );
-        logMessage('SDP answer registered successfully.');
-        statusMessage = 'Negotiating connection...';
-        notifyListeners();
-
-        // Start 60-second connection timeout
-        unawaited(Future.delayed(const Duration(seconds: 60), () {
-          if (isLoading && !connectionSuccess && error == null) {
-            logMessage('ICE Connection Timeout (60s) reached.');
-            if (_activeHostName != null && _roomPasscode != null) {
-              final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);
-              unawaited(database.deleteLobby(hostName: _activeHostName!, passcodeHash: hash).catchError((_) {}));
-            }
-            final summary = getFailureSummary();
-            logMessage(summary);
-            error = 'Connection timed out. Router firewall blocked P2P.\n\n'
-                'Please verify your TURN server configuration credentials in settings if you are connecting across separate networks.\n\n'
-                '$summary';
-            cleanup();
-          }
-        }));
-
-      } catch (e) {
-        logMessage('ERROR in generating answer handshake: $e');
-        error = 'Handshake failed: $e';
-        cleanup();
+    final completer = Completer<void>();
+    pc.onIceGatheringState = (state) {
+      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
+        if (!completer.isCompleted) completer.complete();
       }
-    }));
+    };
+    await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+  }
+
+  void kickGuest(String guestName) {
+    logMessage('Kicking guest: "$guestName"');
+    final dc = activeDataChannels[guestName];
+    if (dc != null) {
+      try {
+        final jsonMsg = jsonEncode({'type': 'control', 'action': 'kick'});
+        dc.send(RTCDataChannelMessage(jsonMsg));
+      } catch (_) {}
+    }
+    _disconnectGuest(guestName);
+  }
+
+  void _disconnectGuest(String guestName) {
+    if (!activeConnections.containsKey(guestName) && !activeDataChannels.containsKey(guestName)) {
+      return;
+    }
+    logMessage('Disconnecting guest: "$guestName"');
+    final pc = activeConnections.remove(guestName);
+    final dc = activeDataChannels.remove(guestName);
+
+    unawaited(dc?.close());
+    unawaited(pc?.dispose());
+
+    unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
+
+    messageBroker.unregisterGuest(guestName);
+    onGuestDisconnected?.call(guestName);
+    notifyListeners();
   }
 
   Future<void> cancelHosting() async {
@@ -252,9 +266,47 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     return [];
   }
 
+  void _setupGuestConnectionListeners(String guestName, RTCPeerConnection pc) {
+    pc.onIceConnectionState = (state) {
+      final strState = state.toString().split('.').last;
+      logMessage('ICE connection state for "$guestName" changed to: $strState');
+      if (state == RTCIceConnectionState.RTCIceConnectionStateFailed ||
+          state == RTCIceConnectionState.RTCIceConnectionStateClosed) {
+        _disconnectGuest(guestName);
+      }
+    };
+
+    pc.onSignalingState = (state) {
+      final strState = state.toString().split('.').last;
+      logMessage('Signaling state for "$guestName" changed to: $strState');
+    };
+
+    pc.onIceGatheringState = (state) {
+      final strState = state.toString().split('.').last;
+      logMessage('ICE gathering state for "$guestName" changed to: $strState');
+    };
+
+    pc.onIceCandidate = (candidate) {
+      if (candidate == null) {
+        logMessage('ICE candidate gathering complete for "$guestName"');
+        return;
+      }
+      final cand = candidate.candidate ?? '';
+      String type = 'unknown';
+      if (cand.contains('typ host')) {
+        type = 'host (Local)';
+      } else if (cand.contains('typ srflx')) {
+        type = 'srflx (NAT)';
+      } else if (cand.contains('typ relay')) {
+        type = 'relay (TURN)';
+      }
+      logMessage('ICE candidate gathered for "$guestName": $type');
+    };
+  }
+
   @override
   void cleanup() {
-    if (_activeHostName != null && _roomPasscode != null && !connectionSuccess) {
+    if (_activeHostName != null && _roomPasscode != null) {
       final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);
       unawaited(database.deleteLobby(hostName: _activeHostName!, passcodeHash: hash).catchError((_) {}));
     }
@@ -264,6 +316,25 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     }
     _pollTimer?.cancel();
     _pollTimer = null;
+
+    for (final dc in activeDataChannels.values) {
+      unawaited(dc.close());
+    }
+    activeDataChannels.clear();
+
+    for (final pc in activeConnections.values) {
+      unawaited(pc.dispose());
+    }
+    activeConnections.clear();
+    _pendingGuests.clear();
+    messageBroker.clear();
+
     super.cleanup();
+  }
+
+  @override
+  void dispose() {
+    messageBroker.dispose();
+    super.dispose();
   }
 }

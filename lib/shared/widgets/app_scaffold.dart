@@ -10,6 +10,8 @@ import 'package:skystream/shared/widgets/app_sidebar.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../features/settings/presentation/general_settings_provider.dart';
 
+import '../../features/watchparty/presentation/providers/watchparty_notification_provider.dart';
+
 class AppScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
   const AppScaffold({super.key, required this.navigationShell});
@@ -36,6 +38,10 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
   }
 
   void _onItemTapped(int index, BuildContext context) {
+    ref.read(watchPartyActiveTabProvider.notifier).setActive(index == 4);
+    if (index == 4) {
+      ref.read(watchPartyNotificationProvider.notifier).clearNotifications();
+    }
     widget.navigationShell.goBranch(
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
@@ -103,6 +109,18 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
     );
     final defaultIndex = _getRouteIndex(defaultHome);
     final isAtDefaultHome = widget.navigationShell.currentIndex == defaultIndex;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final currentActive = widget.navigationShell.currentIndex == 4;
+        if (ref.read(watchPartyActiveTabProvider) != currentActive) {
+          ref.read(watchPartyActiveTabProvider.notifier).setActive(currentActive);
+          if (currentActive) {
+            ref.read(watchPartyNotificationProvider.notifier).clearNotifications();
+          }
+        }
+      }
+    });
 
     return deviceProfileAsync.when(
       data: (profile) {

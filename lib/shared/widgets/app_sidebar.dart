@@ -9,6 +9,7 @@ import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
 import 'package:skystream/core/storage/settings_repository.dart';
 import 'package:skystream/core/providers/device_info_provider.dart';
+import '../../features/watchparty/presentation/providers/watchparty_notification_provider.dart';
 
 /// Number of destinations rendered by [AppSidebar]. Used by [AppScaffold] to
 /// size its own FocusNode list so the two stay in sync — change this and the
@@ -68,6 +69,7 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+    final notificationState = ref.watch(watchPartyNotificationProvider);
 
     // Sidebar background: seamless with scaffold
     final bgColor = theme.scaffoldBackgroundColor;
@@ -177,6 +179,7 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
                     ...List.generate(destinations.length, (i) {
                       final (outlinedIcon, filledIcon, label) = destinations[i];
                       final isSelected = widget.currentIndex == i;
+                      final isWatchParty = (i == 4);
                       return _SidebarItem(
                         focusNode: widget.focusNodes[i],
                         icon: isSelected ? filledIcon : outlinedIcon,
@@ -185,6 +188,8 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
                         isExpanded: isFullyExpanded,
                         autofocus: i == 0 && context.isTv,
                         onTap: () => widget.onItemTapped(i),
+                        hasUnread: isWatchParty && notificationState.hasUnread,
+                        messageCount: isWatchParty ? notificationState.messageCount : 0,
                       );
                     }),
 
@@ -222,6 +227,8 @@ class _SidebarItem extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onTap;
   final bool autofocus;
+  final bool hasUnread;
+  final int messageCount;
 
   const _SidebarItem({
     required this.focusNode,
@@ -231,6 +238,8 @@ class _SidebarItem extends StatefulWidget {
     required this.isExpanded,
     required this.onTap,
     this.autofocus = false,
+    this.hasUnread = false,
+    this.messageCount = 0,
   });
 
   @override
@@ -302,10 +311,14 @@ class _SidebarItemState extends State<_SidebarItem> {
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                    Icon(
-                      widget.icon,
-                      color: isActive ? primary : onSurfaceVariant,
-                      size: widget.isExpanded ? 28 : 24,
+                    _buildBadgeIcon(
+                      context,
+                      primary,
+                      Icon(
+                        widget.icon,
+                        color: isActive ? primary : onSurfaceVariant,
+                        size: widget.isExpanded ? 28 : 24,
+                      ),
                     ),
                     if (widget.isExpanded) ...[
                       const SizedBox(width: 12),
@@ -335,6 +348,73 @@ class _SidebarItemState extends State<_SidebarItem> {
               borderRadius: BorderRadius.circular(12),
             )(context, _isFocused, innerContent);
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadgeIcon(BuildContext context, Color primaryColor, Widget child) {
+    if (!widget.hasUnread) return child;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          right: -4,
+          top: -4,
+          child: widget.messageCount > 1
+              ? BlinkingBadgeDot(color: primaryColor)
+              : Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class BlinkingBadgeDot extends StatefulWidget {
+  final Color color;
+  const BlinkingBadgeDot({super.key, required this.color});
+
+  @override
+  State<BlinkingBadgeDot> createState() => _BlinkingBadgeDotState();
+}
+
+class _BlinkingBadgeDotState extends State<BlinkingBadgeDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: widget.color,
+          shape: BoxShape.circle,
         ),
       ),
     );

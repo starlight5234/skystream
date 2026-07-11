@@ -164,7 +164,12 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
 
     } catch (e) {
       logMessage('ERROR in handshake: $e');
-      final cleanMsg = e.toString().replaceFirst('Exception: ', '');
+      String cleanMsg = e.toString();
+      if (cleanMsg.contains('lobby is full')) {
+        cleanMsg = 'This watch party lobby is full.';
+      } else {
+        cleanMsg = cleanMsg.replaceFirst('Exception: ', '');
+      }
       error = cleanMsg;
       cleanup();
     }
