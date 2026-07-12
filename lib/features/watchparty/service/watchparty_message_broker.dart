@@ -96,8 +96,19 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           'time': DateTime.now(),
         });
         notifyListeners();
-
-        _relayMessage(sender, text);
+        _relayMessage(sender, text, type: 'chat');
+      } else if (type == 'reaction') {
+        final emoji = decoded['emoji'] as String;
+        final sender = decoded['sender'] as String? ?? guestName;
+        _messages.add({
+          'type': 'reaction',
+          'emoji': emoji,
+          'sender': sender,
+          'isMe': false,
+          'time': DateTime.now(),
+        });
+        notifyListeners();
+        _relayReaction(sender, emoji);
       }
     } catch (_) {
       lastSeen[guestName] = DateTime.now();
@@ -108,33 +119,51 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         'time': DateTime.now(),
       });
       notifyListeners();
-      _relayMessage(guestName, rawText);
+      _relayMessage(guestName, rawText, type: 'chat');
     }
   }
 
   void broadcastChatMessage(String sender, String text) {
     final jsonMsg = jsonEncode({'type': 'chat', 'sender': sender, 'text': text});
     for (final channel in _activeDataChannels.values) {
-      try {
-        channel.send(RTCDataChannelMessage(jsonMsg));
-      } catch (_) {}
+      try { channel.send(RTCDataChannelMessage(jsonMsg)); } catch (_) {}
     }
-    _messages.add({
-      'text': text,
-      'sender': sender,
-      'isMe': true,
-      'time': DateTime.now(),
-    });
+    _messages.add({'text': text, 'sender': sender, 'isMe': true, 'time': DateTime.now()});
     notifyListeners();
   }
 
-  void _relayMessage(String sender, String text) {
-    final jsonMsg = jsonEncode({'type': 'chat', 'sender': sender, 'text': text});
+  /// Sends an emoji reaction from the host to all guests.
+  void broadcastReaction(String sender, String emoji) {
+    final jsonMsg = jsonEncode({'type': 'reaction', 'sender': sender, 'emoji': emoji});
+    for (final channel in _activeDataChannels.values) {
+      try { channel.send(RTCDataChannelMessage(jsonMsg)); } catch (_) {}
+    }
+    _messages.add({'type': 'reaction', 'emoji': emoji, 'sender': sender, 'isMe': true, 'time': DateTime.now()});
+    notifyListeners();
+  }
+
+  /// Sends a structured 'host_ended' control event to all guests before teardown.
+  void broadcastHostEnded() {
+    final jsonMsg = jsonEncode({'type': 'control', 'action': 'host_ended'});
+    for (final channel in _activeDataChannels.values) {
+      try { channel.send(RTCDataChannelMessage(jsonMsg)); } catch (_) {}
+    }
+  }
+
+  void _relayMessage(String sender, String text, {String type = 'chat'}) {
+    final jsonMsg = jsonEncode({'type': type, 'sender': sender, 'text': text});
     for (final entry in _activeDataChannels.entries) {
       if (entry.key != sender) {
-        try {
-          entry.value.send(RTCDataChannelMessage(jsonMsg));
-        } catch (_) {}
+        try { entry.value.send(RTCDataChannelMessage(jsonMsg)); } catch (_) {}
+      }
+    }
+  }
+
+  void _relayReaction(String sender, String emoji) {
+    final jsonMsg = jsonEncode({'type': 'reaction', 'sender': sender, 'emoji': emoji});
+    for (final entry in _activeDataChannels.entries) {
+      if (entry.key != sender) {
+        try { entry.value.send(RTCDataChannelMessage(jsonMsg)); } catch (_) {}
       }
     }
   }

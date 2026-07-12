@@ -101,7 +101,6 @@ dependencies:
   supabase_flutter: ^2.8.3
   flutter_webrtc: ^0.12.3
 
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

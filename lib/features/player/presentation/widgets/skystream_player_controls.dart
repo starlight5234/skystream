@@ -30,6 +30,7 @@ import 'skip_segment_overlay.dart';
 import 'hotstar_player_style.dart';
 import '../player_platform_service.dart';
 import '../player_gesture_handler.dart';
+import '../in_app_player_provider.dart';
 
 class SkyStreamPlayerControls extends ConsumerStatefulWidget {
   final Player player;
@@ -85,7 +86,6 @@ class SkyStreamPlayerControlsState
   bool _isVisible = false;
   bool _isIpad = false;
   bool _isTv = false;
-  bool _isInPip = false;
 
   void togglePlayPause() => _togglePlay();
 
@@ -215,12 +215,6 @@ class SkyStreamPlayerControlsState
         if (mounted && val && !oldPlaying && _duration == Duration.zero) {
           setState(() {});
         }
-        // Sync PiP state with Android
-        if (Platform.isAndroid) {
-          const MethodChannel(
-            'dev.akash.skystream.player/pip',
-          ).invokeMethod('setPipState', {'isPlaying': val});
-        }
       }),
       // Position: No setState needed - StreamBuilder in PlayerProgressBar handles UI
       widget.player.stream.position.listen((val) {
@@ -260,34 +254,6 @@ class SkyStreamPlayerControlsState
     widget.videoViewController?.videoSize.addListener(_updateOrientation);
     widget.videoViewController?.orientation.addListener(_updateOrientation);
 
-    // PiP is phone/tablet-only — never register the handler on TV.
-    if (Platform.isAndroid && !_isTv) {
-      const MethodChannel(
-        'dev.akash.skystream.player/pip',
-      ).setMethodCallHandler((call) async {
-        switch (call.method) {
-          case 'pipModeChanged':
-            if (mounted) {
-              setState(() {
-                _isInPip = call.arguments as bool;
-              });
-            }
-            break;
-          case 'play':
-            unawaited(ref.read(playerControllerProvider.notifier).play());
-            break;
-          case 'pause':
-            unawaited(ref.read(playerControllerProvider.notifier).pause());
-            break;
-          case 'seekForward':
-            _seekRelative(const Duration(seconds: 10));
-            break;
-          case 'seekBackward':
-            _seekRelative(const Duration(seconds: -10));
-            break;
-        }
-      });
-    }
 
     if (widget.streams != null && widget.streams!.isNotEmpty) {
       _isVisible = true;
@@ -369,13 +335,6 @@ class SkyStreamPlayerControlsState
       if (kDebugMode) debugPrint('Failed to restore volume UI: $e');
     }
     SystemChrome.setPreferredOrientations([]); // Reset to system default
-    // Clear the PiP method channel handler to prevent a stale handler from
-    // accessing the disposed provider after the player exits.
-    if (Platform.isAndroid && !_isTv) {
-      const MethodChannel(
-        'dev.akash.skystream.player/pip',
-      ).setMethodCallHandler(null);
-    }
     super.dispose();
   }
 
@@ -403,9 +362,6 @@ class SkyStreamPlayerControlsState
     }
   }
 
-  Future<void> _enterPip() async {
-    await _platformService.enterPip(_isPlaying);
-  }
 
   void _toggleOrientation() {
     _platformService.toggleOrientation(context);
@@ -922,11 +878,11 @@ class SkyStreamPlayerControlsState
     final sourceAttempts = ref.watch(
       playerControllerProvider.select((s) => s.sourceAttempts),
     );
-    // Guard against PiP or small window size
+    // Guard against small window size
     final size = MediaQuery.sizeOf(context);
     final isSmallWindow = size.width < 300 || size.height < 200;
 
-    if (_isInPip || isSmallWindow) return const SizedBox.shrink();
+    if (isSmallWindow) return const SizedBox.shrink();
 
     if (uiPhase.fullscreenBlocking) {
       return _buildLoadingUI(phase: uiPhase, sourceAttempts: sourceAttempts);
@@ -1398,11 +1354,17 @@ class SkyStreamPlayerControlsState
         onPressed: cycleResize,
         isTv: _isTv,
       ),
-      if (Platform.isAndroid && !_isTv)
+      if (ref.watch(playerAuxiliaryPanelBuilderProvider) != null)
         PlayerIconButton(
-          icon: Icons.picture_in_picture_alt_rounded,
-          tooltip: l10n.pip,
-          onPressed: _enterPip,
+          icon: ref.watch(playerAuxiliaryPanelVisibleProvider)
+              ? Icons.chat_bubble_rounded
+              : Icons.chat_bubble_outline_rounded,
+          tooltip: 'Toggle Chat',
+          onPressed: () {
+            final visible = ref.read(playerAuxiliaryPanelVisibleProvider);
+            ref.read(playerAuxiliaryPanelVisibleProvider.notifier).state = !visible;
+            onUserInteraction();
+          },
           isTv: _isTv,
         ),
       if (isDesktop)

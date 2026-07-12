@@ -27,6 +27,8 @@ import 'package:dpad/dpad.dart';
 import 'core/config/tmdb_config.dart';
 import 'core/providers/device_info_provider.dart';
 
+
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
@@ -289,6 +291,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     final locale = ref.watch(localeProvider);
     final profileAsync = ref.watch(deviceProfileProvider);
 
+
     // Mirror the resolved device profile into TmdbConfig's static cache so
     // pure-utility URL builders (AppImageFallbacks, TmdbDetails ctor) pick
     // TV / desktop-class image sizes once the async profile resolves.
@@ -298,6 +301,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       final value = next.value;
       if (value != null) TmdbConfig.setProfile(value);
     });
+
 
     // Reactive Listener: Keeps UpdateController alive and handles the UI side-effect
     ref.listen<UpdateState>(updateControllerProvider, (previous, next) {

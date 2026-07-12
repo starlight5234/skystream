@@ -152,6 +152,10 @@ class SettingsRepository {
   String? getWatchPartyTurnPassword() =>
       _storageService.getString('watchparty_turn_password');
 
+
+
+
+
   Future<void> clearPreferences({bool keepRepos = true}) async {
     await _storageService.clearPreferences(keepRepos: keepRepos);
   }

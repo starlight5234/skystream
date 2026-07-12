@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ import '../../../../features/settings/presentation/player_settings_provider.dart
 import 'widgets/skystream_player_controls.dart';
 import 'widgets/hotstar_player_style.dart';
 import 'player_controller.dart';
+import 'player_platform_service.dart';
+import 'in_app_player_provider.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final MultimediaItem item;
@@ -76,6 +79,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final PlayerController _playerController;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
 
+  String? _toastMessage;
+  Timer? _toastTimer;
+
+  void _showToastMessage(String message) {
+    if (!mounted) return;
+    setState(() {
+      _toastMessage = message;
+    });
+    _toastTimer?.cancel();
+    _toastTimer = Timer(const Duration(seconds: 7), () {
+      if (mounted) {
+        setState(() {
+          _toastMessage = null;
+        });
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -91,38 +112,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     WakelockPlus.enable();
 
-    // Initialize player with larger buffer for torrent streaming
-    _player = Player(
-      configuration: const PlayerConfiguration(
-        bufferSize: 128 * 1024 * 1024, // 128MB
-      ),
-    );
+    // Check if player is already active globally (from in-app PiP)
+    final inAppPlayerState = ref.read(inAppPlayerProvider);
+    final isAlreadyActive = inAppPlayerState.player != null;
 
-    // Increase network timeout to allow TorrServer to pre-buffer
-    if (_player.platform is NativePlayer) {
-      final native = _player.platform as NativePlayer;
-      native.setProperty('network-timeout', '120');
-      native.setProperty('force-seekable', 'yes');
-      // Increase metadata probing depth to match VLC (resolves missing language tags)
-      native.setProperty('demuxer-lavf-probesize', '33554432'); // 32MB
-      // 30s covers the worst-case HLS segment duration; shorter values cause
-      // mpv to miss video tracks in streams with 30s segments.
-      native.setProperty('demuxer-lavf-analyzeduration', '30');
-      // Enable verbose HLS/lavf logging in debug so variant selection and
-      // segment fetch errors are visible in logcat.
-      if (kDebugMode) {
-        native.setProperty('msg-level', 'hls=v,lavf=v,ffmpeg/demuxer=v');
-      }
-      // Disable native MPV subtitle rendering on the video surface.
-      // media_kit sets this at creation when libass=false, but MPV resets
-      // it when a new file is opened. We re-assert it here and in
-      // _applyPlaybackProperties / applySubtitleSettings as well.
-      native.setProperty('sub-visibility', 'no');
+    if (!isAlreadyActive) {
+      // Initialize new playback session globally
+      ref.read(inAppPlayerProvider.notifier).play(
+        item: widget.item,
+        videoUrl: widget.videoUrl,
+        episode: widget.episode,
+      );
+    } else {
+      // Maximize the player state
+      ref.read(inAppPlayerProvider.notifier).maximize();
     }
-    _videoController = VideoController(_player);
 
-    // Phase 8: Initialize video_view engine (ExoPlayer on Android, AVPlayer on iOS/macOS)
-    _videoViewController = vv.VideoController(autoPlay: true);
+    final updatedState = ref.read(inAppPlayerProvider);
+    _player = updatedState.player!;
+    _videoViewController = updatedState.videoViewController!;
+    _videoController = VideoController(_player);
 
     _settingsSub = ref.listenManual<AsyncValue<PlayerSettings>>(playerSettingsProvider, (
       _,
@@ -138,16 +147,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }, fireImmediately: true);
 
     _playerController = ref.read(playerControllerProvider.notifier);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _playerController.init(
-        player: _player,
-        item: widget.item,
-        videoUrl: widget.videoUrl,
-        episode: widget.episode,
-        videoViewController: _videoViewController,
-      );
-    });
   }
 
   @override
@@ -226,19 +225,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         overlays: SystemUiOverlay.values,
       );
       if (!_isTv) {
-        if (_isTablet) {
-          SystemChrome.setPreferredOrientations([]);
-        } else {
-          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-        }
+        SystemChrome.setPreferredOrientations([]);
       }
     }
 
     _settingsSub?.close();
+    
     _playerController.disposeController();
-
     _player.dispose();
     _videoViewController.dispose();
+    ref.read(inAppPlayerProvider.notifier).close();
+
     _controlsVisible.dispose();
     _videoFit.dispose();
     _rootFocusNode.dispose();
@@ -246,11 +243,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     WakelockPlus.disable();
 
     // Restore brightness if the user adjusted it via the gesture handler.
-    // Without this, exiting the player leaves the device at whatever dim
-    // value the user set, until they manually adjust again (audit H4).
-    // Idempotent and safe on platforms without an override active.
     unawaited(ScreenBrightness().resetApplicationScreenBrightness());
     _spaceHoldTimer?.cancel();
+    _toastTimer?.cancel();
     if (_spaceHeldForSpeed) {
       final previousSpeed = _speedBeforeSpaceHold ?? 1.0;
       unawaited(_playerController.setPlaybackSpeed(previousSpeed));
@@ -273,14 +268,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       event.logicalKey == LogicalKeyboardKey.enter ||
       event.logicalKey == LogicalKeyboardKey.mediaPlayPause;
 
-  /// Root key handler. Deliberately small: when a control is focused it stays
-  /// out of the way so native directional traversal + the focused control's
-  /// own activation run; it only acts when *no* control is focused (controls
-  /// hidden / video-only) or for global media shortcuts on desktop.
-  ///
-  /// `primaryFocus == node` means the root node itself holds focus — i.e. no
-  /// chrome control is focused. This is how we tell "hidden / video-only" from
-  /// "a button is focused" without any manual focus bookkeeping.
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final rootHasFocus = FocusManager.instance.primaryFocus == node;
 
@@ -485,21 +472,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Future<void> _handleBack() async {
     if (!context.mounted) return;
-
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      try {
-        await windowManager.setFullScreen(false);
-        await Future<void>.delayed(const Duration(seconds: 1));
-      } catch (e) {
-        if (kDebugMode) debugPrint('PlayerScreen._handleBack: $e');
-      }
-    }
-
     if (mounted) context.pop();
   }
 
+
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<WidgetBuilder?>(playerAuxiliaryPanelBuilderProvider, (previous, next) {
+      if (next == null && previous != null) {
+        // If watchparty ends while viewing player, force maximize to landscape
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      }
+    });
+
+    ref.listen<String?>(playerNotificationProvider, (previous, next) {
+      if (next != null) {
+        _showToastMessage(next);
+        ref.read(playerNotificationProvider.notifier).state = null; // Reset
+      }
+    });
+
     final errorMessage = ref.watch(
       playerControllerProvider.select((s) => s.errorMessage),
     );
@@ -549,8 +545,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ),
                 ),
               ),
-              // Top-left back button — always visible for iOS/desktop
-              // where there may be no system back gesture.
               Positioned(
                 top: 8,
                 left: 8,
@@ -566,151 +560,258 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
+    final auxiliaryPanelBuilder = ref.watch(playerAuxiliaryPanelBuilderProvider);
+    final orientation = MediaQuery.of(context).orientation;
+    final isPortrait = orientation == Orientation.portrait;
+    final showLandscapeChat = ref.watch(playerAuxiliaryPanelVisibleProvider);
+
     return ValueListenableBuilder<bool>(
       valueListenable: _controlsVisible,
       builder: (context, controlsVisible, _) {
+        final playerStack = Focus(
+          focusNode: _rootFocusNode,
+          autofocus: true,
+          onKeyEvent: _handleKey,
+          child: Shortcuts(
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+            },
+            child: Stack(
+              children: [
+                RepaintBoundary(
+                  child: ValueListenableBuilder<BoxFit>(
+                    valueListenable: _videoFit,
+                    builder: (_, fit, child) => Center(
+                      // Phase 8: Switch engine based on stream type
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final useExoPlayer = ref.watch(
+                            playerControllerProvider.select(
+                              (s) => s.useExoPlayer,
+                            ),
+                          );
+                          if (useExoPlayer) {
+                            return vv.VideoView(
+                              controller: _videoViewController,
+                              videoFit: fit,
+                            );
+                          }
+                          return Video(
+                            controller: _videoController,
+                            fit: fit,
+                            subtitleViewConfiguration:
+                                const SubtitleViewConfiguration(
+                                  visible: false,
+                                  style: TextStyle(
+                                    color: Colors.transparent,
+                                  ),
+                                ),
+                            controls: (state) => const SizedBox.shrink(),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final useExoPlayer = ref.watch(
+                      playerControllerProvider.select(
+                        (s) => s.useExoPlayer,
+                      ),
+                    );
+                    if (useExoPlayer) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Positioned(
+                      bottom:
+                          (controlsVisible
+                              ? HotstarPlayerStyle.bottomChromeHeight
+                              : 20.0) +
+                          ((100 -
+                                  (subtitleSettings?.subtitlePosition ??
+                                      100.0)) *
+                              (MediaQuery.sizeOf(context).height * 0.008)),
+                      left: 20,
+                      right: 20,
+                      child: SubtitleView(
+                        controller: _videoController,
+                        configuration: SubtitleViewConfiguration(
+                          style: TextStyle(
+                            fontSize:
+                                subtitleSettings?.subtitleSize ?? 22.0,
+                            color: Color(
+                              subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
+                            ),
+                            backgroundColor:
+                                Color(
+                                  subtitleSettings
+                                          ?.subtitleBackgroundColor ??
+                                      0x00000000,
+                                ).withValues(
+                                  alpha:
+                                      subtitleSettings
+                                          ?.subtitleBackgroundOpacity ??
+                                      0.0,
+                                ),
+                            shadows: const [
+                              Shadow(
+                                offset: Offset(0, 1),
+                                blurRadius: 2,
+                                color: Colors.black,
+                              ),
+                            ],
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: SkyStreamPlayerControls(
+                      key: _controlsKeyFinal,
+                      isLoading: isLoading,
+                      player: _player,
+                      videoViewController: _videoViewController,
+                      title: widget.item.title,
+                      subtitle: ref
+                          .read(playerControllerProvider)
+                          .streamSubtitle,
+                      onResize: _updateResizeMode,
+                      onBackPointer: _handleBack,
+                      onRequestRootFocus: () =>
+                          _rootFocusNode.requestFocus(),
+                      onVisibilityChanged: (v) {
+                        if (mounted) {
+                          _controlsVisible.value = v;
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        Widget mainLayout;
+
+        if (auxiliaryPanelBuilder != null && !isLoading) {
+          final panelWidget = auxiliaryPanelBuilder(context);
+
+          if (isPortrait) {
+            mainLayout = Column(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: playerStack,
+                ),
+                Expanded(child: panelWidget),
+              ],
+            );
+          } else if (showLandscapeChat) {
+            mainLayout = Row(
+              children: [
+                Expanded(child: playerStack),
+                Container(
+                  width: 320,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: panelWidget,
+                ),
+              ],
+            );
+          } else {
+            mainLayout = playerStack;
+          }
+        } else {
+          mainLayout = playerStack;
+        }
+
         return PopScope(
           canPop: false,
           onPopInvokedWithResult: (didPop, result) async {
             if (didPop) return;
-            // Single guarded path (shared with the root key handler): close the
-            // sources panel, else hide TV controls. Only exit when nothing is
-            // left to dismiss. The de-dupe inside prevents the dual Back
-            // delivery (KeyEvent + route-pop) from skipping a step into exit.
             if (_consumeBack()) return;
             await _handleBack();
           },
           child: Scaffold(
-            body: Focus(
-              focusNode: _rootFocusNode,
-              autofocus: true,
-              onKeyEvent: _handleKey,
-              // Map the TV remote OK key (select) to ActivateIntent so the
-              // focused control activates natively (Enter/Space/gameButtonA are
-              // already mapped by WidgetsApp). When no control is focused this
-              // bubbles up to the root handler instead.
-              child: Shortcuts(
-                shortcuts: const <ShortcutActivator, Intent>{
-                  SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-                },
-                child: Stack(
-                  children: [
-                    RepaintBoundary(
-                      child: ValueListenableBuilder<BoxFit>(
-                        valueListenable: _videoFit,
-                        builder: (_, fit, child) => Center(
-                          // Phase 8: Switch engine based on stream type
-                          child: Consumer(
-                            builder: (context, ref, _) {
-                              final useExoPlayer = ref.watch(
-                                playerControllerProvider.select(
-                                  (s) => s.useExoPlayer,
+            backgroundColor: Colors.black,
+            body: SafeArea(
+              top: !isPortrait || auxiliaryPanelBuilder == null || isLoading,
+              bottom: !isPortrait || auxiliaryPanelBuilder == null || isLoading,
+              child: Stack(
+                children: [
+                  mainLayout,
+                  if (_toastMessage != null)
+                    Positioned(
+                      bottom: 40,
+                      left: 20,
+                      right: 20,
+                      child: Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.75),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white24,
+                                  width: 0.5,
                                 ),
-                              );
-                              if (useExoPlayer) {
-                                return vv.VideoView(
-                                  controller: _videoViewController,
-                                  videoFit: fit,
-                                );
-                              }
-                              return Video(
-                                controller: _videoController,
-                                fit: fit,
-                                subtitleViewConfiguration:
-                                    const SubtitleViewConfiguration(
-                                      visible: false,
-                                      style: TextStyle(
-                                        color: Colors.transparent,
-                                      ),
-                                    ),
-                                controls: (state) => const SizedBox.shrink(),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final useExoPlayer = ref.watch(
-                          playerControllerProvider.select(
-                            (s) => s.useExoPlayer,
-                          ),
-                        );
-                        if (useExoPlayer) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Positioned(
-                          bottom:
-                              (controlsVisible
-                                  ? HotstarPlayerStyle.bottomChromeHeight
-                                  : 20.0) +
-                              ((100 -
-                                      (subtitleSettings?.subtitlePosition ??
-                                          100.0)) *
-                                  (MediaQuery.sizeOf(context).height * 0.008)),
-                          left: 20,
-                          right: 20,
-                          child: SubtitleView(
-                            controller: _videoController,
-                            configuration: SubtitleViewConfiguration(
-                              style: TextStyle(
-                                fontSize:
-                                    subtitleSettings?.subtitleSize ?? 22.0,
-                                color: Color(
-                                  subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
-                                ),
-                                backgroundColor:
-                                    Color(
-                                      subtitleSettings
-                                              ?.subtitleBackgroundColor ??
-                                          0x00000000,
-                                    ).withValues(
-                                      alpha:
-                                          subtitleSettings
-                                              ?.subtitleBackgroundOpacity ??
-                                          0.0,
-                                    ),
-                                shadows: const [
-                                  Shadow(
-                                    offset: Offset(0, 1),
-                                    blurRadius: 2,
-                                    color: Colors.black,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black38,
+                                    blurRadius: 12,
+                                    offset: Offset(0, 6),
                                   ),
                                 ],
                               ),
-                              padding: EdgeInsets.zero,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.wifi_off_rounded,
+                                    color: Colors.amberAccent,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Flexible(
+                                    child: Text(
+                                      _toastMessage!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.2,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                    Positioned.fill(
-                      child: RepaintBoundary(
-                        child: SkyStreamPlayerControls(
-                          key: _controlsKeyFinal,
-                          isLoading: isLoading,
-                          player: _player,
-                          videoViewController: _videoViewController,
-                          title: widget.item.title,
-                          subtitle: ref
-                              .read(playerControllerProvider)
-                              .streamSubtitle,
-                          onResize: _updateResizeMode,
-                          onBackPointer: _handleBack,
-                          onRequestRootFocus: () =>
-                              _rootFocusNode.requestFocus(),
-                          onVisibilityChanged: (v) {
-                            if (mounted) {
-                              _controlsVisible.value = v;
-                            }
-                          },
                         ),
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),

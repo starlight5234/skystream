@@ -450,6 +450,7 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: LayoutConstants.spacingLg),
+
             SettingsGroup(
               title: l10n.extensions,
               children: [
@@ -726,3 +727,6 @@ void showWatchPartyTurnPasswordDialog(BuildContext context, WidgetRef ref) {
     ),
   );
 }
+
+
+

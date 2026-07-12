@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
-import '../../features/watchparty/presentation/providers/watchparty_notification_provider.dart';
+
 
 class CustomBottomNavBar extends ConsumerWidget {
   final int currentIndex;
@@ -13,39 +13,8 @@ class CustomBottomNavBar extends ConsumerWidget {
     required this.onTap,
   });
 
-  Widget _buildBadgeIcon(
-    BuildContext context,
-    WatchPartyNotificationState notification,
-    Widget child,
-  ) {
-    if (!notification.hasUnread) return child;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        child,
-        Positioned(
-          right: -4,
-          top: -4,
-          child: notification.messageCount > 1
-              ? BlinkingBadgeDot(color: primaryColor)
-              : Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: primaryColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notification = ref.watch(watchPartyNotificationProvider);
 
     return Container(
       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface),
@@ -94,18 +63,10 @@ class CustomBottomNavBar extends ConsumerWidget {
             label: AppLocalizations.of(context)!.library,
           ),
           NavigationDestination(
-            icon: _buildBadgeIcon(
-              context,
-              notification,
-              const Icon(Icons.people_alt_outlined),
-            ),
-            selectedIcon: _buildBadgeIcon(
-              context,
-              notification,
-              Icon(
-                Icons.people_alt,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            icon: const Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(
+              Icons.people_alt,
+              color: Theme.of(context).colorScheme.primary,
             ),
             label: 'Watch Party',
           ),
@@ -123,45 +84,3 @@ class CustomBottomNavBar extends ConsumerWidget {
   }
 }
 
-class BlinkingBadgeDot extends StatefulWidget {
-  final Color color;
-  const BlinkingBadgeDot({super.key, required this.color});
-
-  @override
-  State<BlinkingBadgeDot> createState() => _BlinkingBadgeDotState();
-}
-
-class _BlinkingBadgeDotState extends State<BlinkingBadgeDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          color: widget.color,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-}

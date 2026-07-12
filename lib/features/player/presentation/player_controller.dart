@@ -3830,6 +3830,13 @@ class PlayerController extends Notifier<PlayerState> {
         await native.setProperty('hwdec', 'no');
       }
 
+      // Thermal & Performance optimization settings
+      await native.setProperty('framedrop', 'decoder');
+      await native.setProperty('hr-seek-framedrop', 'yes');
+      await native.setProperty('vd-lavc-fast', 'yes');
+      await native.setProperty('vd-lavc-threads', '4');
+      await native.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+
       // RC3: disable TLS cert verification for VOD too (was previously only
       // set on the live path). The libmpv builds differ per platform — the
       // shinchiro Windows build and the bundled macOS build ship

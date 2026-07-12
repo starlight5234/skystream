@@ -10,8 +10,9 @@ class TmdbService {
   final Map<String, _SuggestionCacheEntry> _suggestionsCache = {};
 
   TmdbService(Dio baseDio)
-    : _dio = Dio(baseDio.options.copyWith(baseUrl: TmdbConfig.baseUrl)) {
+      : _dio = Dio(baseDio.options.copyWith(baseUrl: TmdbConfig.baseUrl)) {
     _dio.interceptors.addAll(baseDio.interceptors);
+    _dio.httpClientAdapter = baseDio.httpClientAdapter;
   }
 
   Future<List<TmdbGenre>> getGenres({String language = 'en-US'}) async {

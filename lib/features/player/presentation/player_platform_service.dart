@@ -4,25 +4,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 class PlayerPlatformService {
-  Future<void> enterPip(bool isPlaying) async {
-    try {
-      const platform = MethodChannel('dev.akash.skystream.player/pip');
-      await platform.invokeMethod('enterPip', {'isPlaying': isPlaying});
-    } catch (e) {
-      if (kDebugMode) debugPrint("PIP Error: $e");
-    }
-  }
+  // Singleton — ensures saved window geometry survives across widget rebuilds.
+  static final PlayerPlatformService _instance = PlayerPlatformService._internal();
+  factory PlayerPlatformService() => _instance;
+  PlayerPlatformService._internal();
 
-  void syncPipState(bool isPlaying) {
-    if (Platform.isAndroid) {
-      const MethodChannel(
-        'dev.akash.skystream.player/pip',
-      ).invokeMethod('setPipState', {'isPlaying': isPlaying});
-    }
-  }
+
+  // ── Orientation helpers ────────────────────────────────────────────────────
 
   void toggleOrientation(BuildContext context) {
     final orientation = MediaQuery.of(context).orientation;

@@ -17,6 +17,9 @@ import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
 import 'package:go_router/go_router.dart';
 import 'watchparty_chat_screen.dart';
+import 'providers/active_watchparty_provider.dart';
+import '../../player/presentation/in_app_player_provider.dart';
+import '../service/watchparty_chat_service.dart';
 
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? host;
@@ -50,8 +53,8 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   void initState() {
     super.initState();
     _guestName = 'Guest_${Random().nextInt(10000)}';
-    
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (widget.host != null && widget.code != null) {
         _handleDeepLinkJoin();
       }
@@ -115,7 +118,11 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       final errorMsg = service.error!;
       _joinerService?.removeListener(_onJoinerUpdate);
       _joinerService = null;
-      _showError(errorMsg);
+      
+      final cleanMsg = errorMsg.contains('Incorrect room passcode')
+          ? 'Incorrect room passcode. Please check the passcode and try again.'
+          : errorMsg;
+      _showError(cleanMsg);
       return;
     }
 
@@ -141,45 +148,45 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     required bool isHost,
     required String hostName,
   }) {
-    // Reset local loading state
-    setState(() {
-      _isLoading = false;
-    });
-
-    // Remove listeners so the services aren't updated during chat transitions
+    setState(() { _isLoading = false; });
     _creatorService?.removeListener(_onCreatorUpdate);
     _joinerService?.removeListener(_onJoinerUpdate);
 
     final settings = ref.read(generalSettingsProvider);
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
+    final WatchPartyDatabase activeDatabase = _activeDatabase ?? ref.read(watchPartyDatabaseProvider);
+    final userName = isHost
+        ? hostName
+        : (settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : _guestName);
 
-    unawaited(Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) => WatchPartyChatScreen(
-          peerConnection: peerConnection,
-          dataChannel: dataChannel,
-          creatorService: isHost ? _creatorService : null,
-          database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
-          isHost: isHost,
-          hostName: hostName,
-          userName: isHost
-              ? hostName
-              : (settings.watchPartyUsername.isNotEmpty
-                  ? settings.watchPartyUsername
-                  : _guestName),
-          passcode: passcode,
-        ),
+    final chatService = WatchPartyChatService(
+      peerConnection: peerConnection,
+      dataChannel: dataChannel,
+      creatorService: isHost ? _creatorService : null,
+      database: activeDatabase,
+      isHost: isHost,
+      hostName: hostName,
+      userName: userName,
+      passcode: passcode,
+    );
+
+    ref.read(activeWatchPartyProvider.notifier).setActiveSession(
+      ActiveWatchPartyState(
+        peerConnection: peerConnection,
+        dataChannel: dataChannel,
+        creatorService: isHost ? _creatorService : null,
+        database: activeDatabase,
+        isHost: isHost,
+        hostName: hostName,
+        userName: userName,
+        passcode: passcode,
+        chatService: chatService,
       ),
-    ).then((_) {
-      setState(() {
-        _creatorService = null;
-        _joinerService = null;
-      });
-      if (mounted) {
-        context.go('/watchparty');
-      }
-    }));
+    );
+
+    // Register chat as the auxiliary panel for the landscape player view.
+    ref.read(playerAuxiliaryPanelBuilderProvider.notifier).state =
+        (context) => const WatchPartyChatScreen();
   }
 
   Future<void> _handleDeepLinkJoin({String? host, String? code}) async {
@@ -640,11 +647,55 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(activeWatchPartyProvider);
     final settings = ref.watch(generalSettingsProvider);
-    final isDbConfigured = settings.watchPartyProjectId.isNotEmpty && 
+    final isDbConfigured = settings.watchPartyProjectId.isNotEmpty &&
                            settings.watchPartyAnonKey.isNotEmpty;
 
+    // Clean up local joining/hosting state when the active watch party session is cleared
+    ref.listen<ActiveWatchPartyState?>(activeWatchPartyProvider, (prev, next) {
+      if (next == null) {
+        setState(() {
+          _isLoading = false;
+          _statusMessage = '';
+          _isHosting = false;
+          _activeHostName = null;
+          _activeDatabase = null;
+          _lobbyPasscode = null;
+          _creatorService?.removeListener(_onCreatorUpdate);
+          _creatorService?.dispose();
+          _creatorService = null;
+          _joinerService?.removeListener(_onJoinerUpdate);
+          _joinerService?.dispose();
+          _joinerService = null;
+        });
+      }
+    });
+
+    // When a session is active, this tab IS the chat — no separate route needed.
+    // AnimatedSwitcher provides a smooth slide-up transition between idle ↔ chat.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      transitionBuilder: (child, animation) {
+        final offset = Tween<Offset>(
+          begin: const Offset(0, 0.08),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      child: session != null
+          ? const WatchPartyChatScreen(isInline: true)
+          : _buildIdleScaffold(context, settings, isDbConfigured),
+    );
+  }
+
+  Widget _buildIdleScaffold(
+      BuildContext context, GeneralSettings settings, bool isDbConfigured) {
     return Scaffold(
+      key: const ValueKey('idle'),
       appBar: AppBar(
         title: const Text('Watch Party'),
         centerTitle: false,

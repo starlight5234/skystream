@@ -4,6 +4,7 @@ import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -16,9 +17,19 @@ import UserNotifications
         }
       }
     }
+
+
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+
+
+
+  // MARK: - UNUserNotificationCenterDelegate
 
   // This is required to show notifications while the app is in the foreground
   override func userNotificationCenter(_ center: UNUserNotificationCenter,
@@ -29,9 +40,5 @@ import UserNotifications
     } else {
       completionHandler([.alert, .sound, .badge])
     }
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 }
