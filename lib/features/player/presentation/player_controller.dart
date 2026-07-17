@@ -206,6 +206,7 @@ class PlayerState {
   final double? resumePromptPercentage;
   final bool userSkippedOverlay;
   final List<SkipSegment> skipSegments;
+  final String? activeDecoderName;
 
   const PlayerState({
     this.errorMessage,
@@ -243,6 +244,7 @@ class PlayerState {
     this.resumePromptPercentage,
     this.userSkippedOverlay = false,
     this.skipSegments = const [],
+    this.activeDecoderName,
   });
 
   // Derived from uiPhase — no separate field needed.
@@ -298,6 +300,7 @@ class PlayerState {
     Object? resumePromptPercentage = _keep,
     bool? userSkippedOverlay,
     List<SkipSegment>? skipSegments,
+    Object? activeDecoderName = _keep,
   }) {
     return PlayerState(
       errorMessage: errorMessage ?? this.errorMessage,
@@ -343,6 +346,9 @@ class PlayerState {
           : resumePromptPercentage as double?,
       userSkippedOverlay: userSkippedOverlay ?? this.userSkippedOverlay,
       skipSegments: skipSegments ?? this.skipSegments,
+      activeDecoderName: activeDecoderName == _keep
+          ? this.activeDecoderName
+          : activeDecoderName as String?,
     );
   }
 }
@@ -1036,6 +1042,13 @@ class PlayerController extends Notifier<PlayerState> {
 
   void _setupVideoViewListeners() {
     if (_videoViewController == null) return;
+
+    _videoViewController!.activeDecoder.addListener(() {
+      final name = _videoViewController!.activeDecoder.value;
+      if (name != state.activeDecoderName) {
+        state = state.copyWith(activeDecoderName: name);
+      }
+    });
 
     _videoViewController!.mediaInfo.addListener(() {
       final info = _videoViewController!.mediaInfo.value;
@@ -1869,11 +1882,12 @@ class PlayerController extends Notifier<PlayerState> {
     }
 
     try {
-      if (_videoUrl.isNotEmpty) {
+      final resolveUrl = _videoUrl.isNotEmpty ? _videoUrl : _item.url;
+      if (resolveUrl.isNotEmpty) {
         state = state.copyWith(streamSubtitle: "Fetching sources...");
         if (await _handleFallbackTorrent()) return;
 
-        final rawStreams = await activeProvider.loadStreams(_videoUrl);
+        final rawStreams = await activeProvider.loadStreams(resolveUrl);
         if (!_isCurrentSourceSession(sourceSessionId)) return;
         if (rawStreams.isNotEmpty) {
           // Filter then sort streams by quality preference based on network type.
@@ -2877,6 +2891,7 @@ class PlayerController extends Notifier<PlayerState> {
     bool resetPosition = false,
     bool manualSelection = false,
   }) async {
+    state = state.copyWith(activeDecoderName: null);
     final matchingIndex = state.streams.indexWhere(
       (candidate) =>
           candidate.url == stream.url && candidate.source == stream.source,
@@ -3503,7 +3518,10 @@ class PlayerController extends Notifier<PlayerState> {
     }
   }
 
-  void disposeController() {
+  void disposeController([Player? player]) {
+    if (player != null && _player != player) {
+      return;
+    }
     _isDisposed = true;
     _torrentPollTimer?.cancel();
     _torrentPollTimer = null;
@@ -3557,7 +3575,9 @@ class PlayerController extends Notifier<PlayerState> {
     saveProgress();
     ref.read(torrentServiceProvider).stop();
     Future.microtask(() {
-      state = const PlayerState();
+      if (_isDisposed) {
+        state = const PlayerState();
+      }
     });
   }
 
@@ -3698,7 +3718,20 @@ class PlayerController extends Notifier<PlayerState> {
       settings.qualityFilterMode,
       onFallback: onFallback,
     );
-    return sortStreamsByQuality(filtered, preference);
+    
+    // Query device profile for hardware codecs
+    final profile = await ref.read(deviceProfileProvider.future);
+    final hardwareDecoders = profile.hardwareDecoders;
+    
+    // Run parallel HLS playlist probing on candidates
+    final resolvedCodecs = await probeHlsCodecs(filtered);
+
+    return sortStreamsByQuality(
+      filtered,
+      preference,
+      hardwareDecoders: hardwareDecoders,
+      resolvedCodecs: resolvedCodecs,
+    );
   }
 
   String _getProviderDisplayName(String providerName) {
@@ -3748,11 +3781,7 @@ class PlayerController extends Notifier<PlayerState> {
         'licenseUrl=${stream.licenseUrl}',
       );
       debugPrint('[Player] Headers for stream: $headers');
-      // Enable mpv internal log for every stream so HLS variant selection
-      // and segment fetch errors appear in logcat regardless of live/VOD.
       _logSub ??= _player.stream.log.listen((log) {
-        // Always forward warn/error/fatal; also forward verbose hls/lavf lines
-        // that match keywords useful for diagnosing auth / track selection issues.
         if (log.level == 'warn' ||
             log.level == 'error' ||
             log.level == 'fatal' ||
@@ -3836,6 +3865,10 @@ class PlayerController extends Notifier<PlayerState> {
       await native.setProperty('vd-lavc-fast', 'yes');
       await native.setProperty('vd-lavc-threads', '4');
       await native.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+      await native.setProperty('scale', 'bilinear');
+      await native.setProperty('cscale', 'bilinear');
+      await native.setProperty('dscale', 'bilinear');
+      await native.setProperty('sws-scaler', 'fast-bilinear');
 
       // RC3: disable TLS cert verification for VOD too (was previously only
       // set on the live path). The libmpv builds differ per platform — the

@@ -40,9 +40,11 @@ class PlaybackLauncher {
     final settings = await _ref.read(playerSettingsProvider.future);
     if (!context.mounted) return;
 
+    final targetUrl = url.isNotEmpty ? url : baseItem.url;
+
     // Smart Intercept: Check if this item/episode is downloaded
     final itemToCheck = detailedItem ?? baseItem;
-    final episode = itemToCheck.episodes?.firstWhereOrNull((e) => e.url == url);
+    final episode = itemToCheck.episodes?.firstWhereOrNull((e) => e.url == targetUrl);
     final downloadService = _ref.read(downloadServiceProvider);
     final localFile = await downloadService.getDownloadedFile(
       itemToCheck,
@@ -50,7 +52,7 @@ class PlaybackLauncher {
     );
     if (!context.mounted) return;
 
-    final String finalUrl = AppUtils.normalizeUrl(localFile?.path ?? url);
+    final String finalUrl = AppUtils.normalizeUrl(localFile?.path ?? targetUrl);
 
     if (settings.preferredPlayer != null) {
       if (baseItem.url.isNotEmpty) {

@@ -198,38 +198,100 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
         ? '$remainingText / $durationText'
         : '$currentText / $durationText';
 
+    final activeDecoder = ref.watch(
+      playerControllerProvider.select((s) => s.activeDecoderName),
+    );
+    final hw = activeDecoder != null ? _isHardware(activeDecoder) : null;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _sliderTrackInset),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              ref
-                  .read(playerSettingsProvider.notifier)
-                  .setShowRemainingTime(!showRemaining);
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                label,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.clip,
-                style: const TextStyle(
-                  color: HotstarPlayerStyle.primaryText,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: [FontFeature.tabularFigures()],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  ref
+                      .read(playerSettingsProvider.notifier)
+                      .setShowRemainingTime(!showRemaining);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.clip,
+                    style: const TextStyle(
+                      color: HotstarPlayerStyle.primaryText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            if (activeDecoder != null && hw != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: hw
+                      ? const Color(0x2610B981) // emerald/green 15%
+                      : const Color(0x26F59E0B), // amber 15%
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: hw
+                        ? const Color(0x8034D399) // greenAccent/emeraldAccent 50%
+                        : const Color(0x80FBBF24), // amberAccent 50%
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  hw ? 'HW' : 'SW',
+                  style: TextStyle(
+                    color: hw
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFFFBBF24),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                activeDecoder!.replaceFirst(RegExp(r'^(omx|c2)\.(android\.)?'), '').toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
+  }
+
+  bool _isHardware(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('sw') ||
+        lower.contains('google') ||
+        lower.contains('android.soft') ||
+        lower.contains('ffmpeg') ||
+        lower.contains('software') ||
+        lower.contains('yuv')) {
+      return false;
+    }
+    return true;
   }
 
   @override

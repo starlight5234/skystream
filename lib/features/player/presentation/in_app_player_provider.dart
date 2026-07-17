@@ -93,6 +93,7 @@ class InAppPlayer extends Notifier<InAppPlayerState> {
 
     if (newPlayer.platform is NativePlayer) {
       final native = newPlayer.platform as NativePlayer;
+      native.setProperty('hwdec', 'auto');
       native.setProperty('network-timeout', '120');
       native.setProperty('force-seekable', 'yes');
       native.setProperty('demuxer-lavf-probesize', '33554432');
@@ -137,7 +138,10 @@ class InAppPlayer extends Notifier<InAppPlayerState> {
     state = state.copyWith(width: width, height: height);
   }
 
-  void close() {
+  void close([Player? player]) {
+    if (player != null && state.player != player) {
+      return;
+    }
     _cleanupActiveControllers();
     state = const InAppPlayerState(mode: PlayerWindowMode.none);
   }
@@ -149,7 +153,7 @@ class InAppPlayer extends Notifier<InAppPlayerState> {
       unawaited(oldPlayer.dispose());
     }
     if (state.mode != PlayerWindowMode.none) {
-      ref.read(playerControllerProvider.notifier).disposeController();
+      ref.read(playerControllerProvider.notifier).disposeController(oldPlayer);
     }
   }
 }

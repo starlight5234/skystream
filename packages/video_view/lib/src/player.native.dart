@@ -11,6 +11,15 @@ class VideoControllerImplementation extends VideoController {
   static const _methodChannel = MethodChannel('VideoViewPlugin');
   static var _detectorStarted = false;
 
+  static Future<List<String>> getHardwareDecoders() async {
+    try {
+      final list = await _methodChannel.invokeMethod<List<dynamic>>('getHardwareDecoders');
+      return list?.cast<String>() ?? ['h264'];
+    } catch (_) {
+      return ['h264'];
+    }
+  }
+
   /// The id of the player.
   /// It should be unique and never change again after the player is initialized, or null otherwise.
   int? get id => _id;
@@ -148,6 +157,12 @@ class VideoControllerImplementation extends VideoController {
                     playbackState.value = .paused;
                   }
                 }
+              } else if (eventName == 'decoderName') {
+                final name = e['value'] as String?;
+                activeDecoder.value = name;
+                if (mediaInfo.value != null) {
+                  mediaInfo.value = mediaInfo.value!.copyWith(decoderName: name);
+                }
               }
             });
         if (_source != null) {
@@ -207,6 +222,7 @@ class VideoControllerImplementation extends VideoController {
   close() {
     if (!disposed) {
       _source = null;
+      activeDecoder.value = null;
       if (_id != null && (playbackState.value != .closed || loading.value)) {
         _methodChannel.invokeMethod('close', _id);
         _close();
@@ -219,6 +235,7 @@ class VideoControllerImplementation extends VideoController {
   open(source, {Map<String, String>? headers, String? drmKey, String? drmKid}) {
     if (!disposed) {
       _source = source;
+      activeDecoder.value = null;
       if (_id != null) {
         error.value = null;
         _close();
@@ -244,6 +261,7 @@ class VideoControllerImplementation extends VideoController {
   }) {
     if (!disposed) {
       _source = source;
+      activeDecoder.value = null;
       if (_id != null) {
         error.value = null;
         _close();
@@ -555,6 +573,7 @@ class VideoControllerImplementation extends VideoController {
   }
 
   void _close() {
+    activeDecoder.value = null;
     orientation.value = 0;
     _seeking = false;
     mediaInfo.value = null;

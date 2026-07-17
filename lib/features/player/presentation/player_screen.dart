@@ -114,7 +114,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Check if player is already active globally (from in-app PiP)
     final inAppPlayerState = ref.read(inAppPlayerProvider);
-    final isAlreadyActive = inAppPlayerState.player != null;
+    final isAlreadyActive = inAppPlayerState.player != null &&
+        inAppPlayerState.videoUrl == widget.videoUrl;
 
     if (!isAlreadyActive) {
       // Initialize new playback session globally
@@ -231,10 +232,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _settingsSub?.close();
     
-    _playerController.disposeController();
+    _playerController.disposeController(_player);
     _player.dispose();
     _videoViewController.dispose();
-    ref.read(inAppPlayerProvider.notifier).close();
+    ref.read(inAppPlayerProvider.notifier).close(_player);
 
     _controlsVisible.dispose();
     _videoFit.dispose();
@@ -471,6 +472,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _handleBack() async {
+    ref.read(inAppPlayerProvider.notifier).close(_player);
     if (!context.mounted) return;
     if (mounted) context.pop();
   }
@@ -635,35 +637,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               (MediaQuery.sizeOf(context).height * 0.008)),
                       left: 20,
                       right: 20,
-                      child: SubtitleView(
-                        controller: _videoController,
-                        configuration: SubtitleViewConfiguration(
-                          style: TextStyle(
-                            fontSize:
-                                subtitleSettings?.subtitleSize ?? 22.0,
-                            color: Color(
-                              subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
-                            ),
-                            backgroundColor:
-                                Color(
-                                  subtitleSettings
-                                          ?.subtitleBackgroundColor ??
-                                      0x00000000,
-                                ).withValues(
-                                  alpha:
-                                      subtitleSettings
-                                          ?.subtitleBackgroundOpacity ??
-                                      0.0,
-                                ),
-                            shadows: const [
-                              Shadow(
-                                offset: Offset(0, 1),
-                                blurRadius: 2,
-                                color: Colors.black,
+                      child: RepaintBoundary(
+                        child: SubtitleView(
+                          controller: _videoController,
+                          configuration: SubtitleViewConfiguration(
+                            style: TextStyle(
+                              fontSize:
+                                  subtitleSettings?.subtitleSize ?? 22.0,
+                              color: Color(
+                                subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
                               ),
-                            ],
+                              backgroundColor:
+                                  Color(
+                                    subtitleSettings
+                                            ?.subtitleBackgroundColor ??
+                                        0x00000000,
+                                  ).withValues(
+                                    alpha:
+                                        subtitleSettings
+                                            ?.subtitleBackgroundOpacity ??
+                                        0.0,
+                                  ),
+                              shadows: const [
+                                Shadow(
+                                  offset: Offset(0, 1),
+                                  blurRadius: 2,
+                                  color: Colors.black,
+                                ),
+                              ],
+                            ),
+                            padding: EdgeInsets.zero,
                           ),
-                          padding: EdgeInsets.zero,
                         ),
                       ),
                     );

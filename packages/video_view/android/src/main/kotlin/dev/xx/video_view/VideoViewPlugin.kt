@@ -83,6 +83,20 @@ class VideoController(
 		eventChannel.setStreamHandler(this)
 		exoPlayer.addListener(this)
 		exoPlayer.setVideoSurface(surfaceProducer.surface)
+
+		exoPlayer.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+			override fun onVideoDecoderInitialized(
+				eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+				decoderName: String,
+				initializedTimestampMs: Long,
+				initializationDurationMs: Long
+			) {
+				eventSink?.success(mapOf(
+					"event" to "decoderName",
+					"value" to decoderName
+				))
+			}
+		})
 	}
 
 	fun dispose() {
@@ -727,6 +741,37 @@ class VideoViewPlugin : FlutterPlugin, ActivityAware {
 		}
 	}
 
+	private fun getHardwareDecoders(): List<String> {
+		val codecs = mutableListOf("h264")
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+			val codecList = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+			for (info in codecList.codecInfos) {
+				if (info.isEncoder || !info.isHardwareAccelerated) continue
+				for (type in info.supportedTypes) {
+					when (type) {
+						"video/av01" -> codecs.add("av1")
+						"video/hevc" -> codecs.add("hevc")
+						"video/x-vnd.on2.vp9" -> codecs.add("vp9")
+					}
+				}
+			}
+		} else {
+			val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
+			for (info in codecList.codecInfos) {
+				if (info.isEncoder) continue
+				val name = info.name.lowercase()
+				if (name.contains(".google.") || name.contains(".sw.") || name.contains("google")) continue
+				for (type in info.supportedTypes) {
+					when (type) {
+						"video/hevc" -> codecs.add("hevc")
+						"video/x-vnd.on2.vp9" -> codecs.add("vp9")
+					}
+				}
+			}
+		}
+		return codecs.distinct()
+	}
+
 	private fun clear() {
 		for (player in players.values) {
 			player.dispose()
@@ -738,6 +783,9 @@ class VideoViewPlugin : FlutterPlugin, ActivityAware {
 		methodChannel = MethodChannel(binding.binaryMessenger, "VideoViewPlugin")
 		methodChannel.setMethodCallHandler { call, result ->
 			when (call.method) {
+				"getHardwareDecoders" -> {
+					result.success(getHardwareDecoders())
+				}
 				"create" -> {
 					val player = VideoController(binding, this)
 					players[player.id] = player

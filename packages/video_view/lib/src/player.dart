@@ -145,6 +145,7 @@ class VideoControllerMediaInfo {
   final String source;
   final bool isLive;
   final bool isSeekable;
+  final String? decoderName;
 
   const VideoControllerMediaInfo(
     this.duration,
@@ -153,6 +154,7 @@ class VideoControllerMediaInfo {
     this.source, {
     this.isLive = false,
     this.isSeekable = true,
+    this.decoderName,
   });
 
   VideoControllerMediaInfo copyWith({
@@ -162,6 +164,7 @@ class VideoControllerMediaInfo {
     String? source,
     bool? isLive,
     bool? isSeekable,
+    String? decoderName,
   }) {
     return VideoControllerMediaInfo(
       duration ?? this.duration,
@@ -170,6 +173,7 @@ class VideoControllerMediaInfo {
       source ?? this.source,
       isLive: isLive ?? this.isLive,
       isSeekable: isSeekable ?? this.isSeekable,
+      decoderName: decoderName ?? this.decoderName,
     );
   }
 }
@@ -225,6 +229,9 @@ abstract class VideoController {
   /// The information of the current media.
   /// It's null before the media is opened.
   final mediaInfo = VideoControllerProperty<VideoControllerMediaInfo?>(null);
+
+  /// The name of the active video decoder (e.g. "OMX.qcom.video.decoder.hevc").
+  final activeDecoder = VideoControllerProperty<String?>(null);
 
   /// The size of the current video.
   /// This value is Size.zero by default, and may change during playback.
@@ -330,6 +337,7 @@ abstract class VideoController {
     preferredSubtitleLanguage,
     showSubtitle,
     displayMode,
+    activeDecoder,
   ];
 
   /// Whether the player is disposed.
@@ -513,4 +521,9 @@ abstract class VideoController {
   /// Set video display mode.
   /// This API only works on web.
   bool setDisplayMode(VideoControllerDisplayMode mode);
+
+  /// Retrieves the hardware-accelerated video decoders supported by the OS.
+  static Future<List<String>> getHardwareDecoders() {
+    return VideoControllerImplementation.getHardwareDecoders();
+  }
 }

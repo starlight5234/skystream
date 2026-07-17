@@ -1,5 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
+import 'package:http/http.dart' as http;
 import '../../features/settings/presentation/player_settings_provider.dart';
 import '../domain/entity/multimedia_item.dart';
 
@@ -152,6 +153,78 @@ Future<bool> isOnWifi() async {
   }
 }
 
+enum CodecType { av1, hevc, vp9, h264, unknown }
+
+CodecType _detectCodec(String sourceLabel, String url) {
+  final s = '$sourceLabel ${url.split('?').first}'.toLowerCase();
+  if (s.contains('av1') || s.contains('av01')) return CodecType.av1;
+  if (s.contains('hevc') ||
+      s.contains('h265') ||
+      s.contains('x265') ||
+      s.contains('h.265') ||
+      s.contains('10bit')) {
+    return CodecType.hevc;
+  }
+  if (s.contains('vp9') || s.contains('vp09')) return CodecType.vp9;
+  if (s.contains('h264') ||
+      s.contains('x264') ||
+      s.contains('avc') ||
+      s.contains('h.264')) {
+    return CodecType.h264;
+  }
+  return CodecType.unknown;
+}
+
+int _getCodecScore(CodecType codec, List<String> hardwareDecoders) {
+  if (codec == CodecType.unknown) return 100;
+  final name = codec.name;
+  const preferredOrder = ['av1', 'hevc', 'vp9', 'h264'];
+  if (hardwareDecoders.contains(name)) {
+    return preferredOrder.indexOf(name);
+  }
+  return 50 + preferredOrder.indexOf(name);
+}
+
+/// Probes HLS streams in parallel to detect their codecs.
+Future<Map<String, CodecType>> probeHlsCodecs(List<StreamResult> streams) async {
+  final Map<String, CodecType> results = {};
+  final candidates = streams.take(5).toList();
+  final futures = candidates.map((s) async {
+    final codec = await _probeSingleHlsCodec(s.url, headers: s.headers);
+    if (codec != CodecType.unknown) {
+      results[s.url] = codec;
+    }
+  });
+  await Future.wait(futures).timeout(
+    const Duration(seconds: 2),
+    onTimeout: () => [],
+  );
+  return results;
+}
+
+Future<CodecType> _probeSingleHlsCodec(String url, {Map<String, String>? headers}) async {
+  try {
+    final uri = Uri.parse(url);
+    if (!uri.path.toLowerCase().contains('.m3u8')) return CodecType.unknown;
+    final response = await http.get(uri, headers: headers).timeout(const Duration(milliseconds: 1500));
+    if (response.statusCode == 200) {
+      final body = response.body;
+      if (body.contains('CODECS=')) {
+        final codecsRegex = RegExp(r'CODECS="([^"]+)"', caseSensitive: false);
+        final matches = codecsRegex.allMatches(body);
+        for (final m in matches) {
+          final codecsStr = m.group(1)?.toLowerCase() ?? '';
+          if (codecsStr.contains('av01')) return CodecType.av1;
+          if (codecsStr.contains('hvc1') || codecsStr.contains('hev1')) return CodecType.hevc;
+          if (codecsStr.contains('vp09') || codecsStr.contains('vp9')) return CodecType.vp9;
+          if (codecsStr.contains('avc1') || codecsStr.contains('avc')) return CodecType.h264;
+        }
+      }
+    }
+  } catch (_) {}
+  return CodecType.unknown;
+}
+
 /// Sorts [streams] by quality preference without changing the original list.
 ///
 /// If [preference] is [QualityPreference.any] the list is returned unchanged.
@@ -162,8 +235,10 @@ Future<bool> isOnWifi() async {
 ///   1080p → 720p → 480p → 360p → 4K → unknown/auto
 List<StreamResult> sortStreamsByQuality(
   List<StreamResult> streams,
-  QualityPreference preference,
-) {
+  QualityPreference preference, {
+  List<String> hardwareDecoders = const ['h264'],
+  Map<String, CodecType> resolvedCodecs = const {},
+}) {
   if (preference == QualityPreference.any || streams.length <= 1) {
     return streams;
   }
@@ -182,6 +257,13 @@ List<StreamResult> sortStreamsByQuality(
     final ka = _sortKey(a.tier, prefRank);
     final kb = _sortKey(b.tier, prefRank);
     if (ka != kb) return ka.compareTo(kb);
+
+    final codecA = resolvedCodecs[a.stream.url] ?? _detectCodec(a.stream.source, a.stream.url);
+    final codecB = resolvedCodecs[b.stream.url] ?? _detectCodec(b.stream.source, b.stream.url);
+    final scoreA = _getCodecScore(codecA, hardwareDecoders);
+    final scoreB = _getCodecScore(codecB, hardwareDecoders);
+    if (scoreA != scoreB) return scoreA.compareTo(scoreB);
+
     return a.index.compareTo(b.index); // stable: preserve original order
   });
 

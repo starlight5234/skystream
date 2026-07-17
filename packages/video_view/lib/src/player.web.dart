@@ -398,6 +398,10 @@ class VideoControllerImplementation extends VideoController {
     overrideAudio.value = overrideSubtitle.value = null;
     displayMode.value = .normal;
   }
+
+  static Future<List<String>> getHardwareDecoders() async {
+    return const ['h264'];
+  }
 }
 
 String _translateSource(String asset) {

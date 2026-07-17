@@ -32,7 +32,7 @@ class DownloadLauncher {
     String? episodeUrl,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    final resolveUrl = episodeUrl ?? item.url;
+    final resolveUrl = (episodeUrl != null && episodeUrl.isNotEmpty) ? episodeUrl : item.url;
     if (resolveUrl.isEmpty) return;
 
     bool isCanceled = false;
