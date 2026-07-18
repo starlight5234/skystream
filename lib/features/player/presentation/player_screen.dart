@@ -734,22 +734,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     if (showChatPanel) {
                       final orientation = MediaQuery.of(context).orientation;
                       if (orientation == Orientation.portrait) {
-                        return Column(
-                          children: [
-                            AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: playerStack,
-                            ),
-                            Expanded(
-                              child: WatchPartyPlayerChatPanel(session: activeSession!),
-                            ),
-                          ],
+                        return SafeArea(
+                          child: Column(
+                            children: [
+                              AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: playerStack,
+                              ),
+                              Expanded(
+                                child: WatchPartyPlayerChatPanel(session: activeSession!),
+                              ),
+                            ],
+                          ),
                         );
                       } else {
                         return Row(
                           children: [
                             Expanded(child: playerStack),
-                            WatchPartyPlayerChatPanel(session: activeSession!),
+                            SafeArea(
+                              left: false,
+                              top: false,
+                              bottom: false,
+                              child: WatchPartyPlayerChatPanel(session: activeSession!),
+                            ),
                           ],
                         );
                       }
