@@ -152,6 +152,42 @@ Future<bool> isOnWifi() async {
   }
 }
 
+bool isCodecSupportedByDevice(String streamName, String url, List<String> supportedDecoders) {
+  final nameLower = streamName.toLowerCase();
+  final urlLower = url.toLowerCase();
+  
+  bool isHevc = nameLower.contains('hevc') || nameLower.contains('h265') || nameLower.contains('x265') ||
+                urlLower.contains('hevc') || urlLower.contains('h265') || urlLower.contains('x265');
+  bool isAv1 = nameLower.contains('av1') || urlLower.contains('av1');
+  bool isVp9 = nameLower.contains('vp9') || urlLower.contains('vp9');
+  bool isH264 = nameLower.contains('h264') || nameLower.contains('x264') || nameLower.contains('avc') ||
+                urlLower.contains('h264') || urlLower.contains('x264') || urlLower.contains('avc');
+  
+  if (isHevc) {
+    return supportedDecoders.any((d) => d.toLowerCase().contains('hevc') || d.toLowerCase().contains('h265'));
+  }
+  if (isAv1) {
+    return supportedDecoders.any((d) => d.toLowerCase().contains('av1'));
+  }
+  if (isVp9) {
+    return supportedDecoders.any((d) => d.toLowerCase().contains('vp9'));
+  }
+  if (isH264) {
+    return supportedDecoders.any((d) => d.toLowerCase().contains('h264') || d.toLowerCase().contains('avc'));
+  }
+  
+  // Baseline Fallback: If no codec keywords are detected in the stream label/URL, 
+  // we assume it is compatible (most likely standard H.264/AVC) to avoid penalizing it.
+  //
+  // NOTE ON RUNTIME DECODING FALLBACK:
+  // If the stream ends up being encoded in HEVC/AV1 but lacks identifying words, 
+  // the player (ExoPlayer/MediaKit) will parse the video track at runtime and still
+  // attempt to decode it. If the device hardware decoder is missing for that codec, 
+  // the player automatically falls back to software decoding (SW), displaying the 
+  // [SW] badge in the top bar.
+  return true;
+}
+
 /// Sorts [streams] by quality preference without changing the original list.
 ///
 /// If [preference] is [QualityPreference.any] the list is returned unchanged.
@@ -162,8 +198,9 @@ Future<bool> isOnWifi() async {
 ///   1080p → 720p → 480p → 360p → 4K → unknown/auto
 List<StreamResult> sortStreamsByQuality(
   List<StreamResult> streams,
-  QualityPreference preference,
-) {
+  QualityPreference preference, {
+  List<String> hardwareDecoders = const [],
+}) {
   if (preference == QualityPreference.any || streams.length <= 1) {
     return streams;
   }
@@ -182,6 +219,15 @@ List<StreamResult> sortStreamsByQuality(
     final ka = _sortKey(a.tier, prefRank);
     final kb = _sortKey(b.tier, prefRank);
     if (ka != kb) return ka.compareTo(kb);
+    
+    if (hardwareDecoders.isNotEmpty) {
+      final aSupported = isCodecSupportedByDevice(a.stream.source, a.stream.url, hardwareDecoders);
+      final bSupported = isCodecSupportedByDevice(b.stream.source, b.stream.url, hardwareDecoders);
+      if (aSupported != bSupported) {
+        return aSupported ? -1 : 1;
+      }
+    }
+    
     return a.index.compareTo(b.index); // stable: preserve original order
   });
 

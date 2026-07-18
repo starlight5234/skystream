@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'dart:isolate';
 
 class ProxyOptions {
   final List<String> mirrorHosts;
@@ -27,6 +28,28 @@ class ProxyOptions {
   }
 }
 
+// Spawn entrypoint
+void _proxyIsolateEntryPoint(SendPort mainSendPort) {
+  final fromMainPort = ReceivePort();
+  mainSendPort.send(fromMainPort.sendPort);
+
+  fromMainPort.listen((message) async {
+    if (message is Map) {
+      final action = message['action'] as String;
+      if (action == 'start') {
+        await LocalProxyService.instance._runServer(mainSendPort);
+      } else if (action == 'add_playlist') {
+        final uuid = message['uuid'] as String;
+        final content = message['content'] as String;
+        LocalProxyService.instance._addPlaylist(uuid, content);
+      } else if (action == 'shutdown') {
+        await LocalProxyService.instance._shutdownInternal();
+        fromMainPort.close();
+      }
+    }
+  });
+}
+
 class LocalProxyService {
   static final LocalProxyService _instance = LocalProxyService._internal();
 
@@ -34,8 +57,12 @@ class LocalProxyService {
 
   LocalProxyService._internal();
 
-  HttpServer? _server;
+  Isolate? _isolate;
+  SendPort? _toIsolatePort;
   int _serverPort = 0;
+
+  // Background state (inside background isolate only)
+  HttpServer? _server;
   final Map<String, String> _playlists = {};
 
   static const int _maxPlaylists = 50;
@@ -43,15 +70,35 @@ class LocalProxyService {
   int get port => _serverPort;
 
   Future<void> startServer() async {
-    if (_server != null) return;
+    if (_isolate != null) return;
     try {
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      _serverPort = _server!.port;
-      if (kDebugMode) {
-        debugPrint("LocalProxyService: Started on port $_serverPort");
-      }
+      final fromIsolatePort = ReceivePort();
+      
+      _isolate = await Isolate.spawn(
+        _proxyIsolateEntryPoint,
+        fromIsolatePort.sendPort,
+      );
 
-      _server!.listen(_handleRequest);
+      final completer = Completer<void>();
+      fromIsolatePort.listen((message) {
+        if (message is SendPort) {
+          _toIsolatePort = message;
+          _toIsolatePort!.send({'action': 'start'});
+        } else if (message is Map) {
+          final status = message['status'] as String;
+          if (status == 'started') {
+            _serverPort = message['port'] as int;
+            if (kDebugMode) {
+              debugPrint("LocalProxyService: Started inside isolate on port $_serverPort");
+            }
+            completer.complete();
+          } else if (status == 'error') {
+            completer.completeError(Exception(message['error']));
+          }
+        }
+      });
+
+      await completer.future;
     } catch (e) {
       if (kDebugMode) {
         debugPrint("LocalProxyService: Failed to start server: $e");
@@ -59,11 +106,49 @@ class LocalProxyService {
     }
   }
 
-  /// Stop the proxy and release the bound port. The proxy is a singleton
-  /// reused across player sessions, so this is normally only called on app
-  /// shutdown (audit B4 — port stays bound for the app lifetime otherwise,
-  /// which only matters on desktop / long-running app processes).
   Future<void> shutdown() async {
+    _toIsolatePort?.send({'action': 'shutdown'});
+    _isolate?.kill(priority: Isolate.beforeNextEvent);
+    _isolate = null;
+    _toIsolatePort = null;
+    _serverPort = 0;
+  }
+
+  String serveM3u8(String content) {
+    // Generate UUID
+    final uuid =
+        "${DateTime.now().millisecondsSinceEpoch}_${(content.length % 1000)}";
+    
+    // Send it to the background isolate
+    _toIsolatePort?.send({
+      'action': 'add_playlist',
+      'uuid': uuid,
+      'content': content,
+    });
+    
+    return "http://127.0.0.1:$_serverPort/$uuid.m3u8";
+  }
+
+  // Isolate-internal helper methods
+  Future<void> _runServer(SendPort mainSendPort) async {
+    try {
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      _serverPort = _server!.port;
+      mainSendPort.send({'status': 'started', 'port': _serverPort});
+      _server!.listen(_handleRequest);
+    } catch (e) {
+      mainSendPort.send({'status': 'error', 'error': e.toString()});
+    }
+  }
+
+  void _addPlaylist(String uuid, String content) {
+    while (_playlists.length >= _maxPlaylists) {
+      _playlists.remove(_playlists.keys.first);
+    }
+    _playlists[uuid] = content;
+  }
+
+  Future<void> _shutdownInternal() async {
     final server = _server;
     _server = null;
     _serverPort = 0;
@@ -78,12 +163,7 @@ class LocalProxyService {
     }
   }
 
-  /// Allow-list for incoming request schemes / hosts. We only serve to
-  /// in-process media_kit (which connects to 127.0.0.1) — any request from
-  /// another origin would mean a local web page is trying to scrape our
-  /// stream URLs (audit B4). Returning false → 403 in the handler.
   bool _isAllowedOrigin(HttpRequest request) {
-    // Only accept loopback connections at the socket level. The Dart
     // HttpServer is already bound to loopbackIPv4, but we double-check the
     // remote address here in case future code binds to anyAddress.
     final remote = request.connectionInfo?.remoteAddress;
@@ -104,21 +184,6 @@ class LocalProxyService {
     if (scheme != 'http' && scheme != 'https') return false;
     if (uri.host.isEmpty) return false;
     return true;
-  }
-
-  /// Stores a generated M3U8 content and returns the local URL to access it.
-  String serveM3u8(String content) {
-    if (_server == null) startServer(); // Ensure started
-
-    // Evict oldest entries if at capacity
-    while (_playlists.length >= _maxPlaylists) {
-      _playlists.remove(_playlists.keys.first);
-    }
-
-    final uuid =
-        "${DateTime.now().millisecondsSinceEpoch}_${(content.length % 1000)}";
-    _playlists[uuid] = content;
-    return "http://127.0.0.1:$_serverPort/$uuid.m3u8";
   }
 
   /// Returns a proxied URL for the given target URL, with optional sticky headers and options.

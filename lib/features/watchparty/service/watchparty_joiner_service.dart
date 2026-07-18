@@ -10,6 +10,9 @@ import 'watchparty_crypto.dart';
 class WatchPartyJoinerService extends WatchPartyConnectionService {
   String? _activeHostName;
   String? _activeGuestName;
+  String? _activePasscode;
+  String? _customTurnUsername;
+  String? _customTurnPassword;
   StreamSubscription<Map<String, dynamic>?>? _lobbySubscription;
   Timer? _pollTimer;
 
@@ -26,6 +29,9 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
     isLoading = true;
     _activeHostName = hostName;
     _activeGuestName = guestName;
+    _activePasscode = passcode;
+    _customTurnUsername = customTurnUsername;
+    _customTurnPassword = customTurnPassword;
 
     statusMessage = 'Joining lobby...';
     logMessage('Join session started for guest "$guestName" joining host "$hostName" with passcode');
@@ -167,6 +173,8 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       String cleanMsg = e.toString();
       if (cleanMsg.contains('lobby is full')) {
         cleanMsg = 'This watch party lobby is full.';
+      } else if (cleanMsg.contains('Incorrect room passcode') || cleanMsg.contains('passcode')) {
+        cleanMsg = 'Wrong password.';
       } else {
         cleanMsg = cleanMsg.replaceFirst('Exception: ', '');
       }
@@ -177,7 +185,7 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
 
   void _processHostAnswer(List<dynamic> signaling, String passcode) {
     // Find the signaling entry for this specific guest
-    final entry = signaling.firstWhere(
+    final entry = signaling.lastWhere(
       (element) => Map<String, dynamic>.from(element as Map)['guest_name'] == _activeGuestName,
       orElse: () => null,
     );
@@ -232,6 +240,7 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
 
   @override
   void cleanup() {
+    isLoading = false;
     if (_activeHostName != null && _activeGuestName != null && !connectionSuccess) {
       unawaited(database.leaveLobby(
         hostName: _activeHostName!,
@@ -245,6 +254,63 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
     _pollTimer?.cancel();
     _pollTimer = null;
     super.cleanup();
+  }
+
+  Future<bool> reconnect() async {
+    logMessage('Reconnection handshake initiated...');
+    
+    // 1. Clean up old connection but do NOT clear credentials
+    _lobbySubscription?.cancel();
+    _lobbySubscription = null;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    
+    if (peerConnection != null) {
+      try {
+        await peerConnection!.dispose();
+      } catch (_) {}
+      peerConnection = null;
+    }
+    if (dataChannel != null) {
+      try {
+        await dataChannel!.close();
+      } catch (_) {}
+      dataChannel = null;
+    }
+    
+    connectionSuccess = false;
+    error = null;
+    isLoading = true;
+    statusMessage = 'Reconnecting...';
+    notifyListeners();
+ 
+    try {
+      // Re-run joining flow
+      await startJoining(
+        _activeHostName!,
+        _activeGuestName!,
+        _activePasscode!,
+        customTurnUsername: _customTurnUsername,
+        customTurnPassword: _customTurnPassword,
+      );
+      
+      // Wait up to 30 seconds for handshake to succeed
+      int duration = 0;
+      while (isLoading && !connectionSuccess && error == null && duration < 30) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        duration++;
+      }
+      
+      if (connectionSuccess) {
+        logMessage('Reconnection success!');
+        return true;
+      } else {
+        throw Exception(error ?? 'Reconnection handshake timed out.');
+      }
+    } catch (e) {
+      logMessage('Reconnection failed: $e');
+      return false;
+    }
   }
 
   List<dynamic> _parseSignaling(dynamic raw) {

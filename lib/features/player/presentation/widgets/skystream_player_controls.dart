@@ -11,6 +11,7 @@ import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:video_view/video_view.dart' as vv;
 import '../../../../l10n/generated/app_localizations.dart';
 import '../player_controller.dart';
+import '../../../watchparty/presentation/providers/active_watchparty_provider.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/models/torrent_status.dart';
@@ -92,6 +93,7 @@ class SkyStreamPlayerControlsState
   bool _showTorrentInfo = false; // Changed from true
   Timer? _hideTimer;
   bool _isLocked = false;
+  bool _isManualOrientationOverride = false;
 
   // Seek animation state
   late AnimationController _seekAnimController;
@@ -380,6 +382,7 @@ class SkyStreamPlayerControlsState
   }
 
   void _updateOrientation() {
+    if (_isManualOrientationOverride) return;
     final useExo = ref.read(
       playerControllerProvider.select((s) => s.useExoPlayer),
     );
@@ -408,6 +411,7 @@ class SkyStreamPlayerControlsState
   }
 
   void _toggleOrientation() {
+    _isManualOrientationOverride = true;
     _platformService.toggleOrientation(context);
   }
 
@@ -1326,10 +1330,22 @@ class SkyStreamPlayerControlsState
         ),
     ];
 
+    final activeSession = ref.watch(activeWatchPartyProvider);
+
     // Right-side icon-only buttons (same style as resize/fullscreen). Sources,
     // Audio and Subtitles all open the same side panel, each landing on its own
     // tab; the panel applies every choice instantly.
     final actions = <Widget>[
+      if (activeSession != null)
+        PlayerIconButton(
+          icon: Icons.chat_rounded,
+          tooltip: 'Toggle Chat',
+          onPressed: () {
+            ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+          },
+          isTv: _isTv,
+          highlight: ref.watch(watchPartyLandscapeChatProvider),
+        ),
       PlayerIconButton(
         icon: Icons.source,
         tooltip: l10n.sources,
@@ -1378,13 +1394,6 @@ class SkyStreamPlayerControlsState
           isTv: _isTv,
           highlight: _showTorrentInfo,
         ),
-      if (isTouch && (Platform.isAndroid || (Platform.isIOS && !_isIpad)))
-        PlayerIconButton(
-          icon: Icons.screen_rotation,
-          tooltip: l10n.rotate,
-          onPressed: _toggleOrientation,
-          isTv: _isTv,
-        ),
       if (isSeries)
         PlayerIconButton(
           icon: Icons.playlist_play_rounded,
@@ -1405,13 +1414,15 @@ class SkyStreamPlayerControlsState
           onPressed: _enterPip,
           isTv: _isTv,
         ),
-      if (isDesktop)
+      if (isDesktop || (isTouch && (Platform.isAndroid || (Platform.isIOS && !_isIpad))))
         PlayerIconButton(
-          icon: _isFullscreen
+          icon: (isDesktop ? _isFullscreen : MediaQuery.of(context).orientation == Orientation.landscape)
               ? Icons.fullscreen_exit_rounded
               : Icons.fullscreen_rounded,
-          tooltip: _isFullscreen ? l10n.windowed : l10n.fullscreen,
-          onPressed: toggleFullscreen,
+          tooltip: (isDesktop ? _isFullscreen : MediaQuery.of(context).orientation == Orientation.landscape)
+              ? l10n.windowed
+              : l10n.fullscreen,
+          onPressed: isDesktop ? toggleFullscreen : _toggleOrientation,
           isTv: _isTv,
         ),
     ];

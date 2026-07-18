@@ -88,10 +88,22 @@ class NotificationService {
   void showInfo(String message) {
     messengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        duration: const Duration(seconds: 4),
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: Color(0xFFE5E7EB),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        backgroundColor: const Color(0xFF22222E),
+        duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 8,
+        width: 280,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }

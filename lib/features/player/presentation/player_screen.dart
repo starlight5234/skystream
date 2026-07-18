@@ -13,6 +13,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:video_view/video_view.dart' as vv;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
+import '../../watchparty/presentation/providers/active_watchparty_provider.dart';
 
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/providers/device_info_provider.dart';
@@ -73,6 +74,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   double? _speedBeforeSpaceHold;
   Timer? _spaceHoldTimer;
 
+  Orientation? _lastOrientation;
   late final PlayerController _playerController;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
 
@@ -585,137 +587,491 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               focusNode: _rootFocusNode,
               autofocus: true,
               onKeyEvent: _handleKey,
-              // Map the TV remote OK key (select) to ActivateIntent so the
-              // focused control activates natively (Enter/Space/gameButtonA are
-              // already mapped by WidgetsApp). When no control is focused this
-              // bubbles up to the root handler instead.
               child: Shortcuts(
                 shortcuts: const <ShortcutActivator, Intent>{
                   SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
                 },
-                child: Stack(
-                  children: [
-                    RepaintBoundary(
-                      child: ValueListenableBuilder<BoxFit>(
-                        valueListenable: _videoFit,
-                        builder: (_, fit, child) => Center(
-                          // Phase 8: Switch engine based on stream type
-                          child: Consumer(
-                            builder: (context, ref, _) {
-                              final useExoPlayer = ref.watch(
-                                playerControllerProvider.select(
-                                  (s) => s.useExoPlayer,
-                                ),
-                              );
-                              if (useExoPlayer) {
-                                return vv.VideoView(
-                                  controller: _videoViewController,
-                                  videoFit: fit,
-                                );
-                              }
-                              return Video(
-                                controller: _videoController,
-                                fit: fit,
-                                subtitleViewConfiguration:
-                                    const SubtitleViewConfiguration(
-                                      visible: false,
-                                      style: TextStyle(
-                                        color: Colors.transparent,
-                                      ),
-                                    ),
-                                controls: (state) => const SizedBox.shrink(),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final useExoPlayer = ref.watch(
-                          playerControllerProvider.select(
-                            (s) => s.useExoPlayer,
-                          ),
-                        );
-                        if (useExoPlayer) {
-                          return const SizedBox.shrink();
-                        }
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final activeSession = ref.watch(activeWatchPartyProvider);
+                    final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
+                    final orientation = MediaQuery.of(context).orientation;
+                    final isPortrait = orientation == Orientation.portrait;
+                    final showChatPanel = activeSession != null && (isPortrait || showLandscapeChat);
 
-                        return Positioned(
-                          bottom:
-                              (controlsVisible
-                                  ? HotstarPlayerStyle.bottomChromeHeight
-                                  : 20.0) +
-                              ((100 -
-                                      (subtitleSettings?.subtitlePosition ??
-                                          100.0)) *
-                                  (MediaQuery.sizeOf(context).height * 0.008)),
-                          left: 20,
-                          right: 20,
-                          child: SubtitleView(
-                            controller: _videoController,
-                            configuration: SubtitleViewConfiguration(
-                              style: TextStyle(
-                                fontSize:
-                                    subtitleSettings?.subtitleSize ?? 22.0,
-                                color: Color(
-                                  subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
-                                ),
-                                backgroundColor:
-                                    Color(
-                                      subtitleSettings
-                                              ?.subtitleBackgroundColor ??
-                                          0x00000000,
-                                    ).withValues(
-                                      alpha:
-                                          subtitleSettings
-                                              ?.subtitleBackgroundOpacity ??
-                                          0.0,
+                    if (orientation != _lastOrientation) {
+                      _lastOrientation = orientation;
+                      if (Platform.isAndroid || Platform.isIOS) {
+                        if (isPortrait) {
+                          SystemChrome.setEnabledSystemUIMode(
+                            SystemUiMode.manual,
+                            overlays: SystemUiOverlay.values,
+                          );
+                        } else {
+                          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+                        }
+                      }
+                    }
+
+                    final playerStack = Stack(
+                      children: [
+                        RepaintBoundary(
+                          child: ValueListenableBuilder<BoxFit>(
+                            valueListenable: _videoFit,
+                            builder: (_, fit, child) => Center(
+                              child: Consumer(
+                                builder: (context, ref, _) {
+                                  final useExoPlayer = ref.watch(
+                                    playerControllerProvider.select(
+                                      (s) => s.useExoPlayer,
                                     ),
-                                shadows: const [
-                                  Shadow(
-                                    offset: Offset(0, 1),
-                                    blurRadius: 2,
-                                    color: Colors.black,
-                                  ),
-                                ],
+                                  );
+                                  if (useExoPlayer) {
+                                    return vv.VideoView(
+                                      controller: _videoViewController,
+                                      videoFit: fit,
+                                    );
+                                  }
+                                  return Video(
+                                    controller: _videoController,
+                                    fit: fit,
+                                    subtitleViewConfiguration:
+                                        const SubtitleViewConfiguration(
+                                          visible: false,
+                                          style: TextStyle(
+                                            color: Colors.transparent,
+                                          ),
+                                        ),
+                                    controls: (state) => const SizedBox.shrink(),
+                                  );
+                                },
                               ),
-                              padding: EdgeInsets.zero,
                             ),
                           ),
-                        );
-                      },
-                    ),
-                    Positioned.fill(
-                      child: RepaintBoundary(
-                        child: SkyStreamPlayerControls(
-                          key: _controlsKeyFinal,
-                          isLoading: isLoading,
-                          player: _player,
-                          videoViewController: _videoViewController,
-                          title: widget.item.title,
-                          subtitle: ref
-                              .read(playerControllerProvider)
-                              .streamSubtitle,
-                          onResize: _updateResizeMode,
-                          onBackPointer: _handleBack,
-                          onRequestRootFocus: () =>
-                              _rootFocusNode.requestFocus(),
-                          onVisibilityChanged: (v) {
-                            if (mounted) {
-                              _controlsVisible.value = v;
+                        ),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final useExoPlayer = ref.watch(
+                              playerControllerProvider.select(
+                                (s) => s.useExoPlayer,
+                              ),
+                            );
+                            if (useExoPlayer) {
+                              return const SizedBox.shrink();
                             }
+
+                            return Positioned(
+                              bottom:
+                                  (controlsVisible
+                                      ? HotstarPlayerStyle.bottomChromeHeight
+                                      : 20.0) +
+                                  ((100 -
+                                          (subtitleSettings?.subtitlePosition ??
+                                              100.0)) *
+                                      (MediaQuery.sizeOf(context).height * 0.008)),
+                              left: 20,
+                              right: 20,
+                              child: SubtitleView(
+                                controller: _videoController,
+                                configuration: SubtitleViewConfiguration(
+                                  style: TextStyle(
+                                    fontSize:
+                                        subtitleSettings?.subtitleSize ?? 22.0,
+                                    color: Color(
+                                      subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
+                                    ),
+                                    backgroundColor:
+                                        Color(
+                                          subtitleSettings
+                                                  ?.subtitleBackgroundColor ??
+                                              0x00000000,
+                                        ).withValues(
+                                          alpha:
+                                              subtitleSettings
+                                                  ?.subtitleBackgroundOpacity ??
+                                              0.0,
+                                        ),
+                                    shadows: const [
+                                      Shadow(
+                                        offset: Offset(0, 1),
+                                        blurRadius: 2,
+                                        color: Colors.black,
+                                      ),
+                                    ],
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            );
                           },
                         ),
-                      ),
-                    ),
-                  ],
+                        Positioned.fill(
+                          child: RepaintBoundary(
+                            child: SkyStreamPlayerControls(
+                              key: _controlsKeyFinal,
+                              isLoading: isLoading,
+                              player: _player,
+                              videoViewController: _videoViewController,
+                              title: widget.item.title,
+                              subtitle: ref
+                                  .read(playerControllerProvider)
+                                  .streamSubtitle,
+                              onResize: _updateResizeMode,
+                              onBackPointer: _handleBack,
+                              onRequestRootFocus: () =>
+                                  _rootFocusNode.requestFocus(),
+                              onVisibilityChanged: (v) {
+                                if (mounted) {
+                                  _controlsVisible.value = v;
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (showChatPanel) {
+                      final orientation = MediaQuery.of(context).orientation;
+                      if (orientation == Orientation.portrait) {
+                        return Column(
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: playerStack,
+                            ),
+                            Expanded(
+                              child: WatchPartyPlayerChatPanel(session: activeSession!),
+                            ),
+                          ],
+                        );
+                      } else {
+                        return Row(
+                          children: [
+                            Expanded(child: playerStack),
+                            WatchPartyPlayerChatPanel(session: activeSession!),
+                          ],
+                        );
+                      }
+                    }
+                    return playerStack;
+                  },
                 ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class WatchPartyPlayerChatPanel extends ConsumerStatefulWidget {
+  final ActiveWatchPartyState session;
+  const WatchPartyPlayerChatPanel({super.key, required this.session});
+
+  @override
+  ConsumerState<WatchPartyPlayerChatPanel> createState() => _WatchPartyPlayerChatPanelState();
+}
+
+class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChatPanel> {
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _sendMessage() {
+    final text = _textController.text.trim();
+    if (text.isNotEmpty) {
+      widget.session.chatService.sendMessage(text);
+      _textController.clear();
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orientation = MediaQuery.of(context).orientation;
+    final isPortrait = orientation == Orientation.portrait;
+
+    return Container(
+      width: isPortrait ? double.infinity : 320,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        border: Border(
+          left: isPortrait
+              ? BorderSide.none
+              : BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
+          top: isPortrait
+              ? BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2))
+              : BorderSide.none,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.people_alt, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Watch Party Chat',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () {
+                    ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+                  },
+                ),
+              ],
+            ),
+          ),
+          ListenableBuilder(
+            listenable: widget.session.chatService,
+            builder: (context, _) {
+              if (widget.session.chatService.isReconnecting) {
+                return Container(
+                  width: double.infinity,
+                  color: Colors.amber,
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reconnecting (Attempt ${widget.session.chatService.reconnectAttempts}/3)...',
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: widget.session.chatService,
+              builder: (context, _) {
+                final messages = widget.session.chatService.messages;
+                _scrollToBottom();
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: messages.length,
+                  itemBuilder: (context, idx) {
+                    final msg = messages[idx];
+                    final isSystem = msg['type'] == 'system' || (msg['isSystem'] as bool? ?? false);
+                    if (isSystem) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              msg['text'] as String,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    final isMe = msg['isMe'] as bool? ?? false;
+                    final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
+                    final text = msg['text'] as String;
+
+                    final reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
+                    final isEmojiReaction = reactions.contains(text.trim());
+
+                    if (isEmojiReaction) {
+                      return Align(
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Column(
+                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+                              child: Text(
+                                isMe ? 'Me' : sender,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                              child: Text(
+                                text.trim(),
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+                            child: Text(
+                              isMe ? 'Me' : sender,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isMe
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12).copyWith(
+                                topRight: isMe ? const Radius.circular(0) : const Radius.circular(12),
+                                topLeft: isMe ? const Radius.circular(12) : const Radius.circular(0),
+                              ),
+                            ),
+                            child: Text(
+                              text,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isMe
+                                    ? Theme.of(context).colorScheme.onPrimary
+                                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(15),
+                      onTap: () {
+                        widget.session.chatService.sendMessage(emoji);
+                        _scrollToBottom();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      hintText: 'Type a message...',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(20)),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.send_rounded, size: 20),
+                  onPressed: _sendMessage,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

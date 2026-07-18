@@ -206,6 +206,7 @@ class PlayerState {
   final double? resumePromptPercentage;
   final bool userSkippedOverlay;
   final List<SkipSegment> skipSegments;
+  final String activeDecoderName;
 
   const PlayerState({
     this.errorMessage,
@@ -243,6 +244,7 @@ class PlayerState {
     this.resumePromptPercentage,
     this.userSkippedOverlay = false,
     this.skipSegments = const [],
+    this.activeDecoderName = 'SW',
   });
 
   // Derived from uiPhase — no separate field needed.
@@ -298,6 +300,7 @@ class PlayerState {
     Object? resumePromptPercentage = _keep,
     bool? userSkippedOverlay,
     List<SkipSegment>? skipSegments,
+    String? activeDecoderName,
   }) {
     return PlayerState(
       errorMessage: errorMessage ?? this.errorMessage,
@@ -343,6 +346,7 @@ class PlayerState {
           : resumePromptPercentage as double?,
       userSkippedOverlay: userSkippedOverlay ?? this.userSkippedOverlay,
       skipSegments: skipSegments ?? this.skipSegments,
+      activeDecoderName: activeDecoderName ?? this.activeDecoderName,
     );
   }
 }
@@ -736,6 +740,25 @@ class PlayerController extends Notifier<PlayerState> {
   void _confirmPlaybackStarted() {
     _hasConfirmedPlaybackFrame = true;
     _manualSelectionPending = false; // source played — no longer pending
+
+    // Fetch and update MPV active decoder name if using MPV
+    if (!state.useExoPlayer && _player.platform is NativePlayer) {
+      final native = _player.platform as NativePlayer;
+      Future<void>.microtask(() async {
+        try {
+          final hwdecCurrent = await native.getProperty('hwdec-current');
+          final codec = await native.getProperty('video-codec');
+          String name = 'SW';
+          if (hwdecCurrent != null && hwdecCurrent != 'no' && hwdecCurrent.isNotEmpty) {
+            name = '$hwdecCurrent (${codec ?? "unknown"})';
+          } else if (codec != null) {
+            name = 'SW ($codec)';
+          }
+          state = state.copyWith(activeDecoderName: name);
+        } catch (_) {}
+      });
+    }
+
     // A frame confirmed → this playback session is healthy. Re-arm the
     // one-shot stale-URL re-resolve so the NEXT expiry (e.g. after another
     // long pause) is also handled rather than falling straight to a
@@ -1289,6 +1312,12 @@ class PlayerController extends Notifier<PlayerState> {
           }
         }
       }
+    });
+
+    _videoViewController!.decoderName.addListener(() {
+      if (!state.useExoPlayer) return;
+      final name = _videoViewController!.decoderName.value ?? 'SW';
+      state = state.copyWith(activeDecoderName: name);
     });
   }
 
@@ -3698,7 +3727,12 @@ class PlayerController extends Notifier<PlayerState> {
       settings.qualityFilterMode,
       onFallback: onFallback,
     );
-    return sortStreamsByQuality(filtered, preference);
+    final deviceProfileVal = await ref.read(deviceProfileProvider.future);
+    return sortStreamsByQuality(
+      filtered,
+      preference,
+      hardwareDecoders: deviceProfileVal.hardwareDecoders,
+    );
   }
 
   String _getProviderDisplayName(String providerName) {
@@ -3822,10 +3856,7 @@ class PlayerController extends Notifier<PlayerState> {
       if (_forceSoftwareDecode) {
         await native.setProperty('hwdec', 'no');
       } else if (settings?.hardwareDecoding ?? true) {
-        await native.setProperty(
-          'hwdec',
-          Platform.isWindows ? 'auto-safe' : 'auto',
-        );
+        await native.setProperty('hwdec', 'auto');
       } else {
         await native.setProperty('hwdec', 'no');
       }
@@ -3897,7 +3928,7 @@ class PlayerController extends Notifier<PlayerState> {
         // Playback
         await native.setProperty('framedrop', 'decoder');
         await native.setProperty('hr-seek-framedrop', 'yes');
-        await native.setProperty('hwdec', 'auto-safe');
+        await native.setProperty('hwdec', 'auto');
 
         // H.264 resilience: wait for clean keyframe after reconnect
         await native.setProperty('vd-lavc-skiploopfilter', 'nonkey');

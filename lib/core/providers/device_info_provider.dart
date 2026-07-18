@@ -3,22 +3,21 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:video_view/video_view.dart';
 
 part 'device_info_provider.g.dart';
 
 class DeviceProfile {
   final bool isTv;
   final bool isTablet;
-
-  /// Indicates if running on a desktop operating system (macOS, Windows, Linux)
-  /// Use this for capability checks (e.g. window controls, mouse hovers),
-  /// NOT for layout sizing. Use [ResponsiveBreakpoints] for layout sizing.
   final bool isDesktopOS;
+  final List<String> hardwareDecoders;
 
   const DeviceProfile({
     this.isTv = false,
     this.isTablet = false,
     this.isDesktopOS = false,
+    this.hardwareDecoders = const [],
   });
 
   bool get isLargeScreen => isTv || isTablet || isDesktopOS;
@@ -29,6 +28,7 @@ Future<DeviceProfile> deviceProfile(Ref ref) async {
   bool isTv = false;
   bool isTablet = false;
   bool isDesktopOS = false;
+  List<String> hardwareDecoders = [];
 
   if (!kIsWeb) {
     if (Platform.isAndroid || Platform.isIOS) {
@@ -42,16 +42,24 @@ Future<DeviceProfile> deviceProfile(Ref ref) async {
         final androidInfo = await deviceInfo.androidInfo;
         isTv = androidInfo.systemFeatures.contains('android.software.leanback');
       }
+
+      try {
+        hardwareDecoders = await VideoController.getHardwareDecoders();
+      } catch (_) {}
     }
 
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       isDesktopOS = true;
+      hardwareDecoders = ['hevc', 'h264', 'vp9', 'av1'];
     }
+  } else {
+    hardwareDecoders = ['h264'];
   }
 
   return DeviceProfile(
     isTv: isTv,
     isTablet: isTablet,
     isDesktopOS: isDesktopOS,
+    hardwareDecoders: hardwareDecoders,
   );
 }

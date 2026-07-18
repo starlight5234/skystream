@@ -133,6 +133,8 @@ class VideoControllerImplementation extends VideoController {
                 if (mediaInfo.value != null) {
                   loading.value = e['value'];
                 }
+              } else if (eventName == 'decoderChanged') {
+                decoderName.value = e['decoder'] as String?;
               } else if (eventName == 'seekEnd') {
                 if (mediaInfo.value != null) {
                   _seeking = false;
@@ -564,5 +566,15 @@ class VideoControllerImplementation extends VideoController {
     finishedTimes.value = 0;
     playbackState.value = .closed;
     overrideAudio.value = overrideSubtitle.value = null;
+    decoderName.value = 'SW';
+  }
+
+  static Future<List<String>> getHardwareDecoders() async {
+    try {
+      final List? decoders = await _methodChannel.invokeMethod('getHardwareDecoders');
+      return decoders?.cast<String>() ?? [];
+    } catch (_) {
+      return [];
+    }
   }
 }

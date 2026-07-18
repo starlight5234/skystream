@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,12 +13,16 @@ import '../data/watchparty_database.dart';
 import '../config/watchparty_config.dart';
 import '../service/watchparty_chat_service.dart';
 import '../service/watchparty_creator_service.dart';
+import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
+import 'providers/active_watchparty_provider.dart';
+import '../../../core/services/notification_service.dart';
 
 class WatchPartyChatScreen extends ConsumerStatefulWidget {
   final RTCPeerConnection? peerConnection;
   final RTCDataChannel? dataChannel;
   final WatchPartyCreatorService? creatorService;
+  final WatchPartyJoinerService? joinerService;
   final WatchPartyDatabase database;
   final bool isHost;
   final String hostName;
@@ -28,6 +34,7 @@ class WatchPartyChatScreen extends ConsumerStatefulWidget {
     this.peerConnection,
     this.dataChannel,
     this.creatorService,
+    this.joinerService,
     required this.database,
     required this.isHost,
     required this.hostName,
@@ -54,6 +61,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
       peerConnection: widget.peerConnection,
       dataChannel: widget.dataChannel,
       creatorService: widget.creatorService,
+      joinerService: widget.joinerService,
       database: widget.database,
       isHost: widget.isHost,
       hostName: widget.hostName,
@@ -62,22 +70,27 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
     );
     _chatService.addListener(_onChatServiceUpdate);
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(activeWatchPartyProvider.notifier).setActiveSession(
+        ActiveWatchPartyState(
+          peerConnection: widget.peerConnection,
+          dataChannel: widget.dataChannel,
+          creatorService: widget.creatorService,
+          database: widget.database,
+          isHost: widget.isHost,
+          hostName: widget.hostName,
+          userName: widget.userName,
+          passcode: widget.passcode,
+          chatService: _chatService,
+        ),
+      );
+    });
+
     if (widget.isHost) {
       _chatService.onAllGuestsLeft = () {
         if (!mounted) return;
-        showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            surfaceTintColor: Colors.transparent,
-            title: const Text('WatchParty Update'),
-            content: const Text('All guests have left the watch party lobby.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
+        ref.read(notificationServiceProvider).showInfo(
+          'All guests have left the lobby.',
         );
       };
     }
@@ -89,6 +102,9 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
     _scrollController.dispose();
     _chatService.removeListener(_onChatServiceUpdate);
     _chatService.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(activeWatchPartyProvider.notifier).clearSession();
+    });
     super.dispose();
   }
 
@@ -150,6 +166,19 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
 
   void _showDisconnectDialog() {
     final msg = _chatService.kickMessage ?? 'The peer has disconnected from the watch party.';
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+
+    if (!isCurrentRoute) {
+      // Player screen is on top — use a subtle toast instead of a blocking dialog
+      ref.read(notificationServiceProvider).showInfo(msg);
+      Future<void>.delayed(const Duration(milliseconds: 1500), () async {
+        if (!mounted) return;
+        await _chatService.leaveParty();
+        _safePop();
+      });
+      return;
+    }
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -310,38 +339,44 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final guests = widget.creatorService?.activeDataChannels.keys.toList() ?? [];
+            final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
             return AlertDialog(
               surfaceTintColor: Colors.transparent,
               title: const Text('Lobby Members'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: guests.isEmpty
-                    ? const Text('No guests currently in the lobby.', style: TextStyle(color: Colors.grey))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: guests.length,
-                        itemBuilder: (context, idx) {
-                          final guest = guests[idx];
-                          return ListTile(
-                            title: Text(
-                              guest,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: widget.isHost
-                                ? IconButton(
-                                    icon: Icon(Icons.remove_circle_outline, color: Theme.of(context).colorScheme.primary),
-                                    tooltip: 'Kick',
-                                    onPressed: () {
-                                      widget.creatorService?.kickGuest(guest);
-                                      setDialogState(() {});
-                                    },
-                                  )
-                                : null,
-                          );
-                        },
-                      ),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isDesktop ? 400.0 : double.infinity,
+                ),
+                child: SizedBox(
+                  width: isDesktop ? 400.0 : double.maxFinite,
+                  child: guests.isEmpty
+                      ? const Text('No guests currently in the lobby.', style: TextStyle(color: Colors.grey))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: guests.length,
+                          itemBuilder: (context, idx) {
+                            final guest = guests[idx];
+                            return ListTile(
+                              title: Text(
+                                guest,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: widget.isHost
+                                  ? IconButton(
+                                      icon: Icon(Icons.remove_circle_outline, color: Theme.of(context).colorScheme.primary),
+                                      tooltip: 'Kick',
+                                      onPressed: () {
+                                        widget.creatorService?.kickGuest(guest);
+                                        setDialogState(() {});
+                                      },
+                                    )
+                                  : null,
+                            );
+                          },
+                        ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -429,6 +464,35 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
         ),
         body: Column(
           children: [
+            if (_chatService.isReconnecting)
+              Container(
+                width: double.infinity,
+                color: Colors.amber,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Reconnecting to host (Attempt ${_chatService.reconnectAttempts}/3)...',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (isHostWaiting)
               Expanded(
                 child: Center(
@@ -507,6 +571,40 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
 
                     final isMe = msg['isMe'] as bool;
                     final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
+                    final text = msg['text'] as String;
+
+                    final reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
+                    final isEmojiReaction = reactions.contains(text.trim());
+
+                    if (isEmojiReaction) {
+                      return Align(
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Column(
+                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+                              child: Text(
+                                isMe ? 'Me' : sender,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                              child: Text(
+                                text.trim(),
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
                     return Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -538,7 +636,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
                               ),
                             ),
                             child: Text(
-                              msg['text'] as String,
+                              text,
                               style: TextStyle(
                                 color: isMe
                                     ? Theme.of(context).colorScheme.onPrimary
@@ -556,26 +654,66 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.all(LayoutConstants.spacingMd),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: const InputDecoration(
-                            hintText: 'Type a message...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(24)),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
                             ),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(15),
+                                  onTap: () {
+                                    _chatService.sendMessage(emoji);
+                                    _scrollToBottom();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                                    child: Text(
+                                      emoji,
+                                      style: const TextStyle(fontSize: 18),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
                           ),
-                          onSubmitted: (_) => _sendMessage(),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      FloatingActionButton(
-                        mini: true,
-                        onPressed: _sendMessage,
-                        child: const Icon(Icons.send_rounded),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _messageController,
+                              decoration: const InputDecoration(
+                                hintText: 'Type a message...',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.all(Radius.circular(24)),
+                                ),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                              onSubmitted: (_) => _sendMessage(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FloatingActionButton(
+                            mini: true,
+                            onPressed: _sendMessage,
+                            child: const Icon(Icons.send_rounded),
+                          ),
+                        ],
                       ),
                     ],
                   ),

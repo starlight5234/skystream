@@ -83,6 +83,22 @@ class VideoController(
 		eventChannel.setStreamHandler(this)
 		exoPlayer.addListener(this)
 		exoPlayer.setVideoSurface(surfaceProducer.surface)
+
+		exoPlayer.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+			override fun onVideoDecoderInitialized(
+				eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+				decoderName: String,
+				initializedTimestampMs: Long,
+				initializationDurationMs: Long
+			) {
+				handler.post {
+					eventSink?.success(mapOf(
+						"event" to "decoderChanged",
+						"decoder" to decoderName
+					))
+				}
+			}
+		})
 	}
 
 	fun dispose() {
@@ -738,6 +754,25 @@ class VideoViewPlugin : FlutterPlugin, ActivityAware {
 		methodChannel = MethodChannel(binding.binaryMessenger, "VideoViewPlugin")
 		methodChannel.setMethodCallHandler { call, result ->
 			when (call.method) {
+				"getHardwareDecoders" -> {
+					val decoders = ArrayList<String>()
+					try {
+						val numCodecs = android.media.MediaCodecList.getCodecCount()
+						for (i in 0 until numCodecs) {
+							val codecInfo = android.media.MediaCodecList.getCodecInfoAt(i)
+							if (codecInfo.isEncoder) continue
+							val name = codecInfo.name.lowercase()
+							val isHardware = !name.startsWith("omx.google.") &&
+											 !name.startsWith("c2.android.") &&
+											 !name.startsWith("omx.sec.raw.") &&
+											 (name.startsWith("omx.") || name.startsWith("c2."))
+							if (isHardware) {
+								decoders.add(codecInfo.name)
+							}
+						}
+					} catch (e: Exception) {}
+					result.success(decoders)
+				}
 				"create" -> {
 					val player = VideoController(binding, this)
 					players[player.id] = player

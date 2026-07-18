@@ -129,7 +129,11 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       final hostAnswer = guestData['host_answer'] as String?;
 
       if (hostAnswer != null) continue;
-      if (activeConnections.containsKey(guestName) || _pendingGuests.contains(guestName)) continue;
+      if (activeConnections.containsKey(guestName)) {
+        logMessage('Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...');
+        _disconnectGuest(guestName);
+      }
+      if (_pendingGuests.contains(guestName)) continue;
 
       _pendingGuests.add(guestName);
       logMessage('Guest offer received from "$guestName". Processing connection in background...');
@@ -243,6 +247,15 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   }
 
   Future<void> cancelHosting() async {
+    // Send host_ended control event to all active guests before cleaning up
+    final endMsg = jsonEncode({'type': 'control', 'action': 'host_ended'});
+    for (final dc in activeDataChannels.values) {
+      try {
+        dc.send(RTCDataChannelMessage(endMsg));
+      } catch (_) {}
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
     if (_activeHostName != null && _roomPasscode != null) {
       final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);
       await database.deleteLobby(hostName: _activeHostName!, passcodeHash: hash);

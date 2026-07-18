@@ -9,7 +9,6 @@ import 'package:skystream/core/utils/layout_constants.dart';
 import 'package:skystream/core/utils/responsive_breakpoints.dart';
 import 'package:skystream/core/storage/settings_repository.dart';
 import 'package:skystream/core/providers/device_info_provider.dart';
-import '../../features/watchparty/presentation/providers/watchparty_notification_provider.dart';
 
 /// Number of destinations rendered by [AppSidebar]. Used by [AppScaffold] to
 /// size its own FocusNode list so the two stay in sync — change this and the
@@ -69,7 +68,6 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final notificationState = ref.watch(watchPartyNotificationProvider);
 
     // Sidebar background: seamless with scaffold
     final bgColor = theme.scaffoldBackgroundColor;
@@ -188,8 +186,8 @@ class _AppSidebarState extends ConsumerState<AppSidebar> {
                         isExpanded: isFullyExpanded,
                         autofocus: i == 0 && context.isTv,
                         onTap: () => widget.onItemTapped(i),
-                        hasUnread: isWatchParty && notificationState.hasUnread,
-                        messageCount: isWatchParty ? notificationState.messageCount : 0,
+                        hasUnread: false,
+                        messageCount: 0,
                       );
                     }),
 

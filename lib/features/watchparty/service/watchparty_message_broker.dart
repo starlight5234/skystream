@@ -35,7 +35,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       for (final entry in _activeDataChannels.entries) {
         final guest = entry.key;
         final lastTime = lastSeen[guest] ?? now;
-        if (now.difference(lastTime) > const Duration(seconds: 30)) {
+        if (now.difference(lastTime) > const Duration(seconds: 45)) {
           deadGuests.add(guest);
         }
       }
@@ -60,6 +60,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     lastSeen.remove(guestName);
     _addSystemMessage('$guestName has left the watch party');
     _broadcastSystemMessage('$guestName has left the watch party');
+
+    // Broadcast peer_disconnected control event to all other guests
+    final disconnectEvent = jsonEncode({
+      'type': 'control',
+      'action': 'peer_disconnected',
+      'guest': guestName,
+    });
+    for (final entry in _activeDataChannels.entries) {
+      if (entry.key != guestName) {
+        try {
+          entry.value.send(RTCDataChannelMessage(disconnectEvent));
+        } catch (_) {}
+      }
+    }
   }
 
   void _handleGuestMessage(String guestName, RTCDataChannel channel, String rawText) {

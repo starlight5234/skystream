@@ -299,6 +299,14 @@ abstract class VideoController {
   /// Current maximum resolution of the player. [Size.zero] means no limit.
   final maxResolution = VideoControllerProperty<Size>(.zero);
 
+  /// The active hardware/software video decoder name.
+  final decoderName = VideoControllerProperty<String?>('SW');
+
+  /// Fetches the supported hardware decoders of the device.
+  static Future<List<String>> getHardwareDecoders() {
+    return VideoControllerImplementation.getHardwareDecoders();
+  }
+
   /// The preferred audio language of the player.
   final preferredAudioLanguage = VideoControllerProperty<String?>(null);
 

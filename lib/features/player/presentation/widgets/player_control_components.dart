@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/widgets/custom_widgets.dart';
+import '../player_controller.dart';
 import 'hotstar_player_style.dart';
 
 /// Top zone: back button + title/subtitle. Paints its own top scrim so the
 /// chrome no longer needs a separate fixed-height Positioned gradient.
-class PlayerTopBar extends StatelessWidget {
+class PlayerTopBar extends ConsumerWidget {
   final String title;
   final String? subtitle;
   final VoidCallback? onBack;
@@ -22,10 +24,19 @@ class PlayerTopBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final edge = isTv
         ? HotstarPlayerStyle.tvEdgeInset
         : HotstarPlayerStyle.edgeInset;
+
+    final activeDecoder = ref.watch(playerControllerProvider.select((s) => s.activeDecoderName));
+    final useExoPlayer = ref.watch(playerControllerProvider.select((s) => s.useExoPlayer));
+    final nameLower = activeDecoder.toLowerCase();
+    
+    final isHw = useExoPlayer
+        ? (activeDecoder != 'SW' && !nameLower.contains('software') && !nameLower.contains('.sw.') && !nameLower.contains('google.h264'))
+        : (activeDecoder != 'SW');
+
     return DecoratedBox(
       decoration: const BoxDecoration(gradient: HotstarPlayerStyle.topGradient),
       child: SafeArea(
@@ -49,15 +60,45 @@ class PlayerTopBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(
-                        subtitle!,
-                        style: const TextStyle(
-                          color: HotstarPlayerStyle.secondaryText,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              subtitle!,
+                              style: const TextStyle(
+                                color: HotstarPlayerStyle.secondaryText,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message: 'Decoder: $activeDecoder',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isHw ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: isHw ? Colors.green : Colors.grey,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                isHw ? 'HW' : 'SW',
+                                style: TextStyle(
+                                  color: isHw ? Colors.green : Colors.grey,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     Text(
                       title,

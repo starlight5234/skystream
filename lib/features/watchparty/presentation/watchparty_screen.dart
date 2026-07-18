@@ -160,6 +160,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
           peerConnection: peerConnection,
           dataChannel: dataChannel,
           creatorService: isHost ? _creatorService : null,
+          joinerService: isHost ? null : _joinerService,
           database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
           isHost: isHost,
           hostName: hostName,

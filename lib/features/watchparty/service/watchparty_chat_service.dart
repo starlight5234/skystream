@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../data/watchparty_database.dart';
 import 'watchparty_creator_service.dart';
+import 'watchparty_joiner_service.dart';
 import 'watchparty_crypto.dart';
 
 class WatchPartyChatService extends ChangeNotifier {
-  final RTCPeerConnection? _peerConnection;
-  final RTCDataChannel? _dataChannel;
+  RTCPeerConnection? _peerConnection;
+  RTCDataChannel? _dataChannel;
   final WatchPartyCreatorService? _creatorService;
+  final WatchPartyJoinerService? _joinerService;
   final WatchPartyDatabase _database;
   final bool _isHost;
   final String _hostName;
@@ -29,6 +31,7 @@ class WatchPartyChatService extends ChangeNotifier {
     RTCPeerConnection? peerConnection,
     RTCDataChannel? dataChannel,
     WatchPartyCreatorService? creatorService,
+    WatchPartyJoinerService? joinerService,
     required WatchPartyDatabase database,
     required bool isHost,
     required String hostName,
@@ -37,6 +40,7 @@ class WatchPartyChatService extends ChangeNotifier {
   })  : _peerConnection = peerConnection,
         _dataChannel = dataChannel,
         _creatorService = creatorService,
+        _joinerService = joinerService,
         _database = database,
         _isHost = isHost,
         _hostName = hostName,
@@ -58,6 +62,8 @@ class WatchPartyChatService extends ChangeNotifier {
 
   bool get connectionClosed => _connectionClosed;
   String? get kickMessage => _kickMessage;
+  bool get isReconnecting => _isReconnecting;
+  int get reconnectAttempts => _reconnectAttempts;
 
   void _setupHostListeners() {
     if (_creatorService == null) return;
@@ -96,10 +102,15 @@ class WatchPartyChatService extends ChangeNotifier {
             } catch (_) {}
           } else if (action == 'pong') {
             _lastSeen = DateTime.now();
-          } else if (action == 'leave' || action == 'kick') {
+          } else if (action == 'leave' || action == 'kick' || action == 'host_ended') {
             _connectionClosed = true;
-            _kickMessage = action == 'kick' ? 'You have been kicked from the lobby.' : null;
+            _kickMessage = action == 'host_ended'
+                ? 'The host has ended the watch party.'
+                : (action == 'kick' ? 'You have been kicked from the lobby.' : null);
             notifyListeners();
+          } else if (action == 'peer_disconnected') {
+            final guest = decoded['guest'] as String? ?? 'A peer';
+            _addSystemMessage('$guest has left the watch party.');
           }
           return;
         }
@@ -143,6 +154,51 @@ class WatchPartyChatService extends ChangeNotifier {
     _setupDbListener();
   }
 
+  int _reconnectAttempts = 0;
+  bool _isReconnecting = false;
+
+  Future<void> _attemptReconnection() async {
+    if (_isReconnecting) return;
+    _isReconnecting = true;
+    _reconnectAttempts++;
+    notifyListeners();
+    
+    final joiner = _joinerService;
+    if (joiner == null) {
+      _connectionClosed = true;
+      _kickMessage = 'Reconnection failed: Joiner service is unavailable.';
+      _isReconnecting = false;
+      notifyListeners();
+      return;
+    }
+
+    final success = await joiner.reconnect();
+    if (success) {
+      _peerConnection = joiner.peerConnection;
+      _dataChannel = joiner.dataChannel;
+      _isReconnecting = false;
+      _reconnectAttempts = 0;
+      _lastSeen = DateTime.now();
+      _setupGuestListeners(); // Re-register data channel event handlers
+      _addSystemMessage('Reconnected to host.');
+      notifyListeners();
+    } else {
+      _isReconnecting = false;
+      if (_reconnectAttempts >= 3) {
+        _connectionClosed = true;
+        _kickMessage = 'Connection lost after 3 reconnection attempts.';
+        notifyListeners();
+      } else {
+        notifyListeners();
+        // Wait 15 seconds, then try again if still not connected and not closed
+        await Future<void>.delayed(const Duration(seconds: 15));
+        if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
+          _attemptReconnection();
+        }
+      }
+    }
+  }
+
   void _startGuestKeepAliveTimer() {
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       if (_connectionClosed || _dataChannel == null) {
@@ -150,18 +206,10 @@ class WatchPartyChatService extends ChangeNotifier {
         return;
       }
 
-      // Send ping to host
-      final jsonMsg = jsonEncode({'type': 'control', 'action': 'ping'});
-      try {
-        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
-      } catch (_) {}
-
-      // Check timeout
+      // Check timeout (no ping received from host for >30s)
       if (DateTime.now().difference(_lastSeen) > const Duration(seconds: 30)) {
-        _connectionClosed = true;
-        _kickMessage = 'Connection lost: Host did not respond to keep-alive pings.';
-        notifyListeners();
         timer.cancel();
+        _attemptReconnection();
       }
     });
   }
@@ -230,6 +278,7 @@ class WatchPartyChatService extends ChangeNotifier {
   }
 
   void _cleanup() {
+    _connectionClosed = true;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     if (_lobbyDbSubscription != null) {

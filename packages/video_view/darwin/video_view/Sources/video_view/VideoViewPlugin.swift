@@ -762,6 +762,8 @@ public class VideoViewPlugin: NSObject, FlutterPlugin {
 	public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
 		var response: Any?
 		switch call.method {
+		case "getHardwareDecoders":
+			response = ["hevc", "h264", "vp9", "av1"]
 		case "create":
 			let player = VideoController(registrar: registrar)
 			players[player.id] = player

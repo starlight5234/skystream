@@ -397,7 +397,10 @@ class VideoControllerImplementation extends VideoController {
     playbackState.value = .closed;
     overrideAudio.value = overrideSubtitle.value = null;
     displayMode.value = .normal;
+    decoderName.value = 'SW';
   }
+
+  static Future<List<String>> getHardwareDecoders() async => [];
 }
 
 String _translateSource(String asset) {
