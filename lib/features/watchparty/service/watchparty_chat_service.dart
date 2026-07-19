@@ -156,8 +156,11 @@ class WatchPartyChatService extends ChangeNotifier {
 
     _dataChannel!.onDataChannelState = (state) {
       if (state == RTCDataChannelState.RTCDataChannelClosed) {
-        _connectionClosed = true;
-        notifyListeners();
+        if (!_connectionClosed && !_isReconnecting) {
+          _attemptReconnection();
+        } else if (_connectionClosed) {
+          notifyListeners();
+        }
       }
     };
 

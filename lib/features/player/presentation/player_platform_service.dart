@@ -40,25 +40,7 @@ class PlayerPlatformService {
   }
 
   void updateOrientation(int? width, int? height) {
-    try {
-      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) return;
-    } catch (e) {
-      if (kDebugMode) debugPrint('PlayerPlatformService.updateOrientation: $e');
-    }
-
-    if (width != null && height != null && width > 0 && height > 0) {
-      if (width >= height) {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-      } else {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-        ]);
-      }
-    }
+    // Let the user decide when to rotate or allow auto-rotation via system sensors.
   }
 
   Future<bool> toggleFullscreen() async {

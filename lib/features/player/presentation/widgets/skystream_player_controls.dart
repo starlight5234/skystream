@@ -964,8 +964,20 @@ class SkyStreamPlayerControlsState
         // Start the hide timer so controls auto-hide after the timeout.
         if (_isPlaying) _startHideTimer();
       },
-      child: GestureDetector(
-        onVerticalDragStart: _handleDragStart,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          if (_isVisible && _isPlaying) {
+            _startHideTimer();
+          }
+        },
+        onPointerMove: (_) {
+          if (_isVisible && _isPlaying) {
+            _startHideTimer();
+          }
+        },
+        child: GestureDetector(
+          onVerticalDragStart: _handleDragStart,
         onVerticalDragUpdate: _handleDragUpdate,
         onVerticalDragEnd: _handleDragEnd,
         onHorizontalDragStart: _handleHorizontalDragStart,
@@ -1235,7 +1247,8 @@ class SkyStreamPlayerControlsState
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildActionButton({

@@ -36,6 +36,7 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
   }
 
   void clearSession() {
+    state?.chatService.dispose();
     state = null;
   }
 }
@@ -47,7 +48,7 @@ final activeWatchPartyProvider =
 
 class WatchPartyLandscapeChatNotifier extends Notifier<bool> {
   @override
-  bool build() => true;
+  bool build() => false;
 
   void toggle() {
     state = !state;

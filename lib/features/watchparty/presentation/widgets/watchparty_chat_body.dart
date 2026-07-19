@@ -12,7 +12,6 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
   final String passcode;
   final WatchPartyCreatorService? creatorService;
   final VoidCallback? onCopyInviteLink;
-  final VoidCallback? onShowQRDialog;
 
   const WatchPartyChatBody({
     super.key,
@@ -21,7 +20,6 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
     required this.passcode,
     this.creatorService,
     this.onCopyInviteLink,
-    this.onShowQRDialog,
   });
 
   @override
@@ -111,6 +109,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
     final messages = widget.chatService.messages;
     final isHostWaiting = widget.isHost &&
         (widget.creatorService?.activeDataChannels.isEmpty ?? true) &&
+        !(widget.creatorService?.hasAnyGuestJoined ?? false) &&
         !_hasGuestJoinedBefore;
 
     return Column(
@@ -176,14 +175,6 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                             icon: const Icon(Icons.copy_rounded, size: 16),
                             label: const Text('Copy Invite Link'),
                           ),
-                        if (widget.onShowQRDialog != null) ...[
-                          const SizedBox(width: 12),
-                          ElevatedButton.icon(
-                            onPressed: widget.onShowQRDialog,
-                            icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                            label: const Text('Show QR'),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -322,6 +313,8 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
             ),
           ),
           SafeArea(
+            left: false,
+            right: false,
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(LayoutConstants.spacingMd),
@@ -355,7 +348,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                               },
                               child: Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
                                 child: Text(
                                   emoji,
                                   style: const TextStyle(fontSize: 18),

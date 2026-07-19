@@ -15,8 +15,10 @@ import '../../../core/storage/settings_repository.dart';
 import '../service/watchparty_creator_service.dart';
 import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
+import '../service/watchparty_chat_service.dart';
 import 'package:go_router/go_router.dart';
 import 'watchparty_chat_screen.dart';
+import 'providers/active_watchparty_provider.dart';
 
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? host;
@@ -38,7 +40,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
   bool _isHosting = false;
-  late final String _guestName;
   String? _activeHostName;
   WatchPartyDatabase? _activeDatabase;
   String? _lobbyPasscode;
@@ -49,7 +50,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   @override
   void initState() {
     super.initState();
-    _guestName = 'Guest_${Random().nextInt(10000)}';
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.host != null && widget.code != null) {
@@ -152,35 +152,38 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
 
     final settings = ref.read(generalSettingsProvider);
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
+    final resolvedUserName = settings.watchPartyUsername;
 
-    unawaited(Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) => WatchPartyChatScreen(
-          peerConnection: peerConnection,
-          dataChannel: dataChannel,
-          creatorService: isHost ? _creatorService : null,
-          joinerService: isHost ? null : _joinerService,
-          database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
-          isHost: isHost,
-          hostName: hostName,
-          userName: isHost
-              ? hostName
-              : (settings.watchPartyUsername.isNotEmpty
-                  ? settings.watchPartyUsername
-                  : _guestName),
-          passcode: passcode,
-        ),
+    final chatService = WatchPartyChatService(
+      peerConnection: peerConnection,
+      dataChannel: dataChannel,
+      creatorService: isHost ? _creatorService : null,
+      joinerService: isHost ? null : _joinerService,
+      database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
+      isHost: isHost,
+      hostName: hostName,
+      userName: resolvedUserName,
+      passcode: passcode,
+    );
+
+    ref.read(activeWatchPartyProvider.notifier).setActiveSession(
+      ActiveWatchPartyState(
+        peerConnection: peerConnection,
+        dataChannel: dataChannel,
+        creatorService: isHost ? _creatorService : null,
+        database: _activeDatabase ?? ref.read(watchPartyDatabaseProvider),
+        isHost: isHost,
+        hostName: hostName,
+        userName: resolvedUserName,
+        passcode: passcode,
+        chatService: chatService,
       ),
-    ).then((_) {
-      setState(() {
-        _creatorService = null;
-        _joinerService = null;
-      });
-      if (mounted) {
-        context.go('/watchparty');
-      }
-    }));
+    );
+
+    setState(() {
+      _creatorService = null;
+      _joinerService = null;
+    });
   }
 
   Future<void> _handleDeepLinkJoin({String? host, String? code}) async {
@@ -318,7 +321,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                   _joinerService!.addListener(_onJoinerUpdate);
                   unawaited(_joinerService!.startJoining(
                     targetHost,
-                    settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : _guestName,
+                    settings.watchPartyUsername,
                     passcode,
                     customTurnUsername: turnUser,
                     customTurnPassword: turnPass,
@@ -423,9 +426,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   void _executeStartHost(String? passcode) {
     final settings = ref.read(generalSettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
-    final name = settings.watchPartyUsername.isNotEmpty
-        ? settings.watchPartyUsername
-        : 'Host_${DateTime.now().millisecondsSinceEpoch % 1000}';
+    final name = settings.watchPartyUsername;
 
     _activeDatabase = database;
     _isHosting = true;
@@ -566,7 +567,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     _joinerService!.addListener(_onJoinerUpdate);
     unawaited(_joinerService!.startJoining(
       hostName,
-      settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : _guestName,
+      settings.watchPartyUsername,
       passcode,
     ));
   }
@@ -641,6 +642,11 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeSession = ref.watch(activeWatchPartyProvider);
+    if (activeSession != null) {
+      return WatchPartyChatScreen(session: activeSession);
+    }
+
     final settings = ref.watch(generalSettingsProvider);
     final isDbConfigured = settings.watchPartyProjectId.isNotEmpty && 
                            settings.watchPartyAnonKey.isNotEmpty;
@@ -805,9 +811,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    settings.watchPartyUsername.isNotEmpty
-                                        ? settings.watchPartyUsername
-                                        : 'Guest_${_guestName.split('_').last}',
+                                    settings.watchPartyUsername,
                                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                           fontWeight: FontWeight.bold,
                                         ),

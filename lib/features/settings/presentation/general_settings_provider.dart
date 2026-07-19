@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/storage/settings_repository.dart';
 
@@ -62,6 +64,18 @@ class GeneralSettingsNotifier extends _$GeneralSettingsNotifier {
     final localTurnUser = repository.getWatchPartyTurnUsername();
     final localTurnPass = repository.getWatchPartyTurnPassword();
 
+    final savedUsername = repository.getWatchPartyUsername();
+    final String watchPartyUsername;
+    if (savedUsername == null || savedUsername.trim().isEmpty) {
+      final rand = Random().nextInt(9000) + 1000;
+      watchPartyUsername = 'User_$rand';
+      scheduleMicrotask(() async {
+        await repository.setWatchPartyUsername(watchPartyUsername);
+      });
+    } else {
+      watchPartyUsername = savedUsername;
+    }
+
     return GeneralSettings(
       watchHistoryEnabled: repository.isWatchHistoryEnabled(),
       defaultHomeScreen: repository.getDefaultHomeScreen(),
@@ -72,7 +86,7 @@ class GeneralSettingsNotifier extends _$GeneralSettingsNotifier {
       watchPartyAnonKey: (localKey != null && localKey.trim().isNotEmpty)
           ? localKey
           : const String.fromEnvironment('SUPABASE_ANON_KEY'),
-      watchPartyUsername: repository.getWatchPartyUsername() ?? '',
+      watchPartyUsername: watchPartyUsername,
       watchPartyTurnUsername: (localTurnUser != null && localTurnUser.trim().isNotEmpty)
           ? localTurnUser
           : const String.fromEnvironment('TURN_USERNAME'),

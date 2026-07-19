@@ -17,7 +17,6 @@ import '../../watchparty/presentation/providers/active_watchparty_provider.dart'
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../../watchparty/data/watchparty_database.dart';
 import '../../watchparty/data/supabase_watchparty_database.dart';
 import '../../watchparty/service/watchparty_creator_service.dart';
@@ -102,8 +101,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _isTv = deviceProfile?.isTv ?? false;
     _isTablet = deviceProfile?.isTablet ?? false;
 
+    final activeSession = ref.read(activeWatchPartyProvider);
+    if (activeSession != null) {
+      scheduleMicrotask(() {
+        ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(true);
+      });
+    }
+
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      if (!_isTv) {
+        if (activeSession == null) {
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        } else {
+          SystemChrome.setPreferredOrientations([]);
+        }
+      }
     }
     WakelockPlus.enable();
 
@@ -608,6 +624,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 child: Consumer(
                   builder: (context, ref, _) {
                     final activeSession = ref.watch(activeWatchPartyProvider);
+                    ref.listen<ActiveWatchPartyState?>(activeWatchPartyProvider, (previous, next) {
+                      if (!_isTv && (Platform.isAndroid || Platform.isIOS)) {
+                        if (next == null) {
+                          SystemChrome.setPreferredOrientations([
+                            DeviceOrientation.landscapeLeft,
+                            DeviceOrientation.landscapeRight,
+                          ]);
+                        } else {
+                          SystemChrome.setPreferredOrientations([]);
+                        }
+                      }
+                    });
+
                     final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
                     final orientation = MediaQuery.of(context).orientation;
                     final isPortrait = orientation == Orientation.portrait;
@@ -690,7 +719,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                 configuration: SubtitleViewConfiguration(
                                   style: TextStyle(
                                     fontSize:
-                                        subtitleSettings?.subtitleSize ?? 22.0,
+                                        (subtitleSettings?.subtitleSize ?? 22.0) *
+                                            (isPortrait ? 0.65 : 1.0),
                                     color: Color(
                                       subtitleSettings?.subtitleColor ?? 0xFFFFFFFF,
                                     ),
@@ -935,11 +965,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
 
     final settings = ref.read(generalSettingsProvider);
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
-    final resolvedUserName = isHost
-        ? hostName
-        : (settings.watchPartyUsername.isNotEmpty
-            ? settings.watchPartyUsername
-            : 'Guest_${Random().nextInt(10000)}');
+    final resolvedUserName = settings.watchPartyUsername;
 
     final chatService = WatchPartyChatService(
       peerConnection: peerConnection,
@@ -966,14 +992,13 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
         chatService: chatService,
       ),
     );
+    ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(true);
   }
 
   void _executeStartHost() {
     final settings = ref.read(generalSettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
-    final name = settings.watchPartyUsername.isNotEmpty
-        ? settings.watchPartyUsername
-        : 'Host_${DateTime.now().millisecondsSinceEpoch % 1000}';
+    final name = settings.watchPartyUsername;
 
     setState(() {
       _setupLoading = true;
@@ -1002,9 +1027,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
 
     final settings = ref.read(generalSettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
-    final guestName = settings.watchPartyUsername.isNotEmpty
-        ? settings.watchPartyUsername
-        : 'Guest_${Random().nextInt(10000)}';
+    final guestName = settings.watchPartyUsername;
 
     setState(() {
       _setupLoading = true;
@@ -1054,44 +1077,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     );
   }
 
-  void _showQRDialog() {
-    final settings = ref.read(generalSettingsProvider);
-    final inviteUrl = _buildInviteUrl(settings);
 
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        surfaceTintColor: Colors.transparent,
-        title: const Text('Invite QR Code'),
-        content: SizedBox(
-          width: 250,
-          height: 250,
-          child: Center(
-            child: QrImageView(
-              data: inviteUrl,
-              version: QrVersions.auto,
-              size: 200.0,
-              gapless: false,
-              eyeStyle: QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              dataModuleStyle: QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showPeopleDialog() {
     final session = widget.session!;
@@ -1228,13 +1214,13 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     return Container(
       width: isPortrait ? double.infinity : 320,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: Theme.of(context).colorScheme.surface,
         border: Border(
           left: isPortrait
               ? BorderSide.none
-              : BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
+              : BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1.0),
           top: isPortrait
-              ? BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2))
+              ? BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1.0)
               : BorderSide.none,
         ),
       ),
@@ -1252,31 +1238,34 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.people_alt, size: 20),
+                      const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                       const SizedBox(width: 8),
                       const Text(
-                        'Watch Party Chat',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        'Chat',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.link_rounded, size: 20),
+                        icon: const Icon(Icons.link_rounded, size: 18),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         tooltip: 'Copy Invite Link',
                         onPressed: _copyInviteLink,
                       ),
+                      const SizedBox(width: 12),
                       IconButton(
-                        icon: const Icon(Icons.qr_code_2_rounded, size: 20),
-                        tooltip: 'Show QR Code',
-                        onPressed: _showQRDialog,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.power_settings_new_rounded, size: 20),
+                        icon: const Icon(Icons.power_settings_new_rounded, size: 18),
                         color: Colors.redAccent,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         tooltip: session.isHost ? 'End Lobby & Leave' : 'Leave Lobby',
                         onPressed: _leaveSessionConfirm,
                       ),
+                      const SizedBox(width: 4),
                       PopupMenuButton<String>(
                         surfaceTintColor: Colors.transparent,
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.more_vert_rounded, size: 18),
                         onSelected: (val) {
                           if (val == 'people') {
                             _showPeopleDialog();
@@ -1289,7 +1278,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                             value: 'people',
                             child: Row(
                               children: [
-                                Icon(Icons.people_outline, size: 20),
+                                Icon(Icons.people_outline, size: 18),
                                 SizedBox(width: 8),
                                 Text('People'),
                               ],
@@ -1299,7 +1288,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                             value: 'logs',
                             child: Row(
                               children: [
-                                Icon(Icons.receipt_long_outlined, size: 20),
+                                Icon(Icons.receipt_long_outlined, size: 18),
                                 SizedBox(width: 8),
                                 Text('Connection Logs'),
                               ],
@@ -1307,12 +1296,17 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                           ),
                         ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () {
-                          ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
-                        },
-                      ),
+                      if (!isPortrait) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1323,7 +1317,6 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                     passcode: session.passcode,
                     creatorService: session.creatorService,
                     onCopyInviteLink: _copyInviteLink,
-                    onShowQRDialog: _showQRDialog,
                   ),
                 ),
               ],

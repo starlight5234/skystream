@@ -20,6 +20,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   final Map<String, RTCDataChannel> activeDataChannels = {};
   final Set<String> _pendingGuests = {};
   late final WatchPartyMessageBroker messageBroker;
+  bool hasAnyGuestJoined = false;
 
   void Function(String guestName, RTCDataChannel channel)? onGuestConnected;
   void Function(String guestName)? onGuestDisconnected;
@@ -143,11 +144,11 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       final hostAnswer = guestData['host_answer'] as String?;
 
       if (hostAnswer != null) continue;
+      if (_pendingGuests.contains(guestName)) continue;
       if (activeConnections.containsKey(guestName)) {
         logMessage('Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...');
         _disconnectGuest(guestName);
       }
-      if (_pendingGuests.contains(guestName)) continue;
 
       _pendingGuests.add(guestName);
       logMessage('Guest offer received from "$guestName". Processing connection in background...');
@@ -163,6 +164,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
           pc.onDataChannel = (dc) {
             logMessage('Data channel received from guest: "$guestName"');
+            hasAnyGuestJoined = true;
             activeDataChannels[guestName] = dc;
             messageBroker.registerGuest(guestName, dc);
 
@@ -348,6 +350,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       unawaited(dc.close());
     }
     activeDataChannels.clear();
+    hasAnyGuestJoined = false;
 
     for (final pc in activeConnections.values) {
       unawaited(pc.dispose());
