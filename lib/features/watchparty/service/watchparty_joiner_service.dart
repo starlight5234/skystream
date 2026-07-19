@@ -33,7 +33,7 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
     _customTurnUsername = customTurnUsername;
     _customTurnPassword = customTurnPassword;
 
-    statusMessage = 'Joining lobby...';
+    statusMessage = 'Checking for lobby...';
     logMessage('Join session started for guest "$guestName" joining host "$hostName" with passcode');
 
     try {
@@ -43,7 +43,10 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
 
       // 1. Fetch Host Lobby to verify its existence
       logMessage('Verifying host lobby on database...');
-      final lobby = await database.getLobby(hostName: hostName);
+      final lobby = await database.getLobby(hostName: hostName).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('Connection to database timed out while verifying lobby.'),
+      );
       if (!isLoading) return;
       if (lobby == null) {
         throw Exception('Lobby not found.');

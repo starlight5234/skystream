@@ -17,6 +17,7 @@ import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
 import 'providers/active_watchparty_provider.dart';
 import '../../../core/services/notification_service.dart';
+import 'widgets/watchparty_chat_body.dart';
 
 class WatchPartyChatScreen extends ConsumerStatefulWidget {
   final RTCPeerConnection? peerConnection;
@@ -393,9 +394,6 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = _chatService.messages;
-    final isHostWaiting = widget.isHost && (widget.creatorService?.activeDataChannels.isEmpty ?? true) && !_hasGuestJoinedBefore;
-
     return PopScope(
       canPop: _canPop,
       onPopInvokedWithResult: (didPop, result) async {
@@ -427,6 +425,17 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
               icon: const Icon(Icons.qr_code_2_rounded),
               tooltip: 'Show QR Code',
               onPressed: _showQRDialog,
+            ),
+            IconButton(
+              icon: const Icon(Icons.power_settings_new_rounded),
+              color: Colors.redAccent,
+              tooltip: widget.isHost ? 'End Lobby & Leave' : 'Leave Lobby',
+              onPressed: () async {
+                final shouldPop = await _onWillPop();
+                if (shouldPop && mounted) {
+                  _safePop();
+                }
+              },
             ),
             PopupMenuButton<String>(
               surfaceTintColor: Colors.transparent,
@@ -462,265 +471,13 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            if (_chatService.isReconnecting)
-              Container(
-                width: double.infinity,
-                color: Colors.amber,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Reconnecting to host (Attempt ${_chatService.reconnectAttempts}/3)...',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            if (isHostWaiting)
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(LayoutConstants.spacingLg),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Waiting for guests to join...',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Lobby Passcode: ${widget.passcode}',
-                          style: const TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _copyInviteLink,
-                              icon: const Icon(Icons.copy_rounded, size: 16),
-                              label: const Text('Copy Invite Link'),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton.icon(
-                              onPressed: _showQRDialog,
-                              icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                              label: const Text('Show QR'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            else ...[
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: LayoutConstants.spacingMd,
-                    vertical: LayoutConstants.spacingSm,
-                  ),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[index];
-                    final isSystem = msg['type'] == 'system';
-
-                    if (isSystem) {
-                      return Align(
-                        alignment: Alignment.center,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, width: 0.5),
-                            borderRadius: BorderRadius.circular(20),
-                            color: Theme.of(context).colorScheme.surfaceContainerLow,
-                          ),
-                          child: Text(
-                            msg['text'] as String,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    final isMe = msg['isMe'] as bool;
-                    final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
-                    final text = msg['text'] as String;
-
-                    final reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
-                    final isEmojiReaction = reactions.contains(text.trim());
-
-                    if (isEmojiReaction) {
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Column(
-                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
-                              child: Text(
-                                isMe ? 'Me' : sender,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                              child: Text(
-                                text.trim(),
-                                style: const TextStyle(fontSize: 32),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Column(
-                        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
-                            child: Text(
-                              isMe ? 'Me' : sender,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isMe
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(16).copyWith(
-                                topRight: isMe ? const Radius.circular(0) : const Radius.circular(16),
-                                topLeft: isMe ? const Radius.circular(16) : const Radius.circular(0),
-                              ),
-                            ),
-                            child: Text(
-                              text,
-                              style: TextStyle(
-                                color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimary
-                                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(LayoutConstants.spacingMd),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
-                                return InkWell(
-                                  borderRadius: BorderRadius.circular(15),
-                                  onTap: () {
-                                    _chatService.sendMessage(emoji);
-                                    _scrollToBottom();
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-                                    child: Text(
-                                      emoji,
-                                      style: const TextStyle(fontSize: 18),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              decoration: const InputDecoration(
-                                hintText: 'Type a message...',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.all(Radius.circular(24)),
-                                ),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              ),
-                              onSubmitted: (_) => _sendMessage(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FloatingActionButton(
-                            mini: true,
-                            onPressed: _sendMessage,
-                            child: const Icon(Icons.send_rounded),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ]
-          ],
+        body: WatchPartyChatBody(
+          chatService: _chatService,
+          isHost: widget.isHost,
+          passcode: widget.passcode,
+          creatorService: widget.creatorService,
+          onCopyInviteLink: _copyInviteLink,
+          onShowQRDialog: _showQRDialog,
         ),
       ),
     );

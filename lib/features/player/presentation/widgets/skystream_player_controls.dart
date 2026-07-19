@@ -1336,16 +1336,15 @@ class SkyStreamPlayerControlsState
     // Audio and Subtitles all open the same side panel, each landing on its own
     // tab; the panel applies every choice instantly.
     final actions = <Widget>[
-      if (activeSession != null)
-        PlayerIconButton(
-          icon: Icons.chat_rounded,
-          tooltip: 'Toggle Chat',
-          onPressed: () {
-            ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
-          },
-          isTv: _isTv,
-          highlight: ref.watch(watchPartyLandscapeChatProvider),
-        ),
+      PlayerIconButton(
+        icon: Icons.chat_rounded,
+        tooltip: 'Toggle Chat',
+        onPressed: () {
+          ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+        },
+        isTv: _isTv,
+        highlight: ref.watch(watchPartyLandscapeChatProvider),
+      ),
       PlayerIconButton(
         icon: Icons.source,
         tooltip: l10n.sources,

@@ -75,6 +75,16 @@ class WatchPartyChatService extends ChangeNotifier {
         onAllGuestsLeft?.call();
       }
     };
+
+    _creatorService!.addListener(_onCreatorServiceUpdated);
+  }
+
+  void _onCreatorServiceUpdated() {
+    if (_creatorService?.error != null) {
+      _connectionClosed = true;
+      _kickMessage = _creatorService!.error;
+      notifyListeners();
+    }
   }
 
   void _onBrokerUpdated() {
@@ -293,6 +303,7 @@ class WatchPartyChatService extends ChangeNotifier {
   void dispose() {
     if (_isHost && _creatorService != null) {
       _creatorService!.messageBroker.removeListener(_onBrokerUpdated);
+      _creatorService!.removeListener(_onCreatorServiceUpdated);
     }
     _cleanup();
     super.dispose();

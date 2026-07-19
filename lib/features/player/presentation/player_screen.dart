@@ -14,6 +14,20 @@ import 'package:video_view/video_view.dart' as vv;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
 import '../../watchparty/presentation/providers/active_watchparty_provider.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../../watchparty/data/watchparty_database.dart';
+import '../../watchparty/data/supabase_watchparty_database.dart';
+import '../../watchparty/service/watchparty_creator_service.dart';
+import '../../watchparty/service/watchparty_joiner_service.dart';
+import '../../watchparty/service/watchparty_chat_service.dart';
+import '../../watchparty/presentation/widgets/watchparty_chat_body.dart';
+import '../../watchparty/service/watchparty_crypto.dart';
+import '../../settings/presentation/general_settings_provider.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../watchparty/config/watchparty_config.dart';
 
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/providers/device_info_provider.dart';
@@ -597,7 +611,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
                     final orientation = MediaQuery.of(context).orientation;
                     final isPortrait = orientation == Orientation.portrait;
-                    final showChatPanel = activeSession != null && (isPortrait || showLandscapeChat);
+                    final showChatPanel = activeSession != null ? (isPortrait || showLandscapeChat) : showLandscapeChat;
 
                     if (orientation != _lastOrientation) {
                       _lastOrientation = orientation;
@@ -742,7 +756,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                 child: playerStack,
                               ),
                               Expanded(
-                                child: WatchPartyPlayerChatPanel(session: activeSession!),
+                                child: WatchPartyPlayerChatPanel(session: activeSession),
                               ),
                             ],
                           ),
@@ -755,7 +769,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               left: false,
                               top: false,
                               bottom: false,
-                              child: WatchPartyPlayerChatPanel(session: activeSession!),
+                              child: WatchPartyPlayerChatPanel(session: activeSession),
                             ),
                           ],
                         );
@@ -774,49 +788,442 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 }
 
 class WatchPartyPlayerChatPanel extends ConsumerStatefulWidget {
-  final ActiveWatchPartyState session;
-  const WatchPartyPlayerChatPanel({super.key, required this.session});
+  final ActiveWatchPartyState? session;
+  const WatchPartyPlayerChatPanel({super.key, this.session});
 
   @override
   ConsumerState<WatchPartyPlayerChatPanel> createState() => _WatchPartyPlayerChatPanelState();
 }
 
 class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChatPanel> {
-  final TextEditingController _textController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  // Join/Host Setup State
+  final _joinHostController = TextEditingController();
+  final _joinPasscodeController = TextEditingController();
+  WatchPartyCreatorService? _creatorService;
+  WatchPartyJoinerService? _joinerService;
+  bool _setupLoading = false;
+  String _setupStatus = '';
+  String? _setupError;
+  String? _lobbyPasscode;
+
+  ActiveWatchPartyState? _subscribedSession;
 
   @override
-  void dispose() {
-    _textController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _updateSessionSubscription();
   }
 
-  void _sendMessage() {
-    final text = _textController.text.trim();
-    if (text.isNotEmpty) {
-      widget.session.chatService.sendMessage(text);
-      _textController.clear();
-      _scrollToBottom();
+  @override
+  void didUpdateWidget(WatchPartyPlayerChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateSessionSubscription();
+  }
+
+  void _updateSessionSubscription() {
+    if (_subscribedSession != widget.session) {
+      _subscribedSession?.chatService.removeListener(_onChatServiceStateChanged);
+      _subscribedSession = widget.session;
+      _subscribedSession?.chatService.addListener(_onChatServiceStateChanged);
     }
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
+  void _onChatServiceStateChanged() {
+    if (!mounted) return;
+    final session = widget.session;
+    if (session == null) return;
+
+    if (session.chatService.connectionClosed) {
+      session.chatService.removeListener(_onChatServiceStateChanged);
+      _subscribedSession = null;
+
+      final msg = session.chatService.kickMessage ?? 'The watch party connection was closed.';
+      ref.read(notificationServiceProvider).showInfo(msg);
+      ref.read(activeWatchPartyProvider.notifier).clearSession();
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscribedSession?.chatService.removeListener(_onChatServiceStateChanged);
+    _joinHostController.dispose();
+    _joinPasscodeController.dispose();
+    _creatorService?.removeListener(_onCreatorUpdate);
+    _creatorService?.dispose();
+    _joinerService?.removeListener(_onJoinerUpdate);
+    _joinerService?.dispose();
+    super.dispose();
+  }
+
+  void _onCreatorUpdate() {
+    if (!mounted) return;
+    final service = _creatorService;
+    if (service == null) return;
+
+    if (service.error != null) {
+      final errorMsg = service.error!;
+      _creatorService?.removeListener(_onCreatorUpdate);
+      _creatorService = null;
+      setState(() {
+        _setupLoading = false;
+        _setupError = errorMsg;
+      });
+      return;
+    }
+
+    if (service.lobbyReady) {
+      _onP2PConnected(
+        peerConnection: null,
+        dataChannel: null,
+        isHost: true,
+        hostName: 'Host',
+      );
+      return;
+    }
+
+    setState(() {
+      _setupLoading = service.isLoading;
+      _setupStatus = service.statusMessage;
     });
+  }
+
+  void _onJoinerUpdate() {
+    if (!mounted) return;
+    final service = _joinerService;
+    if (service == null) return;
+
+    if (service.error != null) {
+      final errorMsg = service.error!;
+      _joinerService?.removeListener(_onJoinerUpdate);
+      _joinerService = null;
+      setState(() {
+        _setupLoading = false;
+        _setupError = errorMsg;
+      });
+      return;
+    }
+
+    if (service.connectionSuccess) {
+      _onP2PConnected(
+        peerConnection: service.peerConnection!,
+        dataChannel: service.dataChannel!,
+        isHost: false,
+        hostName: _joinHostController.text.trim(),
+      );
+      return;
+    }
+
+    setState(() {
+      _setupLoading = service.isLoading;
+      _setupStatus = service.statusMessage;
+    });
+  }
+
+  void _onP2PConnected({
+    RTCPeerConnection? peerConnection,
+    RTCDataChannel? dataChannel,
+    required bool isHost,
+    required String hostName,
+  }) {
+    setState(() {
+      _setupLoading = false;
+      _setupError = null;
+    });
+
+    _creatorService?.removeListener(_onCreatorUpdate);
+    _joinerService?.removeListener(_onJoinerUpdate);
+
+    final settings = ref.read(generalSettingsProvider);
+    final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
+    final resolvedUserName = isHost
+        ? hostName
+        : (settings.watchPartyUsername.isNotEmpty
+            ? settings.watchPartyUsername
+            : 'Guest_${Random().nextInt(10000)}');
+
+    final chatService = WatchPartyChatService(
+      peerConnection: peerConnection,
+      dataChannel: dataChannel,
+      creatorService: isHost ? _creatorService : null,
+      joinerService: isHost ? null : _joinerService,
+      database: ref.read(watchPartyDatabaseProvider),
+      isHost: isHost,
+      hostName: hostName,
+      userName: resolvedUserName,
+      passcode: passcode,
+    );
+
+    ref.read(activeWatchPartyProvider.notifier).setActiveSession(
+      ActiveWatchPartyState(
+        peerConnection: peerConnection,
+        dataChannel: dataChannel,
+        creatorService: isHost ? _creatorService : null,
+        database: ref.read(watchPartyDatabaseProvider),
+        isHost: isHost,
+        hostName: hostName,
+        userName: resolvedUserName,
+        passcode: passcode,
+        chatService: chatService,
+      ),
+    );
+  }
+
+  void _executeStartHost() {
+    final settings = ref.read(generalSettingsProvider);
+    final database = ref.read(watchPartyDatabaseProvider);
+    final name = settings.watchPartyUsername.isNotEmpty
+        ? settings.watchPartyUsername
+        : 'Host_${DateTime.now().millisecondsSinceEpoch % 1000}';
+
+    setState(() {
+      _setupLoading = true;
+      _setupError = null;
+      _setupStatus = 'Initializing WebRTC connection...';
+    });
+
+    _creatorService?.removeListener(_onCreatorUpdate);
+    _creatorService?.dispose();
+
+    _creatorService = WatchPartyCreatorService(settings, database);
+    _creatorService!.addListener(_onCreatorUpdate);
+    unawaited(_creatorService!.startHosting(name));
+  }
+
+  void _executeJoin() {
+    final hostName = _joinHostController.text.trim();
+    final passcode = _joinPasscodeController.text.trim();
+
+    if (hostName.isEmpty || passcode.isEmpty) {
+      setState(() {
+        _setupError = 'Host name and Passcode are required.';
+      });
+      return;
+    }
+
+    final settings = ref.read(generalSettingsProvider);
+    final database = ref.read(watchPartyDatabaseProvider);
+    final guestName = settings.watchPartyUsername.isNotEmpty
+        ? settings.watchPartyUsername
+        : 'Guest_${Random().nextInt(10000)}';
+
+    setState(() {
+      _setupLoading = true;
+      _setupError = null;
+      _setupStatus = 'Checking for lobby...';
+      _lobbyPasscode = passcode;
+    });
+
+    _joinerService?.removeListener(_onJoinerUpdate);
+    _joinerService?.dispose();
+
+    _joinerService = WatchPartyJoinerService(settings, database);
+    _joinerService!.addListener(_onJoinerUpdate);
+    unawaited(_joinerService!.startJoining(hostName, guestName, passcode));
+  }
+
+  void _cancelConnection() {
+    _creatorService?.cancelHosting();
+    _joinerService?.cancelJoining();
+    setState(() {
+      _setupLoading = false;
+      _setupError = null;
+      _setupStatus = '';
+    });
+  }
+
+  // Active Session UI Helpers
+  String _buildInviteUrl(GeneralSettings settings) {
+    final session = widget.session!;
+    final jsonStr = jsonEncode({
+      'db': settings.watchPartyProjectId.trim(),
+      'key': settings.watchPartyAnonKey.trim(),
+      'turn_user': settings.watchPartyTurnUsername.trim(),
+      'turn_pass': settings.watchPartyTurnPassword.trim(),
+    });
+    final encryptedCode = WatchPartyCrypto.encrypt(jsonStr, session.passcode, session.hostName);
+    return '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(session.hostName)}&code=${Uri.encodeComponent(encryptedCode)}';
+  }
+
+  void _copyInviteLink() {
+    final settings = ref.read(generalSettingsProvider);
+    final inviteUrl = _buildInviteUrl(settings);
+
+    unawaited(Clipboard.setData(ClipboardData(text: inviteUrl)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Invite link copied to clipboard!')),
+    );
+  }
+
+  void _showQRDialog() {
+    final settings = ref.read(generalSettingsProvider);
+    final inviteUrl = _buildInviteUrl(settings);
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Invite QR Code'),
+        content: SizedBox(
+          width: 250,
+          height: 250,
+          child: Center(
+            child: QrImageView(
+              data: inviteUrl,
+              version: QrVersions.auto,
+              size: 200.0,
+              gapless: false,
+              eyeStyle: QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              dataModuleStyle: QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPeopleDialog() {
+    final session = widget.session!;
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final guests = session.creatorService?.activeDataChannels.keys.toList() ?? [];
+            final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+            return AlertDialog(
+              surfaceTintColor: Colors.transparent,
+              title: const Text('Lobby Members'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isDesktop ? 400.0 : double.infinity,
+                ),
+                child: SizedBox(
+                  width: isDesktop ? 400.0 : double.maxFinite,
+                  child: guests.isEmpty
+                      ? const Text('No guests currently in the lobby.', style: TextStyle(color: Colors.grey))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: guests.length,
+                          itemBuilder: (context, idx) {
+                            final guest = guests[idx];
+                            return ListTile(
+                              title: Text(
+                                guest,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: session.isHost
+                                  ? IconButton(
+                                      icon: Icon(Icons.remove_circle_outline, color: Theme.of(context).colorScheme.primary),
+                                      tooltip: 'Kick',
+                                      onPressed: () {
+                                        session.creatorService?.kickGuest(guest);
+                                        setDialogState(() {});
+                                      },
+                                    )
+                                  : null,
+                            );
+                          },
+                        ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDiagnosticsLogs() {
+    final session = widget.session!;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        final logs = session.isHost
+            ? (session.creatorService?.diagnosticLogs ?? [])
+            : (session.chatService.messages.where((m) => m['type'] == 'system').map((m) => m['text'] as String).toList());
+        
+        final logsToShow = logs.isEmpty ? ['No connection diagnostic logs available.'] : logs;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Connection Diagnostic Logs',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: logsToShow.length,
+                  itemBuilder: (context, idx) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      logsToShow[idx],
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _leaveSessionConfirm() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Leave WatchParty?'),
+        content: const Text('Are you sure you want to disconnect from this watch party?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+
+    if (leave == true && mounted) {
+      await widget.session!.chatService.leaveParty();
+      ref.read(activeWatchPartyProvider.notifier).clearSession();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final orientation = MediaQuery.of(context).orientation;
     final isPortrait = orientation == Orientation.portrait;
+    final session = widget.session;
 
     return Container(
       width: isPortrait ? double.infinity : 320,
@@ -831,254 +1238,242 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
               : BorderSide.none,
         ),
       ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
-                ),
-              ),
-            ),
-            child: Row(
+      child: session != null
+          ? Column(
               children: [
-                const Icon(Icons.people_alt, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  'Watch Party Chat',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () {
-                    ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
-                  },
-                ),
-              ],
-            ),
-          ),
-          ListenableBuilder(
-            listenable: widget.session.chatService,
-            builder: (context, _) {
-              if (widget.session.chatService.isReconnecting) {
-                return Container(
-                  width: double.infinity,
-                  color: Colors.amber,
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+                      ),
+                    ),
+                  ),
                   child: Row(
                     children: [
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                        ),
-                      ),
+                      const Icon(Icons.people_alt, size: 20),
                       const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Reconnecting (Attempt ${widget.session.chatService.reconnectAttempts}/3)...',
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      const Text(
+                        'Watch Party Chat',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ],
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          Expanded(
-            child: ListenableBuilder(
-              listenable: widget.session.chatService,
-              builder: (context, _) {
-                final messages = widget.session.chatService.messages;
-                _scrollToBottom();
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, idx) {
-                    final msg = messages[idx];
-                    final isSystem = msg['type'] == 'system' || (msg['isSystem'] as bool? ?? false);
-                    if (isSystem) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              msg['text'] as String,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                              ),
-                              textAlign: TextAlign.center,
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.link_rounded, size: 20),
+                        tooltip: 'Copy Invite Link',
+                        onPressed: _copyInviteLink,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.qr_code_2_rounded, size: 20),
+                        tooltip: 'Show QR Code',
+                        onPressed: _showQRDialog,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.power_settings_new_rounded, size: 20),
+                        color: Colors.redAccent,
+                        tooltip: session.isHost ? 'End Lobby & Leave' : 'Leave Lobby',
+                        onPressed: _leaveSessionConfirm,
+                      ),
+                      PopupMenuButton<String>(
+                        surfaceTintColor: Colors.transparent,
+                        onSelected: (val) {
+                          if (val == 'people') {
+                            _showPeopleDialog();
+                          } else if (val == 'logs') {
+                            _showDiagnosticsLogs();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'people',
+                            child: Row(
+                              children: [
+                                Icon(Icons.people_outline, size: 20),
+                                SizedBox(width: 8),
+                                Text('People'),
+                              ],
                             ),
                           ),
-                        ),
-                      );
-                    }
-
-                    final isMe = msg['isMe'] as bool? ?? false;
-                    final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
-                    final text = msg['text'] as String;
-
-                    final reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
-                    final isEmojiReaction = reactions.contains(text.trim());
-
-                    if (isEmojiReaction) {
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Column(
-                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
-                              child: Text(
-                                isMe ? 'Me' : sender,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                              child: Text(
-                                text.trim(),
-                                style: const TextStyle(fontSize: 32),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Column(
-                        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
-                            child: Text(
-                              isMe ? 'Me' : sender,
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isMe
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12).copyWith(
-                                topRight: isMe ? const Radius.circular(0) : const Radius.circular(12),
-                                topLeft: isMe ? const Radius.circular(12) : const Radius.circular(0),
-                              ),
-                            ),
-                            child: Text(
-                              text,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isMe
-                                    ? Theme.of(context).colorScheme.onPrimary
-                                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          const PopupMenuItem(
+                            value: 'logs',
+                            child: Row(
+                              children: [
+                                Icon(Icons.receipt_long_outlined, size: 20),
+                                SizedBox(width: 8),
+                                Text('Connection Logs'),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
-                    width: 1,
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(15),
-                      onTap: () {
-                        widget.session.chatService.sendMessage(emoji);
-                        _scrollToBottom();
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
                 Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      hintText: 'Type a message...',
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(20)),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    onSubmitted: (_) => _sendMessage(),
+                  child: WatchPartyChatBody(
+                    chatService: session.chatService,
+                    isHost: session.isHost,
+                    passcode: session.passcode,
+                    creatorService: session.creatorService,
+                    onCopyInviteLink: _copyInviteLink,
+                    onShowQRDialog: _showQRDialog,
                   ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.send_rounded, size: 20),
-                  onPressed: _sendMessage,
                 ),
               ],
+            )
+          : Stack(
+              children: [
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.share_outlined, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Watch Party Setup',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 20),
+                            onPressed: () {
+                              ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_setupError != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  _setupError!,
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                            Text(
+                              'Host a Watch Party',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Start hosting a Watch Party so others can sync and watch this stream with you.',
+                              style: TextStyle(color: Colors.grey, fontSize: 11),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: _setupLoading ? null : _executeStartHost,
+                              icon: const Icon(Icons.add_to_queue_rounded, size: 18),
+                              label: const Text('Host Lobby'),
+                            ),
+                            const Divider(height: 32),
+                            Text(
+                              'Join a Watch Party',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Enter a host\'s nickname and room passcode to join their synchronized session.',
+                              style: TextStyle(color: Colors.grey, fontSize: 11),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _joinHostController,
+                              style: const TextStyle(fontSize: 13),
+                              decoration: const InputDecoration(
+                                labelText: 'Host Nickname',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                isDense: true,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _joinPasscodeController,
+                              style: const TextStyle(fontSize: 13),
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Passcode',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                isDense: true,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _setupLoading ? null : _executeJoin,
+                              icon: const Icon(Icons.group_add_rounded, size: 18),
+                              label: const Text('Join watch party'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_setupLoading)
+                  Container(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 24),
+                            Text(
+                              _setupStatus,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton(
+                              onPressed: _cancelConnection,
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

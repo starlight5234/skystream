@@ -93,12 +93,26 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       // Periodic polling fallback
       _pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
         try {
-          if (_lobbySubscription == null || error != null) {
+          if (_lobbySubscription == null || error != null || !_lobbyReady) {
             timer.cancel();
             return;
           }
           final row = await database.getLobby(hostName: hostName);
-          if (row != null && _lobbySubscription != null) {
+          
+          if (_lobbySubscription == null || error != null || !_lobbyReady) {
+            timer.cancel();
+            return;
+          }
+
+          if (row == null) {
+            logMessage('Lobby row for "$hostName" was deleted from the database. Expiring...');
+            error = 'Lobby expired due to inactivity.';
+            timer.cancel();
+            notifyListeners();
+            return;
+          }
+
+          if (_lobbySubscription != null) {
             final signaling = _parseSignaling(row['signaling']);
             if (signaling.isNotEmpty) {
               _processGuestOffers(signaling);

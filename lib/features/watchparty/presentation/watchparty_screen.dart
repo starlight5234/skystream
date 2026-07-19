@@ -305,10 +305,10 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     return;
                   }
 
-                  _activeDatabase = dbProvider;
+                   _activeDatabase = dbProvider;
                   setState(() {
                     _isLoading = true;
-                    _statusMessage = 'Joining lobby...';
+                    _statusMessage = 'Checking for lobby...';
                   });
 
                   _joinerService?.removeListener(_onJoinerUpdate);
@@ -556,7 +556,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     _activeDatabase = database;
     _isHosting = false;
     _isLoading = true;
-    _statusMessage = 'Joining lobby...';
+    _statusMessage = 'Checking for lobby...';
     setState(() {});
 
     _joinerService?.removeListener(_onJoinerUpdate);
