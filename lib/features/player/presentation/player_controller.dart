@@ -3274,8 +3274,11 @@ class PlayerController extends Notifier<PlayerState> {
     state = state.copyWith(showEpisodeList: false);
   }
 
-  void openSourcesPanel({int tab = 0}) {
-    state = state.copyWith(showSourcesPanel: true, sourcesPanelTab: tab);
+  void openSourcesPanel({int? tab}) {
+    state = state.copyWith(
+      showSourcesPanel: true,
+      sourcesPanelTab: tab ?? state.sourcesPanelTab,
+    );
   }
 
   void openContentPanel() {

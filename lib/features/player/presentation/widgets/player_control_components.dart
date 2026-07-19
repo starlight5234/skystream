@@ -13,6 +13,7 @@ class PlayerTopBar extends ConsumerWidget {
   final VoidCallback? onBack;
   final bool isTv;
   final FocusNode? backFocusNode;
+  final List<Widget>? actions;
 
   const PlayerTopBar({
     super.key,
@@ -21,6 +22,7 @@ class PlayerTopBar extends ConsumerWidget {
     this.onBack,
     this.isTv = false,
     this.backFocusNode,
+    this.actions,
   });
 
   @override
@@ -113,6 +115,10 @@ class PlayerTopBar extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (actions != null) ...[
+                const SizedBox(width: 12),
+                ...actions!,
+              ],
             ],
           ),
         ),

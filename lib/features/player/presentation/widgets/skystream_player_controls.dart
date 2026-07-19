@@ -560,7 +560,7 @@ class SkyStreamPlayerControlsState
 
   /// Open the sources/audio/subtitles side panel at [tab] (0=Sources, 1=Audio,
   /// 2=Subtitles).
-  void openSourcesPanel(int tab) {
+  void openSourcesPanel(int? tab) {
     _enterPanelMode();
     ref.read(playerControllerProvider.notifier).openSourcesPanel(tab: tab);
   }
@@ -1345,9 +1345,6 @@ class SkyStreamPlayerControlsState
 
     final activeSession = ref.watch(activeWatchPartyProvider);
 
-    // Right-side icon-only buttons (same style as resize/fullscreen). Sources,
-    // Audio and Subtitles all open the same side panel, each landing on its own
-    // tab; the panel applies every choice instantly.
     final actions = <Widget>[
       PlayerIconButton(
         icon: Icons.chat_rounded,
@@ -1357,24 +1354,6 @@ class SkyStreamPlayerControlsState
         },
         isTv: _isTv,
         highlight: ref.watch(watchPartyLandscapeChatProvider),
-      ),
-      PlayerIconButton(
-        icon: Icons.source,
-        tooltip: l10n.sources,
-        onPressed: () => openSourcesPanel(0),
-        isTv: _isTv,
-      ),
-      PlayerIconButton(
-        icon: Icons.audiotrack_rounded,
-        tooltip: l10n.audioTracks,
-        onPressed: () => openSourcesPanel(1),
-        isTv: _isTv,
-      ),
-      PlayerIconButton(
-        icon: Icons.subtitles_rounded,
-        tooltip: l10n.subtitles,
-        onPressed: () => openSourcesPanel(2),
-        isTv: _isTv,
       ),
       if (supportsPlaybackSpeed)
         PlayerIconButton(
@@ -1413,12 +1392,6 @@ class SkyStreamPlayerControlsState
           onPressed: openEpisodesPanel,
           isTv: _isTv,
         ),
-      PlayerIconButton(
-        icon: Icons.aspect_ratio_rounded,
-        tooltip: l10n.resize,
-        onPressed: cycleResize,
-        isTv: _isTv,
-      ),
       if (Platform.isAndroid && !_isTv)
         PlayerIconButton(
           icon: Icons.picture_in_picture_alt_rounded,
@@ -1437,6 +1410,24 @@ class SkyStreamPlayerControlsState
           onPressed: isDesktop ? toggleFullscreen : _toggleOrientation,
           isTv: _isTv,
         ),
+    ];
+
+    final topActions = <Widget>[
+      PlayerIconButton(
+        icon: Icons.aspect_ratio_rounded,
+        tooltip: l10n.resize,
+        onPressed: cycleResize,
+        isTv: _isTv,
+        iconSize: _isTv ? 34 : 30,
+      ),
+      const SizedBox(width: 8),
+      PlayerIconButton(
+        icon: Icons.settings_rounded,
+        tooltip: 'Settings',
+        onPressed: () => openSourcesPanel(null),
+        isTv: _isTv,
+        iconSize: _isTv ? 34 : 30,
+      ),
     ];
 
     // One overlay layer: a Column with top bar / center / bottom bar. No
@@ -1464,6 +1455,7 @@ class SkyStreamPlayerControlsState
                     onBack: widget.onBackPointer ?? () => context.pop(),
                     isTv: _isTv,
                     backFocusNode: _backFocusNode,
+                    actions: topActions,
                   ),
                 ),
                 // Center zone stays empty: the touch play/pause is rendered as
