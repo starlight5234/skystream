@@ -19,6 +19,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   final Map<String, RTCPeerConnection> activeConnections = {};
   final Map<String, RTCDataChannel> activeDataChannels = {};
   final Set<String> _pendingGuests = {};
+  final Set<String> _kickedGuests = {};
   late final WatchPartyMessageBroker messageBroker;
   bool hasAnyGuestJoined = false;
 
@@ -144,10 +145,11 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       final hostAnswer = guestData['host_answer'] as String?;
 
       if (hostAnswer != null) continue;
+      if (_kickedGuests.contains(guestName)) continue;
       if (_pendingGuests.contains(guestName)) continue;
       if (activeConnections.containsKey(guestName)) {
         logMessage('Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...');
-        _disconnectGuest(guestName);
+        _disconnectGuest(guestName, silentReconnect: true);
       }
 
       _pendingGuests.add(guestName);
@@ -233,6 +235,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   }
 
   void kickGuest(String guestName) {
+    _kickedGuests.add(guestName);
     logMessage('Kicking guest: "$guestName"');
     final dc = activeDataChannels[guestName];
     if (dc != null) {
@@ -244,21 +247,34 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     _disconnectGuest(guestName);
   }
 
-  void _disconnectGuest(String guestName) {
+  void _disconnectGuest(String guestName, {bool silentReconnect = false}) {
+    _pendingGuests.remove(guestName);
     if (!activeConnections.containsKey(guestName) && !activeDataChannels.containsKey(guestName)) {
       return;
     }
-    logMessage('Disconnecting guest: "$guestName"');
+    logMessage('Disconnecting guest: "$guestName"${silentReconnect ? " (reconnect cleanup)" : ""}');
     final pc = activeConnections.remove(guestName);
     final dc = activeDataChannels.remove(guestName);
 
-    unawaited(dc?.close());
-    unawaited(pc?.dispose());
+    if (pc != null) {
+      pc.onIceConnectionState = null;
+      pc.onIceGatheringState = null;
+      pc.onSignalingState = null;
+      pc.onDataChannel = null;
+      unawaited(pc.dispose());
+    }
 
-    unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
+    if (dc != null) {
+      dc.onDataChannelState = null;
+      dc.onMessage = null;
+      unawaited(dc.close());
+    }
 
-    messageBroker.unregisterGuest(guestName);
-    onGuestDisconnected?.call(guestName);
+    if (!silentReconnect) {
+      unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
+      messageBroker.unregisterGuest(guestName);
+      onGuestDisconnected?.call(guestName);
+    }
     notifyListeners();
   }
 

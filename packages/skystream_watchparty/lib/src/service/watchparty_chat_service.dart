@@ -135,6 +135,18 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
           } else if (action == 'peer_disconnected') {
             final guest = decoded['guest'] as String? ?? 'A peer';
             _addSystemMessage('$guest has left the watch party');
+          } else if (action == 'host_ended') {
+            _connectionClosed = true;
+            _isReconnecting = false;
+            _kickMessage = 'The host has ended the watch party.';
+            notifyListeners();
+            return;
+          } else if (action == 'kick') {
+            _connectionClosed = true;
+            _isReconnecting = false;
+            _kickMessage = 'You have been kicked from the watch party by the host.';
+            notifyListeners();
+            return;
           }
           return;
         }
@@ -185,6 +197,19 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _attemptReconnection() async {
     if (_isReconnecting || _connectionClosed) return;
+
+    // Check if host deleted the lobby before attempting reconnection
+    try {
+      final lobby = await _database.getLobby(hostName: _hostName);
+      if (lobby == null) {
+        _connectionClosed = true;
+        _isReconnecting = false;
+        _kickMessage = 'The host has ended the watch party.';
+        notifyListeners();
+        return;
+      }
+    } catch (_) {}
+
     _isReconnecting = true;
     _reconnectAttempts++;
     notifyListeners();
@@ -243,6 +268,8 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     _lobbyDbSubscription = _database.subscribeToLobby(hostName: _hostName).listen((row) {
       if (row == null) {
         _connectionClosed = true;
+        _isReconnecting = false;
+        _kickMessage = 'The host has ended the watch party.';
         notifyListeners();
       }
     });

@@ -51,6 +51,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     _addSystemMessage('$guestName has joined the watch party');
     _broadcastSystemMessage('$guestName has joined the watch party');
 
+    // Sync existing chat history to reconnected guest
+    for (final msg in _messages) {
+      if (msg['type'] == 'chat') {
+        try {
+          final syncMsg = jsonEncode({
+            'type': 'chat',
+            'sender': msg['sender'] ?? 'Host',
+            'text': msg['text'] ?? '',
+          });
+          channel.send(RTCDataChannelMessage(syncMsg));
+        } catch (_) {}
+      }
+    }
+
     channel.onMessage = (message) {
       _handleGuestMessage(guestName, channel, message.text);
     };
