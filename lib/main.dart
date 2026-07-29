@@ -35,6 +35,24 @@ class _SyncedWatchPartySettingsNotifier extends WatchPartySettingsNotifier {
     final settings = ref.watch(generalSettingsProvider);
     return settings.watchParty;
   }
+
+  @override
+  Future<void> update({
+    String? username,
+    String? projectId,
+    String? anonKey,
+    String? turnUsername,
+    String? turnPassword,
+    bool? debugEnabled,
+  }) async {
+    final notifier = ref.read(generalSettingsProvider.notifier);
+    if (username != null) await notifier.setWatchPartyUsername(username);
+    if (projectId != null) await notifier.setWatchPartyProjectId(projectId);
+    if (anonKey != null) await notifier.setWatchPartyAnonKey(anonKey);
+    if (turnUsername != null) await notifier.setWatchPartyTurnUsername(turnUsername);
+    if (turnPassword != null) await notifier.setWatchPartyTurnPassword(turnPassword);
+    if (debugEnabled != null) await notifier.setWatchPartyDebugEnabled(debugEnabled);
+  }
 }
 
 void main() async {

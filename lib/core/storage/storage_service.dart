@@ -183,6 +183,23 @@ class StorageService {
     return _settingsBox.get('watchparty_debug_logs', defaultValue: false) as bool;
   }
 
+  Future<void> setString(String key, String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null || value.trim().isEmpty) {
+      await _settingsBox.delete(key);
+      await prefs.remove(key);
+    } else {
+      await _settingsBox.put(key, value);
+      await prefs.setString(key, value);
+    }
+  }
+
+  String? getString(String key) {
+    final val = _settingsBox.get(key) as String?;
+    if (val != null && val.trim().isNotEmpty) return val;
+    return null;
+  }
+
   // --- Active Provider ---
 
   Future<void> setActiveProviderId(String? id) async {
@@ -305,18 +322,6 @@ class StorageService {
   }
 
   // --- General Key-Value ---
-  Future<void> setString(String key, String? value) async {
-    if (value == null) {
-      await _settingsBox.delete(key);
-    } else {
-      await _settingsBox.put(key, value);
-    }
-  }
-
-  String? getString(String key) {
-    return _settingsBox.get(key) as String?;
-  }
-  
   Future<void> remove(String key) async {
     await _settingsBox.delete(key);
   }
