@@ -295,13 +295,28 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                             topLeft: isMe ? const Radius.circular(16) : const Radius.circular(0),
                           ),
                         ),
-                        child: Text(
-                          text,
-                          style: TextStyle(
-                            color: isMe
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                text,
+                                style: TextStyle(
+                                  color: isMe
+                                      ? Theme.of(context).colorScheme.onPrimary
+                                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            if (isMe && msg['status'] == 'pending') ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.schedule,
+                                size: 11,
+                                color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],

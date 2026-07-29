@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../data/watchparty_database.dart';
 import 'watchparty_creator_service.dart';
 import 'watchparty_joiner_service.dart';
 
-class WatchPartyChatService extends ChangeNotifier {
+class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   RTCPeerConnection? _peerConnection;
   RTCDataChannel? _dataChannel;
   final WatchPartyCreatorService? _creatorService;
@@ -18,6 +19,7 @@ class WatchPartyChatService extends ChangeNotifier {
   final String _passcode;
 
   final List<Map<String, dynamic>> _messages = [];
+  final List<Map<String, dynamic>> _outboxQueue = [];
   bool _connectionClosed = false;
   String? _kickMessage;
   StreamSubscription<Map<String, dynamic>?>? _lobbyDbSubscription;
@@ -45,10 +47,29 @@ class WatchPartyChatService extends ChangeNotifier {
         _hostName = hostName,
         _userName = userName,
         _passcode = passcode {
+    WidgetsBinding.instance.addObserver(this);
     if (_isHost) {
       _setupHostListeners();
     } else {
       _setupGuestListeners();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onAppResumed();
+    }
+  }
+
+  void _onAppResumed() {
+    if (_isHost || _connectionClosed) return;
+    final isChannelOpen = _dataChannel != null &&
+        _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen;
+    if (!isChannelOpen && !_isReconnecting) {
+      _attemptReconnection();
+    } else if (isChannelOpen) {
+      _flushOutbox();
     }
   }
 
@@ -107,33 +128,23 @@ class WatchPartyChatService extends ChangeNotifier {
             _lastSeen = DateTime.now();
             final jsonMsg = jsonEncode({'type': 'control', 'action': 'pong'});
             try {
-              _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+              _dataChannel?.send(RTCDataChannelMessage(jsonMsg));
             } catch (_) {}
           } else if (action == 'pong') {
             _lastSeen = DateTime.now();
-          } else if (action == 'leave' || action == 'kick' || action == 'host_ended') {
-            _connectionClosed = true;
-            _kickMessage = action == 'host_ended'
-                ? 'The host has ended the watch party.'
-                : (action == 'kick' ? 'You have been kicked from the lobby.' : null);
-            notifyListeners();
           } else if (action == 'peer_disconnected') {
             final guest = decoded['guest'] as String? ?? 'A peer';
-            _addSystemMessage('$guest has left the watch party.');
+            _addSystemMessage('$guest has left the watch party');
           }
           return;
         }
 
-        _lastSeen = DateTime.now();
-
-        if (type == 'system') {
-          final systemText = decoded['text'] as String;
-          _addSystemMessage(systemText);
-          return;
-        } else if (type == 'chat') {
+        if (type == 'chat') {
+          _lastSeen = DateTime.now();
           final text = decoded['text'] as String;
           final sender = decoded['sender'] as String? ?? 'Friend';
           _messages.add({
+            'type': 'chat',
             'text': text,
             'sender': sender,
             'isMe': false,
@@ -144,6 +155,7 @@ class WatchPartyChatService extends ChangeNotifier {
       } catch (_) {
         _lastSeen = DateTime.now();
         _messages.add({
+          'type': 'chat',
           'text': message.text,
           'sender': 'Friend',
           'isMe': false,
@@ -154,7 +166,9 @@ class WatchPartyChatService extends ChangeNotifier {
     };
 
     _dataChannel!.onDataChannelState = (state) {
-      if (state == RTCDataChannelState.RTCDataChannelClosed) {
+      if (state == RTCDataChannelState.RTCDataChannelOpen) {
+        _flushOutbox();
+      } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
         if (!_connectionClosed && !_isReconnecting) {
           _attemptReconnection();
         } else if (_connectionClosed) {
@@ -170,7 +184,7 @@ class WatchPartyChatService extends ChangeNotifier {
   bool _isReconnecting = false;
 
   Future<void> _attemptReconnection() async {
-    if (_isReconnecting) return;
+    if (_isReconnecting || _connectionClosed) return;
     _isReconnecting = true;
     _reconnectAttempts++;
     notifyListeners();
@@ -192,6 +206,7 @@ class WatchPartyChatService extends ChangeNotifier {
       _reconnectAttempts = 0;
       _lastSeen = DateTime.now();
       _setupGuestListeners();
+      _flushOutbox();
       _addSystemMessage('Reconnected to host.');
       notifyListeners();
     } else {
@@ -202,7 +217,7 @@ class WatchPartyChatService extends ChangeNotifier {
         notifyListeners();
       } else {
         notifyListeners();
-        await Future<void>.delayed(const Duration(seconds: 15));
+        await Future<void>.delayed(const Duration(seconds: 10));
         if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
           _attemptReconnection();
         }
@@ -242,30 +257,73 @@ class WatchPartyChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _flushOutbox() {
+    if (_outboxQueue.isEmpty) return;
+    if (_dataChannel == null || _dataChannel!.state != RTCDataChannelState.RTCDataChannelOpen) {
+      return;
+    }
+
+    final toRemove = <Map<String, dynamic>>[];
+    for (final item in _outboxQueue) {
+      try {
+        final text = item['text'] as String;
+        final jsonMsg = jsonEncode({'type': 'chat', 'sender': _userName, 'text': text});
+        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+        item['status'] = 'sent';
+        toRemove.add(item);
+      } catch (_) {
+        break;
+      }
+    }
+    _outboxQueue.removeWhere(toRemove.contains);
+    notifyListeners();
+  }
+
   void sendMessage(String text) {
-    if (text.isEmpty) return;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    final messageItem = {
+      'type': 'chat',
+      'text': trimmed,
+      'sender': _userName,
+      'isMe': true,
+      'time': DateTime.now(),
+      'status': 'sending',
+    };
+
+    _messages.add(messageItem);
 
     if (_isHost) {
       if (_creatorService != null) {
-        _creatorService!.messageBroker.broadcastChatMessage(_userName, text);
+        _creatorService!.messageBroker.broadcastChatMessage(_userName, trimmed);
+        messageItem['status'] = 'sent';
+      }
+      notifyListeners();
+      return;
+    }
+
+    final isChannelOpen = _dataChannel != null &&
+        _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen &&
+        !_isReconnecting;
+
+    if (isChannelOpen) {
+      try {
+        final jsonMsg = jsonEncode({'type': 'chat', 'sender': _userName, 'text': trimmed});
+        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+        messageItem['status'] = 'sent';
+      } catch (_) {
+        messageItem['status'] = 'pending';
+        _outboxQueue.add(messageItem);
+        _attemptReconnection();
       }
     } else {
-      if (_dataChannel != null) {
-        try {
-          final jsonMsg = jsonEncode({'type': 'chat', 'sender': _userName, 'text': text});
-          _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
-        } catch (_) {
-          _dataChannel!.send(RTCDataChannelMessage(text));
-        }
-      }
-      _messages.add({
-        'text': text,
-        'sender': _userName,
-        'isMe': true,
-        'time': DateTime.now(),
-      });
-      notifyListeners();
+      messageItem['status'] = 'pending';
+      _outboxQueue.add(messageItem);
+      _attemptReconnection();
     }
+
+    notifyListeners();
   }
 
   Future<void> leaveParty() async {
@@ -301,6 +359,7 @@ class WatchPartyChatService extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_isHost && _creatorService != null) {
       _creatorService!.messageBroker.removeListener(_onBrokerUpdated);
       _creatorService!.removeListener(_onCreatorServiceUpdated);

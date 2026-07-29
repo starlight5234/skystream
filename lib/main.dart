@@ -29,6 +29,14 @@ import 'core/providers/device_info_provider.dart';
 import 'package:skystream_watchparty/skystream_watchparty.dart';
 import 'features/settings/presentation/general_settings_provider.dart';
 
+class _SyncedWatchPartySettingsNotifier extends WatchPartySettingsNotifier {
+  @override
+  WatchPartySettings build() {
+    final settings = ref.watch(generalSettingsProvider);
+    return settings.watchParty;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
@@ -157,9 +165,7 @@ class _AppRootState extends State<AppRoot> {
     return ProviderScope(
       overrides: [
         storageServiceProvider.overrideWithValue(_storageService),
-        watchPartySettingsProvider.overrideWith((ref) {
-          return ref.watch(generalSettingsProvider).watchParty;
-        }),
+        watchPartySettingsProvider.overrideWith(() => _SyncedWatchPartySettingsNotifier()),
       ],
       child: const ExtensionsSyncBridge(child: MyApp()),
     );

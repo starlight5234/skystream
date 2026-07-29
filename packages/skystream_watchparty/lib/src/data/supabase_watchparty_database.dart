@@ -5,8 +5,40 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/watchparty_settings.dart';
 import 'watchparty_database.dart';
 
-final watchPartySettingsProvider = Provider<WatchPartySettings>((ref) {
-  return WatchPartySettings();
+class WatchPartySettingsNotifier extends Notifier<WatchPartySettings> {
+  @override
+  WatchPartySettings build() {
+    return const WatchPartySettings();
+  }
+
+  Future<void> update({
+    String? username,
+    String? projectId,
+    String? anonKey,
+    String? turnUsername,
+    String? turnPassword,
+    bool? debugEnabled,
+  }) async {
+    final updated = state.copyWith(
+      username: username,
+      projectId: projectId,
+      anonKey: anonKey,
+      turnUsername: turnUsername,
+      turnPassword: turnPassword,
+      debugEnabled: debugEnabled,
+    );
+    state = updated;
+    await updated.saveToPrefs();
+  }
+
+  void setSettings(WatchPartySettings settings) {
+    state = settings;
+  }
+}
+
+final watchPartySettingsProvider =
+    NotifierProvider<WatchPartySettingsNotifier, WatchPartySettings>(() {
+  return WatchPartySettingsNotifier();
 });
 
 final watchPartyDatabaseProvider = Provider<WatchPartyDatabase>((ref) {

@@ -40,7 +40,7 @@ void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
           onPressed: () async {
             final name = controller.text.trim();
             if (name.isNotEmpty) {
-              await ref.read(watchPartySettingsProvider).update(username: name);
+              await ref.read(watchPartySettingsProvider.notifier).update(username: name);
             }
             if (context.mounted) Navigator.pop(context);
           },
@@ -448,6 +448,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _executeStartHost(String? passcode) {
+    if (_isLoading) return;
     final settings = ref.read(watchPartySettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
     final name = settings.watchPartyUsername;
@@ -573,6 +574,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _executeUsernameJoin(String hostName, String passcode) {
+    if (_isLoading) return;
     final settings = ref.read(watchPartySettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
 

@@ -862,7 +862,10 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
       final msg = session.chatService.kickMessage ?? 'The watch party connection was closed.';
       ref.read(notificationServiceProvider).showInfo(msg);
       ref.read(activeWatchPartyProvider.notifier).clearSession();
+      return;
     }
+
+    setState(() {});
   }
 
   @override
