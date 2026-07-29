@@ -1001,7 +1001,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     _creatorService?.removeListener(_onCreatorUpdate);
     _creatorService?.dispose();
 
-    _creatorService = WatchPartyCreatorService(WatchPartySettings.fromGeneralSettings(settings), database);
+    _creatorService = WatchPartyCreatorService(settings.watchParty, database);
     _creatorService!.addListener(_onCreatorUpdate);
     unawaited(_creatorService!.startHosting(name));
   }
@@ -1031,7 +1031,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     _joinerService?.removeListener(_onJoinerUpdate);
     _joinerService?.dispose();
 
-    _joinerService = WatchPartyJoinerService(WatchPartySettings.fromGeneralSettings(settings), database);
+    _joinerService = WatchPartyJoinerService(settings.watchParty, database);
     _joinerService!.addListener(_onJoinerUpdate);
     unawaited(_joinerService!.startJoining(hostName, guestName, passcode));
   }

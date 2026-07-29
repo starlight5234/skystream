@@ -26,6 +26,8 @@ import 'core/network/cloudflare_bypass.dart';
 import 'package:dpad/dpad.dart';
 import 'core/config/tmdb_config.dart';
 import 'core/providers/device_info_provider.dart';
+import 'package:skystream_watchparty/skystream_watchparty.dart';
+import 'features/settings/presentation/general_settings_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +155,12 @@ class _AppRootState extends State<AppRoot> {
     }
 
     return ProviderScope(
-      overrides: [storageServiceProvider.overrideWithValue(_storageService)],
+      overrides: [
+        storageServiceProvider.overrideWithValue(_storageService),
+        watchPartySettingsProvider.overrideWith((ref) {
+          return ref.watch(generalSettingsProvider).watchParty;
+        }),
+      ],
       child: const ExtensionsSyncBridge(child: MyApp()),
     );
   }

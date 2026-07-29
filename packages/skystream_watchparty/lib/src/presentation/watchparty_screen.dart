@@ -37,12 +37,12 @@ void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () {
+          onPressed: () async {
             final name = controller.text.trim();
             if (name.isNotEmpty) {
-              ref.read(watchPartySettingsProvider).update(username: name);
+              await ref.read(watchPartySettingsProvider).update(username: name);
             }
-            Navigator.pop(context);
+            if (context.mounted) Navigator.pop(context);
           },
           child: const Text('Save'),
         ),

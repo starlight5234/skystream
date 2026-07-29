@@ -1,85 +1,91 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class WatchPartySettings extends ChangeNotifier {
-  String _watchPartyUsername;
-  String _watchPartyProjectId;
-  String _watchPartyAnonKey;
-  String _watchPartyTurnUsername;
-  String _watchPartyTurnPassword;
+@immutable
+class WatchPartySettings {
+  final String username;
+  final String projectId;
+  final String anonKey;
+  final String turnUsername;
+  final String turnPassword;
+  final bool debugEnabled;
 
-  WatchPartySettings({
-    String watchPartyUsername = '',
-    String watchPartyProjectId = '',
-    String watchPartyAnonKey = '',
-    String watchPartyTurnUsername = '',
-    String watchPartyTurnPassword = '',
-  })  : _watchPartyUsername = watchPartyUsername,
-        _watchPartyProjectId = watchPartyProjectId,
-        _watchPartyAnonKey = watchPartyAnonKey,
-        _watchPartyTurnUsername = watchPartyTurnUsername,
-        _watchPartyTurnPassword = watchPartyTurnPassword;
+  const WatchPartySettings({
+    this.username = '',
+    this.projectId = '',
+    this.anonKey = '',
+    this.turnUsername = '',
+    this.turnPassword = '',
+    this.debugEnabled = false,
+  });
 
-  static WatchPartySettings fromGeneralSettings(dynamic settings) {
-    if (settings == null) return WatchPartySettings();
-    try {
-      return WatchPartySettings(
-        watchPartyUsername: (settings.watchPartyUsername as String?) ?? '',
-        watchPartyProjectId: (settings.watchPartyProjectId as String?) ?? '',
-        watchPartyAnonKey: (settings.watchPartyAnonKey as String?) ?? '',
-        watchPartyTurnUsername: (settings.watchPartyTurnUsername as String?) ?? '',
-        watchPartyTurnPassword: (settings.watchPartyTurnPassword as String?) ?? '',
-      );
-    } catch (_) {
-      return WatchPartySettings();
-    }
-  }
+  bool get isConfigured => projectId.trim().isNotEmpty && anonKey.trim().isNotEmpty;
 
-  String get watchPartyUsername => _watchPartyUsername;
-  String get watchPartyProjectId => _watchPartyProjectId;
-  String get watchPartyAnonKey => _watchPartyAnonKey;
-  String get watchPartyTurnUsername => _watchPartyTurnUsername;
-  String get watchPartyTurnPassword => _watchPartyTurnPassword;
-
-  static Future<WatchPartySettings> loadFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    return WatchPartySettings(
-      watchPartyUsername: prefs.getString('watchPartyUsername') ?? '',
-      watchPartyProjectId: prefs.getString('watchPartyProjectId') ?? '',
-      watchPartyAnonKey: prefs.getString('watchPartyAnonKey') ?? '',
-      watchPartyTurnUsername: prefs.getString('watchPartyTurnUsername') ?? '',
-      watchPartyTurnPassword: prefs.getString('watchPartyTurnPassword') ?? '',
-    );
-  }
-
-  Future<void> update({
+  WatchPartySettings copyWith({
     String? username,
     String? projectId,
     String? anonKey,
     String? turnUsername,
     String? turnPassword,
+    bool? debugEnabled,
+  }) {
+    return WatchPartySettings(
+      username: username ?? this.username,
+      projectId: projectId ?? this.projectId,
+      anonKey: anonKey ?? this.anonKey,
+      turnUsername: turnUsername ?? this.turnUsername,
+      turnPassword: turnPassword ?? this.turnPassword,
+      debugEnabled: debugEnabled ?? this.debugEnabled,
+    );
+  }
+
+  Future<WatchPartySettings> update({
+    String? username,
+    String? projectId,
+    String? anonKey,
+    String? turnUsername,
+    String? turnPassword,
+    bool? debugEnabled,
   }) async {
+    final updated = copyWith(
+      username: username,
+      projectId: projectId,
+      anonKey: anonKey,
+      turnUsername: turnUsername,
+      turnPassword: turnPassword,
+      debugEnabled: debugEnabled,
+    );
+    await updated.saveToPrefs();
+    return updated;
+  }
+
+  // Aliases for core app property compatibility
+  String get watchPartyUsername => username;
+  String get watchPartyProjectId => projectId;
+  String get watchPartyAnonKey => anonKey;
+  String get watchPartyTurnUsername => turnUsername;
+  String get watchPartyTurnPassword => turnPassword;
+  bool get watchPartyDebugEnabled => debugEnabled;
+
+  static Future<WatchPartySettings> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    if (username != null) {
-      _watchPartyUsername = username;
-      await prefs.setString('watchPartyUsername', username);
-    }
-    if (projectId != null) {
-      _watchPartyProjectId = projectId;
-      await prefs.setString('watchPartyProjectId', projectId);
-    }
-    if (anonKey != null) {
-      _watchPartyAnonKey = anonKey;
-      await prefs.setString('watchPartyAnonKey', anonKey);
-    }
-    if (turnUsername != null) {
-      _watchPartyTurnUsername = turnUsername;
-      await prefs.setString('watchPartyTurnUsername', turnUsername);
-    }
-    if (turnPassword != null) {
-      _watchPartyTurnPassword = turnPassword;
-      await prefs.setString('watchPartyTurnPassword', turnPassword);
-    }
-    notifyListeners();
+    return WatchPartySettings(
+      username: prefs.getString('watchparty_username') ?? prefs.getString('watchPartyUsername') ?? '',
+      projectId: prefs.getString('watchparty_project_id') ?? prefs.getString('watchparty_supabase_project_id') ?? prefs.getString('watchPartyProjectId') ?? '',
+      anonKey: prefs.getString('watchparty_anon_key') ?? prefs.getString('watchparty_supabase_anon_key') ?? prefs.getString('watchPartyAnonKey') ?? '',
+      turnUsername: prefs.getString('watchparty_turn_username') ?? prefs.getString('watchPartyTurnUsername') ?? '',
+      turnPassword: prefs.getString('watchparty_turn_password') ?? prefs.getString('watchPartyTurnPassword') ?? '',
+      debugEnabled: prefs.getBool('watchparty_debug_enabled') ?? prefs.getBool('watchparty_debug_logs') ?? false,
+    );
+  }
+
+  Future<void> saveToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('watchparty_username', username);
+    await prefs.setString('watchparty_project_id', projectId);
+    await prefs.setString('watchparty_anon_key', anonKey);
+    await prefs.setString('watchparty_turn_username', turnUsername);
+    await prefs.setString('watchparty_turn_password', turnPassword);
+    await prefs.setBool('watchparty_debug_enabled', debugEnabled);
   }
 }

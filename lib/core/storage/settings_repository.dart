@@ -122,16 +122,22 @@ class SettingsRepository {
     return _storageService.getPlayerSetting<T>(key, defaultValue: defaultValue);
   }
 
-  Future<void> setWatchPartyProjectId(String? id) =>
-      _storageService.setString('watchparty_supabase_project_id', id);
+  Future<void> setWatchPartyProjectId(String? id) async {
+    await _storageService.setString('watchparty_project_id', id);
+    await _storageService.setString('watchparty_supabase_project_id', id);
+  }
 
   String? getWatchPartyProjectId() =>
+      _storageService.getString('watchparty_project_id') ??
       _storageService.getString('watchparty_supabase_project_id');
 
-  Future<void> setWatchPartyAnonKey(String? key) =>
-      _storageService.setString('watchparty_supabase_anon_key', key);
+  Future<void> setWatchPartyAnonKey(String? key) async {
+    await _storageService.setString('watchparty_anon_key', key);
+    await _storageService.setString('watchparty_supabase_anon_key', key);
+  }
 
   String? getWatchPartyAnonKey() =>
+      _storageService.getString('watchparty_anon_key') ??
       _storageService.getString('watchparty_supabase_anon_key');
 
   Future<void> setWatchPartyUsername(String name) =>
