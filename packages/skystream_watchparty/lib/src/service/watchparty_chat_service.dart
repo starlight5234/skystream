@@ -5,7 +5,6 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../data/watchparty_database.dart';
 import 'watchparty_creator_service.dart';
 import 'watchparty_joiner_service.dart';
-import 'watchparty_crypto.dart';
 
 class WatchPartyChatService extends ChangeNotifier {
   RTCPeerConnection? _peerConnection;
@@ -192,7 +191,7 @@ class WatchPartyChatService extends ChangeNotifier {
       _isReconnecting = false;
       _reconnectAttempts = 0;
       _lastSeen = DateTime.now();
-      _setupGuestListeners(); // Re-register data channel event handlers
+      _setupGuestListeners();
       _addSystemMessage('Reconnected to host.');
       notifyListeners();
     } else {
@@ -203,7 +202,6 @@ class WatchPartyChatService extends ChangeNotifier {
         notifyListeners();
       } else {
         notifyListeners();
-        // Wait 15 seconds, then try again if still not connected and not closed
         await Future<void>.delayed(const Duration(seconds: 15));
         if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
           _attemptReconnection();
@@ -219,7 +217,6 @@ class WatchPartyChatService extends ChangeNotifier {
         return;
       }
 
-      // Check timeout (no ping received from host for >30s)
       if (DateTime.now().difference(_lastSeen) > const Duration(seconds: 30)) {
         timer.cancel();
         _attemptReconnection();

@@ -11,7 +11,7 @@ import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:video_view/video_view.dart' as vv;
 import '../../../../l10n/generated/app_localizations.dart';
 import '../player_controller.dart';
-import '../../../watchparty/presentation/providers/active_watchparty_provider.dart';
+import 'package:skystream_watchparty/skystream_watchparty.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/models/torrent_status.dart';

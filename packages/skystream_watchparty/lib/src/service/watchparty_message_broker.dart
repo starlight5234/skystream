@@ -61,7 +61,6 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     _addSystemMessage('$guestName has left the watch party');
     _broadcastSystemMessage('$guestName has left the watch party');
 
-    // Broadcast peer_disconnected control event to all other guests
     final disconnectEvent = jsonEncode({
       'type': 'control',
       'action': 'peer_disconnected',

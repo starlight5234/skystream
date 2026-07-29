@@ -2,34 +2,38 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/storage/settings_repository.dart';
-import '../../settings/presentation/general_settings_provider.dart';
+import '../config/watchparty_settings.dart';
 import 'watchparty_database.dart';
 
+final watchPartySettingsProvider = Provider<WatchPartySettings>((ref) {
+  return WatchPartySettings();
+});
+
 final watchPartyDatabaseProvider = Provider<WatchPartyDatabase>((ref) {
-  final settings = ref.watch(generalSettingsProvider);
+  final settings = ref.watch(watchPartySettingsProvider);
   return SupabaseWatchPartyDatabase(
-    ref.watch(settingsRepositoryProvider),
+    settings: settings,
     customId: settings.watchPartyProjectId,
     customKey: settings.watchPartyAnonKey,
   );
 });
 
 class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
-  final SettingsRepository _settingsRepository;
+  final WatchPartySettings? _settings;
   final String? _customId;
   final String? _customKey;
   SupabaseClient? _cachedClient;
   String? _cachedId;
   String? _cachedKey;
 
-  SupabaseWatchPartyDatabase(this._settingsRepository, {String? customId, String? customKey})
-      : _customId = customId,
+  SupabaseWatchPartyDatabase({WatchPartySettings? settings, String? customId, String? customKey})
+      : _settings = settings,
+        _customId = customId,
         _customKey = customKey;
 
   SupabaseClient? get _client {
-    final id = _customId ?? _settingsRepository.getWatchPartyProjectId()?.trim() ?? '';
-    final key = _customKey ?? _settingsRepository.getWatchPartyAnonKey()?.trim() ?? '';
+    final id = _customId ?? _settings?.watchPartyProjectId.trim() ?? '';
+    final key = _customKey ?? _settings?.watchPartyAnonKey.trim() ?? '';
 
     if (id.isEmpty || key.isEmpty) {
       return null;
@@ -54,8 +58,8 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
 
   @override
   bool isConfigured() {
-    final id = _customId ?? _settingsRepository.getWatchPartyProjectId();
-    final key = _customKey ?? _settingsRepository.getWatchPartyAnonKey();
+    final id = _customId ?? _settings?.watchPartyProjectId;
+    final key = _customKey ?? _settings?.watchPartyAnonKey;
     return id != null && id.trim().isNotEmpty && key != null && key.trim().isNotEmpty;
   }
 
@@ -135,7 +139,6 @@ class SupabaseWatchPartyDatabase implements WatchPartyDatabase {
     final client = _client;
     if (client == null) throw Exception('Database not configured.');
 
-    // Call the transaction-safe Postgres RPC function to safely check bounds and join
     final response = await client.rpc('join_watchparty', params: {
       'target_host_name': hostName,
       'joining_guest_name': guestName,

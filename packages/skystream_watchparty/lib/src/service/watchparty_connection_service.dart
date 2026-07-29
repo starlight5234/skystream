@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import '../config/watchparty_settings.dart';
 import '../data/watchparty_database.dart';
-import '../../settings/presentation/general_settings_provider.dart';
 import 'webrtc_connection_manager.dart';
 
 abstract class WatchPartyConnectionService extends ChangeNotifier {
-  final GeneralSettings settings;
+  final WatchPartySettings settings;
   final WatchPartyDatabase database;
 
   bool _isLoading = false;

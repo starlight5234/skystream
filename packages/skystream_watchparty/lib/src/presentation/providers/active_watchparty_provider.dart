@@ -3,6 +3,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../data/watchparty_database.dart';
 import '../../service/watchparty_creator_service.dart';
 import '../../service/watchparty_chat_service.dart';
+
 class ActiveWatchPartyState {
   final RTCPeerConnection? peerConnection;
   final RTCDataChannel? dataChannel;

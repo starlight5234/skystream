@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import '../config/watchparty_settings.dart';
 import '../data/watchparty_database.dart';
-import '../../settings/presentation/general_settings_provider.dart';
 import 'watchparty_connection_service.dart';
 import 'webrtc_connection_manager.dart';
 import 'watchparty_crypto.dart';
@@ -187,7 +187,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
   }
 
   void _processHostAnswer(List<dynamic> signaling, String passcode) {
-    // Find the signaling entry for this specific guest
     final entry = signaling.lastWhere(
       (element) => Map<String, dynamic>.from(element as Map)['guest_name'] == _activeGuestName,
       orElse: () => null,
@@ -198,7 +197,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
     final guestData = Map<String, dynamic>.from(entry as Map);
     final encryptedAnswer = guestData['host_answer'] as String?;
 
-    // If host hasn't answered yet, keep waiting
     if (encryptedAnswer == null) return;
 
     logMessage('Host answer received. Decrypting...');
@@ -211,7 +209,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       return;
     }
 
-    // Cancel database listening and polling now that valid host answer is parsed
     _lobbySubscription?.cancel();
     _lobbySubscription = null;
     _pollTimer?.cancel();
@@ -262,7 +259,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
   Future<bool> reconnect() async {
     logMessage('Reconnection handshake initiated...');
     
-    // 1. Clean up old connection but do NOT clear credentials
     _lobbySubscription?.cancel();
     _lobbySubscription = null;
     _pollTimer?.cancel();
@@ -288,7 +284,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
     notifyListeners();
  
     try {
-      // Re-run joining flow
       await startJoining(
         _activeHostName!,
         _activeGuestName!,
@@ -297,7 +292,6 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
         customTurnPassword: _customTurnPassword,
       );
       
-      // Wait up to 30 seconds for handshake to succeed
       int duration = 0;
       while (isLoading && !connectionSuccess && error == null && duration < 30) {
         await Future<void>.delayed(const Duration(seconds: 1));

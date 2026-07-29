@@ -5,7 +5,7 @@ import 'package:skystream/features/home/presentation/home_screen.dart';
 import 'package:skystream/features/search/presentation/search_screen.dart';
 import '../../features/explore/presentation/explore_screen.dart';
 import 'package:skystream/features/library/presentation/library_screen.dart';
-import 'package:skystream/features/watchparty/presentation/watchparty_screen.dart';
+import 'package:skystream_watchparty/skystream_watchparty.dart';
 import 'package:skystream/features/settings/presentation/settings_screen.dart';
 import '../../features/extensions/screens/extensions_screen.dart';
 import '../../features/settings/presentation/developer_options_screen.dart';

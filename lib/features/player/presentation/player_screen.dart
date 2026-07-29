@@ -13,20 +13,12 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:video_view/video_view.dart' as vv;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
-import '../../watchparty/presentation/providers/active_watchparty_provider.dart';
+import 'package:skystream_watchparty/skystream_watchparty.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import '../../watchparty/data/watchparty_database.dart';
-import '../../watchparty/data/supabase_watchparty_database.dart';
-import '../../watchparty/service/watchparty_creator_service.dart';
-import '../../watchparty/service/watchparty_joiner_service.dart';
-import '../../watchparty/service/watchparty_chat_service.dart';
-import '../../watchparty/presentation/widgets/watchparty_chat_body.dart';
-import '../../watchparty/service/watchparty_crypto.dart';
 import '../../settings/presentation/general_settings_provider.dart';
 import '../../../../core/services/notification_service.dart';
-import '../../watchparty/config/watchparty_config.dart';
 
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/providers/device_info_provider.dart';
@@ -1009,7 +1001,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     _creatorService?.removeListener(_onCreatorUpdate);
     _creatorService?.dispose();
 
-    _creatorService = WatchPartyCreatorService(settings, database);
+    _creatorService = WatchPartyCreatorService(WatchPartySettings.fromGeneralSettings(settings), database);
     _creatorService!.addListener(_onCreatorUpdate);
     unawaited(_creatorService!.startHosting(name));
   }
@@ -1039,7 +1031,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
     _joinerService?.removeListener(_onJoinerUpdate);
     _joinerService?.dispose();
 
-    _joinerService = WatchPartyJoinerService(settings, database);
+    _joinerService = WatchPartyJoinerService(WatchPartySettings.fromGeneralSettings(settings), database);
     _joinerService!.addListener(_onJoinerUpdate);
     unawaited(_joinerService!.startJoining(hostName, guestName, passcode));
   }

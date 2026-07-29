@@ -1,24 +1,55 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import '../../../core/utils/layout_constants.dart';
-import '../../settings/presentation/general_settings_provider.dart';
-import '../../settings/presentation/settings_screen.dart';
 import '../data/watchparty_database.dart';
 import '../data/supabase_watchparty_database.dart';
 import '../config/watchparty_config.dart';
-import '../../../core/storage/settings_repository.dart';
+import '../config/watchparty_settings.dart';
 import '../service/watchparty_creator_service.dart';
 import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
 import '../service/watchparty_chat_service.dart';
-import 'package:go_router/go_router.dart';
 import 'watchparty_chat_screen.dart';
 import 'providers/active_watchparty_provider.dart';
+
+void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
+  final settings = ref.read(watchPartySettingsProvider);
+  final controller = TextEditingController(text: settings.watchPartyUsername);
+
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('WatchParty Username'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Username',
+          hintText: 'Enter your name',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            final name = controller.text.trim();
+            if (name.isNotEmpty) {
+              ref.read(watchPartySettingsProvider).update(username: name);
+            }
+            Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
 
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? host;
@@ -141,16 +172,14 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     required bool isHost,
     required String hostName,
   }) {
-    // Reset local loading state
     setState(() {
       _isLoading = false;
     });
 
-    // Remove listeners so the services aren't updated during chat transitions
     _creatorService?.removeListener(_onCreatorUpdate);
     _joinerService?.removeListener(_onJoinerUpdate);
 
-    final settings = ref.read(generalSettingsProvider);
+    final settings = ref.read(watchPartySettingsProvider);
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
     final resolvedUserName = settings.watchPartyUsername;
 
@@ -190,7 +219,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     final targetHost = host ?? widget.host!;
     final targetCode = code ?? widget.code!;
     
-    // We do NOT set loading to true yet, because we need to ask for the passcode first.
     final passcodeController = TextEditingController();
     bool obscureText = true;
     String? dialogErrorText;
@@ -256,9 +284,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                 setState(() {
                   _isLoading = false;
                 });
-                if (mounted) {
-                  context.go('/watchparty');
-                }
               },
               child: const Text('Cancel'),
             ),
@@ -277,7 +302,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                 });
 
                 try {
-                  // Decrypt the code from the link using the passcode
                   final decryptedJson = WatchPartyCrypto.decrypt(targetCode, passcode, targetHost);
                   final parsed = jsonDecode(decryptedJson) as Map<String, dynamic>;
                   
@@ -295,10 +319,10 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     _statusMessage = 'Connecting to database...';
                   });
 
-                  final settings = ref.read(generalSettingsProvider);
+                  final settings = ref.read(watchPartySettingsProvider);
                   
                   final dbProvider = SupabaseWatchPartyDatabase(
-                    ref.read(settingsRepositoryProvider),
+                    settings: settings,
                     customId: db,
                     customKey: key,
                   );
@@ -308,7 +332,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     return;
                   }
 
-                   _activeDatabase = dbProvider;
+                  _activeDatabase = dbProvider;
                   setState(() {
                     _isLoading = true;
                     _statusMessage = 'Checking for lobby...';
@@ -424,7 +448,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _executeStartHost(String? passcode) {
-    final settings = ref.read(generalSettingsProvider);
+    final settings = ref.read(watchPartySettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
     final name = settings.watchPartyUsername;
 
@@ -448,7 +472,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     if (input.isEmpty) return;
 
     if (input.startsWith('skystream://') || input.startsWith('http://') || input.startsWith('https://')) {
-      // Parse deep link url params
       try {
         final uri = Uri.parse(input);
         final host = uri.queryParameters['host'];
@@ -458,7 +481,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
           throw Exception('Missing required invite link parameters.');
         }
 
-        // Run join logic directly in place on this screen instead of pushing a replacement!
         unawaited(_handleDeepLinkJoin(host: host, code: code));
       } catch (e) {
         _showError('Invalid invite link: $e');
@@ -551,7 +573,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _executeUsernameJoin(String hostName, String passcode) {
-    final settings = ref.read(generalSettingsProvider);
+    final settings = ref.read(watchPartySettingsProvider);
     final database = ref.read(watchPartyDatabaseProvider);
 
     _activeDatabase = database;
@@ -583,9 +605,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     setState(() {
       _isLoading = false;
     });
-    if (mounted && (widget.host != null || widget.code != null)) {
-      context.go('/watchparty');
-    }
   }
 
   void _showError(String message) {
@@ -608,7 +627,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   }
 
   void _copyInviteLink() {
-    final settings = ref.read(generalSettingsProvider);
+    final settings = ref.read(watchPartySettingsProvider);
     final hostName = _activeHostName ?? 'Host';
     final passcode = _creatorService?.roomPasscode ?? '';
 
@@ -619,7 +638,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       'turn_pass': settings.watchPartyTurnPassword.trim(),
     });
     
-    // Encrypt the credentials JSON using the passcode
     final encryptedCode = WatchPartyCrypto.encrypt(jsonStr, passcode, hostName);
     final inviteUrl = '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(hostName)}&code=${Uri.encodeComponent(encryptedCode)}';
 
@@ -647,7 +665,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       return WatchPartyChatScreen(session: activeSession);
     }
 
-    final settings = ref.watch(generalSettingsProvider);
+    final settings = ref.watch(watchPartySettingsProvider);
     final isDbConfigured = settings.watchPartyProjectId.isNotEmpty && 
                            settings.watchPartyAnonKey.isNotEmpty;
 
@@ -658,7 +676,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(LayoutConstants.spacingLg),
+          padding: const EdgeInsets.all(24.0),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
             child: Column(
@@ -667,7 +685,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                 if (_isLoading) ...[
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -710,48 +728,6 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                               ),
                             ),
                           ],
-                          if (settings.watchPartyDebugEnabled) ...[
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Connection Diagnostics Log:',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              height: 250,
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outlineVariant,
-                                ),
-                              ),
-                              child: _getLogs().isEmpty
-                                  ? const Center(
-                                      child: Text(
-                                        'Waiting for connection logs...',
-                                        style: TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
-                                    )
-                                  : ListView.builder(
-                                      shrinkWrap: true,
-                                      itemCount: _getLogs().length,
-                                      itemBuilder: (context, index) {
-                                        return Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2),
-                                          child: Text(
-                                            _getLogs()[index],
-                                            style: const TextStyle(
-                                              fontFamily: 'monospace',
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
@@ -785,10 +761,9 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     child: const Text('Cancel'),
                   ),
                 ] else ...[
-                  // Display Name Card
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -811,7 +786,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    settings.watchPartyUsername,
+                                    settings.watchPartyUsername.isEmpty ? 'Not Set' : settings.watchPartyUsername,
                                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -840,7 +815,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     Card(
                       color: Theme.of(context).colorScheme.errorContainer,
                       child: Padding(
-                        padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                        padding: const EdgeInsets.all(16.0),
                         child: Column(
                           children: [
                             Icon(
@@ -872,10 +847,9 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Host Card
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -909,10 +883,9 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Join Card
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

@@ -5,16 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/utils/layout_constants.dart';
-import '../../settings/presentation/general_settings_provider.dart';
-import '../data/watchparty_database.dart';
+import '../data/supabase_watchparty_database.dart';
 import '../config/watchparty_config.dart';
 import '../service/watchparty_chat_service.dart';
-import '../service/watchparty_creator_service.dart';
-import '../service/watchparty_joiner_service.dart';
 import '../service/watchparty_crypto.dart';
 import 'providers/active_watchparty_provider.dart';
-import '../../../core/services/notification_service.dart';
 import 'widgets/watchparty_chat_body.dart';
 
 class WatchPartyChatScreen extends ConsumerStatefulWidget {
@@ -36,15 +31,6 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
   void initState() {
     super.initState();
     widget.session.chatService.addListener(_onChatServiceUpdate);
-    
-    if (widget.session.isHost) {
-      widget.session.chatService.onAllGuestsLeft = () {
-        if (!mounted) return;
-        ref.read(notificationServiceProvider).showInfo(
-          'All guests have left the lobby.',
-        );
-      };
-    }
   }
 
   @override
@@ -89,7 +75,8 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
     );
   }
 
-  String _buildInviteUrl(GeneralSettings settings) {
+  String _buildInviteUrl() {
+    final settings = ref.read(watchPartySettingsProvider);
     final jsonStr = jsonEncode({
       'db': settings.watchPartyProjectId.trim(),
       'key': settings.watchPartyAnonKey.trim(),
@@ -101,15 +88,12 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
   }
 
   void _copyInviteLink() {
-    final settings = ref.read(generalSettingsProvider);
-    final inviteUrl = _buildInviteUrl(settings);
+    final inviteUrl = _buildInviteUrl();
     Clipboard.setData(ClipboardData(text: inviteUrl));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Invite link copied to clipboard!')),
     );
   }
-
-
 
   void _showDiagnosticsLogs() {
     showModalBottomSheet<void>(

@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../settings/presentation/general_settings_provider.dart';
-import '../../../../core/utils/layout_constants.dart';
 import '../../service/watchparty_chat_service.dart';
 import '../../service/watchparty_creator_service.dart';
 
@@ -147,7 +145,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
           Expanded(
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.all(LayoutConstants.spacingLg),
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -187,8 +185,8 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(
-                horizontal: LayoutConstants.spacingMd,
-                vertical: LayoutConstants.spacingSm,
+                horizontal: 16.0,
+                vertical: 8.0,
               ),
               itemCount: messages.length,
               itemBuilder: (context, index) {
@@ -317,7 +315,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
             right: false,
             top: false,
             child: Padding(
-              padding: const EdgeInsets.all(LayoutConstants.spacingMd),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

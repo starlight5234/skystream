@@ -80,6 +80,8 @@ dependencies:
   shimmer: ^3.0.0
   video_view:
     path: packages/video_view
+  skystream_watchparty:
+    path: packages/skystream_watchparty
   encrypt: ^5.0.3
   flutter_cache_manager: ^3.4.1
   path: ^1.9.1

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import '../../settings/presentation/general_settings_provider.dart';
 import '../config/watchparty_ice_config.dart';
+import '../config/watchparty_settings.dart';
 
 class WebRTCConnectionManager {
   /// Generates the ICE Server configuration with fallback STUNs and regional TURN TCP/TLS relays.
   static Map<String, dynamic> getIceConfiguration(
-    GeneralSettings settings, {
+    WatchPartySettings settings, {
     String? customTurnUsername,
     String? customTurnPassword,
   }) {
@@ -15,14 +15,14 @@ class WebRTCConnectionManager {
 
     final List<Map<String, dynamic>> iceServers = [];
 
-    // 1. Standard STUN fallback servers from Config (Each in its own map of length 1)
+    // 1. Standard STUN fallback servers from Config
     for (final url in WatchPartyIceConfig.productionStunServers) {
       iceServers.add({
         'urls': [url],
       });
     }
 
-    // 2. TURN servers built from Config templates (each in its own map of length 1)
+    // 2. TURN servers built from Config templates
     if (turnUser.isNotEmpty && turnPass.isNotEmpty) {
       final domain = WatchPartyIceConfig.defaultTurnDomain;
       for (final r in WatchPartyIceConfig.defaultTurnRegions) {
@@ -48,7 +48,7 @@ class WebRTCConnectionManager {
 
   /// Creates a peer connection with the correct ICE settings.
   static Future<RTCPeerConnection> createConnection(
-    GeneralSettings settings, {
+    WatchPartySettings settings, {
     String? customTurnUsername,
     String? customTurnPassword,
     void Function(String)? logCallback,
