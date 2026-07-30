@@ -219,12 +219,51 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     });
   }
 
+  String? _lastHandledCode;
+
   Future<void> _handleDeepLinkJoin({String? host, String? code, String? passcode}) async {
-    final targetHost = host ?? widget.host!;
-    final targetCode = code ?? widget.code!;
+    final targetHost = host ?? widget.host;
+    final targetCode = code ?? widget.code;
     final targetPasscode = passcode ?? widget.passcode;
     
+    if (targetHost == null || targetCode == null || targetCode.isEmpty) return;
     if (!mounted) return;
+
+    if (_lastHandledCode == targetCode) return;
+
+    final activeSession = ref.read(activeWatchPartyProvider);
+    if (activeSession != null) {
+      if (activeSession.hostName == targetHost) return;
+
+      final leaveConfirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          surfaceTintColor: Colors.transparent,
+          title: const Text('Switch WatchParty?'),
+          content: Text('You are currently in ${activeSession.hostName}\'s watch party. Would you like to leave and join $targetHost\'s lobby?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text('Leave & Join'),
+            ),
+          ],
+        ),
+      );
+
+      if (leaveConfirm != true) {
+        return;
+      }
+
+      await activeSession.chatService.leaveParty();
+      ref.read(activeWatchPartyProvider.notifier).clearSession();
+    }
+
+    _lastHandledCode = targetCode;
 
     if (targetPasscode != null && targetPasscode.isNotEmpty) {
       try {
@@ -243,16 +282,31 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
           _statusMessage = 'Connecting to signaling channel...';
         });
 
-        _activeDatabase = SupabaseWatchPartyDatabase(projectId: db, anonKey: key);
-        _joinerService = WatchPartyJoinerService(
-          database: _activeDatabase!,
-          hostName: targetHost,
-          userName: ref.read(watchPartySettingsProvider).watchPartyUsername,
-          turnUsername: turnUser,
-          turnPassword: turnPass,
+        final settings = ref.read(watchPartySettingsProvider);
+        final dbProvider = SupabaseWatchPartyDatabase(
+          settings: settings,
+          customId: db,
+          customKey: key,
         );
+
+        if (!dbProvider.isConfigured()) {
+          _showError('Failed to initialize database client from link.');
+          return;
+        }
+
+        _activeDatabase = dbProvider;
+        _joinerService?.removeListener(_onJoinerUpdate);
+        _joinerService?.dispose();
+
+        _joinerService = WatchPartyJoinerService(settings, dbProvider);
         _joinerService!.addListener(_onJoinerUpdate);
-        await _joinerService!.join();
+        unawaited(_joinerService!.startJoining(
+          targetHost,
+          settings.watchPartyUsername,
+          targetPasscode,
+          customTurnUsername: turnUser,
+          customTurnPassword: turnPass,
+        ));
         return;
       } catch (_) {}
     }

@@ -6,20 +6,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/domain/entity/multimedia_item.dart';
-import '../../../core/router/app_router.dart';
-import '../../../core/services/external_player_service.dart';
-import '../../../core/extensions/extension_manager.dart';
 import '../../../core/extensions/base_provider.dart';
+import '../../../core/extensions/extension_manager.dart';
 import '../../../core/extensions/providers.dart';
-import '../../settings/presentation/player_settings_provider.dart';
-import 'package:collection/collection.dart';
-import 'details_controller.dart';
+import '../../../core/router/app_router.dart';
 import '../../../core/services/download_service.dart';
-import '../../../shared/widgets/loading_dialog.dart';
-import '../../../core/utils/app_utils.dart';
-import 'package:skystream/l10n/generated/app_localizations.dart';
+import '../../../core/services/external_player_service.dart';
 import '../../../core/services/notification_service.dart';
-import 'package:skystream_watchparty/skystream_watchparty.dart';
+import '../../../core/utils/app_utils.dart';
+import '../../../shared/widgets/loading_dialog.dart';
+import 'package:collection/collection.dart';
+import 'package:skystream/l10n/generated/app_localizations.dart';
+import '../../player/presentation/watchparty_playback_bridge.dart';
+import '../../settings/presentation/player_settings_provider.dart';
+import 'details_controller.dart';
 
 part 'playback_launcher.g.dart';
 
@@ -33,87 +33,26 @@ class PlaybackLauncher {
 
   PlaybackLauncher(this._ref);
 
-  static Future<void> launchWatchPartyMedia(
-    WidgetRef ref,
-    BuildContext context,
-    Map<String, dynamic> mediaPayload,
-  ) async {
-    final mediaUrl = mediaPayload['mediaUrl'] as String? ?? '';
-    final episodeUrl = mediaPayload['episodeUrl'] as String?;
-    final title = mediaPayload['title'] as String? ?? 'Shared Media';
-    final posterUrl = mediaPayload['posterUrl'] as String?;
-    final providerName = mediaPayload['providerName'] as String?;
-    final season = mediaPayload['season'] as int? ?? 0;
-    final episodeNumber = mediaPayload['episodeNumber'] as int? ?? 0;
-    final episodeName = mediaPayload['episodeName'] as String?;
-
-    final episode = (episodeUrl != null && episodeUrl.isNotEmpty)
-        ? Episode(
-            name: episodeName ?? 'Episode $episodeNumber',
-            url: episodeUrl,
-            season: season,
-            episode: episodeNumber,
-          )
-        : null;
-
-    final item = MultimediaItem(
-      title: title,
-      url: mediaUrl,
-      posterUrl: posterUrl ?? '',
-      provider: providerName ?? '',
-      episodes: episode != null ? [episode] : null,
-    );
-
-    final launcher = ref.read(playbackLauncherProvider);
-    final targetUrl = (episodeUrl != null && episodeUrl.isNotEmpty) ? episodeUrl : mediaUrl;
-
-    await launcher.play(
-      context,
-      targetUrl,
-      baseItem: item,
-      detailedItem: item,
-    );
-  }
-
   Future<void> play(
     BuildContext context,
     String url, {
     required MultimediaItem baseItem,
     MultimediaItem? detailedItem,
+    bool isJoiningStream = false,
   }) async {
     final settings = await _ref.read(playerSettingsProvider.future);
     if (!context.mounted) return;
 
     // WatchParty Playback Interception Check
-    final activeParty = _ref.read(activeWatchPartyProvider);
-    if (activeParty != null) {
-      final partySettings = await WatchPartySettings.loadFromPrefs();
-      if (!context.mounted) return;
-      final promptResult = await WatchPartyPlayPromptDialog.show(
+    if (!isJoiningStream) {
+      await WatchPartyPlaybackBridge.handlePlaybackInterception(
+        _ref,
         context,
-        settings: partySettings,
+        url,
+        baseItem: baseItem,
+        detailedItem: detailedItem,
       );
       if (!context.mounted) return;
-      if (promptResult != null && promptResult.choice == WatchPartyPlayChoice.watchTogether) {
-        final item = detailedItem ?? baseItem;
-        final episode = item.episodes?.firstWhereOrNull((e) => e.url == url);
-        final payload = {
-          'title': item.title,
-          'posterUrl': item.posterUrl,
-          'mediaUrl': item.url,
-          'isTvShow': episode != null || (item.episodes != null && item.episodes!.isNotEmpty),
-          'episodeUrl': episode?.url,
-          'season': episode?.season,
-          'episodeNumber': episode?.episode,
-          'episodeName': episode?.name,
-          'providerName': item.provider,
-        };
-        activeParty.chatService.sendMediaCard(payload);
-        _ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
-          payload,
-          waitForMembers: promptResult.waitForMembers,
-        );
-      }
     }
 
     // Smart Intercept: Check if this item/episode is downloaded

@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import '../logger/app_logger.dart';
 
 import '../../features/details/presentation/playback_launcher.dart';
+import '../../features/player/presentation/watchparty_playback_bridge.dart';
 
 part 'app_router.g.dart';
 
@@ -132,7 +133,7 @@ class WatchPartyRoute extends GoRouteData with $WatchPartyRoute {
           code: code,
           passcode: passcode,
           onJoinMediaStream: (payload) {
-            PlaybackLauncher.launchWatchPartyMedia(ref, context, payload);
+            WatchPartyPlaybackBridge.launchMedia(ref, context, payload);
           },
         ),
       );
