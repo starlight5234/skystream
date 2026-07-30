@@ -150,6 +150,19 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             _kickMessage = 'You have been kicked from the watch party by the host.';
             notifyListeners();
             return;
+          } else if (action == 'msg_ack') {
+            _lastSeen = DateTime.now();
+            final msgId = decoded['msgId'] as String?;
+            if (msgId != null) {
+              for (final msg in _messages) {
+                if (msg['msgId'] == msgId) {
+                  msg['status'] = 'sent';
+                  break;
+                }
+              }
+              _outboxQueue.removeWhere((item) => item['msgId'] == msgId);
+              notifyListeners();
+            }
           } else if (action == 'get_sync_state') {
             final requester = decoded['requester'] as String? ?? 'Friend';
             onSyncStateRequested?.call(requester);
@@ -205,11 +218,24 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       }
     };
 
+    _peerConnection?.onIceConnectionState = (state) {
+      if (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        if (!_connectionClosed && !_isReconnecting) {
+          _isReconnecting = true;
+          notifyListeners();
+          _attemptReconnection();
+        }
+      }
+    };
+
     _dataChannel!.onDataChannelState = (state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         _flushOutbox();
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
         if (!_connectionClosed && !_isReconnecting) {
+          _isReconnecting = true;
+          notifyListeners();
           _attemptReconnection();
         } else if (_connectionClosed) {
           notifyListeners();
@@ -270,7 +296,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       } else {
         notifyListeners();
-        await Future<void>.delayed(const Duration(seconds: 10));
+        await Future<void>.delayed(const Duration(seconds: 5));
         if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
           _attemptReconnection();
         }
@@ -279,15 +305,26 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _startGuestKeepAliveTimer() {
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
       if (_connectionClosed || _dataChannel == null) {
         timer.cancel();
         return;
       }
 
-      if (DateTime.now().difference(_lastSeen) > const Duration(seconds: 30)) {
-        timer.cancel();
-        _attemptReconnection();
+      if (_dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+        try {
+          final pingMsg = jsonEncode({'type': 'control', 'action': 'ping'});
+          _dataChannel!.send(RTCDataChannelMessage(pingMsg));
+        } catch (_) {}
+      }
+
+      if (DateTime.now().difference(_lastSeen) > const Duration(seconds: 16)) {
+        if (!_isReconnecting && !_connectionClosed) {
+          _isReconnecting = true;
+          notifyListeners();
+          _attemptReconnection();
+        }
       }
     });
   }
@@ -318,31 +355,50 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    final toRemove = <Map<String, dynamic>>[];
-    for (final item in _outboxQueue) {
+    for (final item in List<Map<String, dynamic>>.from(_outboxQueue)) {
       try {
-        final text = item['text'] as String;
-        final jsonMsg = jsonEncode({'type': 'chat', 'sender': _userName, 'text': text});
-        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
-        item['status'] = 'sent';
-        toRemove.add(item);
+        final text = item['text'] as String? ?? '';
+        final type = item['type'] as String? ?? 'chat';
+        final msgId = item['msgId'] as String? ?? '';
+
+        if (type == 'media_card') {
+          final media = item['media'] as Map<String, dynamic>? ?? {};
+          final payload = {
+            'type': 'media_card',
+            'msgId': msgId,
+            'sender': _userName,
+            'media': media,
+          };
+          _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+        } else {
+          final payload = {
+            'type': 'chat',
+            'msgId': msgId,
+            'sender': _userName,
+            'text': text,
+          };
+          _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+        }
       } catch (_) {
         break;
       }
     }
-    _outboxQueue.removeWhere(toRemove.contains);
-    notifyListeners();
   }
 
   void sendMediaCard(Map<String, dynamic> mediaPayload) {
+    final msgId = '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
+
     final messageItem = {
       'type': 'media_card',
+      'msgId': msgId,
       'sender': _userName,
       'media': mediaPayload,
       'isMe': true,
       'time': DateTime.now(),
       'status': 'sending',
     };
+
+    _messages.add(messageItem);
 
     if (_isHost) {
       if (_creatorService != null) {
@@ -353,6 +409,8 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    _outboxQueue.add(messageItem);
+
     final isChannelOpen = _dataChannel != null &&
         _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen &&
         !_isReconnecting;
@@ -361,17 +419,20 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         final jsonMsg = jsonEncode({
           'type': 'media_card',
+          'msgId': msgId,
           'sender': _userName,
           'media': mediaPayload,
         });
         _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
-        messageItem['status'] = 'sent';
       } catch (_) {
-        messageItem['status'] = 'pending';
+        _isReconnecting = true;
+        _attemptReconnection();
       }
+    } else {
+      _isReconnecting = true;
+      _attemptReconnection();
     }
 
-    _messages.add(messageItem);
     notifyListeners();
   }
 
@@ -426,8 +487,11 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
+    final msgId = '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
+
     final messageItem = {
       'type': 'chat',
+      'msgId': msgId,
       'text': trimmed,
       'sender': _userName,
       'isMe': true,
@@ -446,23 +510,27 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    _outboxQueue.add(messageItem);
+
     final isChannelOpen = _dataChannel != null &&
         _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen &&
         !_isReconnecting;
 
     if (isChannelOpen) {
       try {
-        final jsonMsg = jsonEncode({'type': 'chat', 'sender': _userName, 'text': trimmed});
+        final jsonMsg = jsonEncode({
+          'type': 'chat',
+          'msgId': msgId,
+          'sender': _userName,
+          'text': trimmed,
+        });
         _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
-        messageItem['status'] = 'sent';
       } catch (_) {
-        messageItem['status'] = 'pending';
-        _outboxQueue.add(messageItem);
+        _isReconnecting = true;
         _attemptReconnection();
       }
     } else {
-      messageItem['status'] = 'pending';
-      _outboxQueue.add(messageItem);
+      _isReconnecting = true;
       _attemptReconnection();
     }
 

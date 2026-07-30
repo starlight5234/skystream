@@ -19,7 +19,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   List<Map<String, dynamic>> get messages => _messages;
 
   void _startKeepAliveTimer() {
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
       final now = DateTime.now();
 
       // Send ping to all active channels
@@ -30,12 +30,12 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         } catch (_) {}
       }
 
-      // Check timeouts
+      // Check timeouts (24 seconds)
       final deadGuests = <String>[];
       for (final entry in _activeDataChannels.entries) {
         final guest = entry.key;
         final lastTime = lastSeen[guest] ?? now;
-        if (now.difference(lastTime) > const Duration(seconds: 45)) {
+        if (now.difference(lastTime) > const Duration(seconds: 24)) {
           deadGuests.add(guest);
         }
       }
@@ -93,6 +93,14 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     try {
       final decoded = jsonDecode(rawText) as Map<String, dynamic>;
       final type = decoded['type'] as String;
+      final msgId = decoded['msgId'] as String?;
+
+      if (msgId != null) {
+        final ackMsg = jsonEncode({'type': 'control', 'action': 'msg_ack', 'msgId': msgId});
+        try {
+          channel.send(RTCDataChannelMessage(ackMsg));
+        } catch (_) {}
+      }
 
       if (type == 'control') {
         final action = decoded['action'] as String;
