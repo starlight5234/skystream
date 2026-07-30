@@ -1366,15 +1366,17 @@ class SkyStreamPlayerControlsState
             final currentEpisode = widget.episode;
             final titleText = widget.title ?? currentItem?.title ?? 'Shared Media';
             if (currentItem != null || titleText.isNotEmpty) {
+              final isMovie = currentItem?.contentType == MultimediaContentType.movie || currentEpisode?.name == 'Full Movie';
+              final isTvShow = !isMovie && (currentItem?.contentType == MultimediaContentType.series || currentItem?.contentType == MultimediaContentType.anime || (currentItem?.episodes != null && currentItem!.episodes!.length > 1));
               final payload = {
                 'title': titleText,
                 'posterUrl': currentItem?.posterUrl,
                 'mediaUrl': currentItem?.url ?? '',
-                'isTvShow': currentEpisode != null || (currentItem?.episodes != null && currentItem!.episodes!.isNotEmpty),
+                'isTvShow': isTvShow,
                 'episodeUrl': currentEpisode?.url,
-                'season': currentEpisode?.season,
-                'episodeNumber': currentEpisode?.episode,
-                'episodeName': currentEpisode?.name,
+                'season': isMovie ? null : currentEpisode?.season,
+                'episodeNumber': isMovie ? null : currentEpisode?.episode,
+                'episodeName': isMovie ? null : currentEpisode?.name,
                 'providerName': currentItem?.provider,
               };
               activeSession.chatService.sendMediaCard(payload);

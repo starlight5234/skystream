@@ -306,7 +306,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                                         fontSize: 13,
                                       ),
                                     ),
-                                    if (isTvShow && season != null && episodeNumber != null) ...[
+                                    if (isTvShow && season != null && episodeNumber != null && episodeName != 'Full Movie') ...[
                                       const SizedBox(height: 2),
                                       Text(
                                         'S$season E$episodeNumber ${episodeName != null ? "• $episodeName" : ""}',

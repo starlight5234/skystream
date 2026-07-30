@@ -1306,13 +1306,27 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                         padding: EdgeInsets.zero,
                         icon: const Icon(Icons.more_vert_rounded, size: 18),
                         onSelected: (val) {
-                          if (val == 'people') {
+                          if (val == 'passcode') {
+                            if (session.passcode.isNotEmpty) {
+                              Clipboard.setData(ClipboardData(text: session.passcode));
+                            }
+                          } else if (val == 'people') {
                             _showPeopleDialog();
                           } else if (val == 'logs') {
                             _showDiagnosticsLogs();
                           }
                         },
                         itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'passcode',
+                            child: Row(
+                              children: [
+                                Icon(Icons.key_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Copy Passcode'),
+                              ],
+                            ),
+                          ),
                           const PopupMenuItem(
                             value: 'people',
                             child: Row(

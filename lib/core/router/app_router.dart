@@ -120,15 +120,17 @@ class WatchPartyBranchData extends StatefulShellBranchData {
 }
 
 class WatchPartyRoute extends GoRouteData with $WatchPartyRoute {
-  const WatchPartyRoute({this.host, this.code});
+  const WatchPartyRoute({this.host, this.code, this.passcode});
   final String? host;
   final String? code;
+  final String? passcode;
 
   @override
   Widget build(BuildContext context, GoRouterState state) => Consumer(
         builder: (context, ref, _) => WatchPartyScreen(
           host: host,
           code: code,
+          passcode: passcode,
           onJoinMediaStream: (payload) {
             PlaybackLauncher.launchWatchPartyMedia(ref, context, payload);
           },
@@ -318,6 +320,7 @@ GoRouter appRouter(Ref ref) {
         redirect: (context, state) {
           final host = state.uri.queryParameters['host'];
           final code = state.uri.queryParameters['code'];
+          final passcode = state.uri.queryParameters['passcode'];
           final params = <String>[];
           if (host != null) {
             params.add('host=${Uri.encodeComponent(host)}');
@@ -325,6 +328,9 @@ GoRouter appRouter(Ref ref) {
           if (code != null) {
             // Keep the code parameter URL-safe
             params.add('code=${Uri.encodeComponent(code)}');
+          }
+          if (passcode != null) {
+            params.add('passcode=${Uri.encodeComponent(passcode)}');
           }
           return '/watchparty${params.isNotEmpty ? '?${params.join('&')}' : ''}';
         },

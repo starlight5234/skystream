@@ -54,12 +54,14 @@ void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? host;
   final String? code;
+  final String? passcode;
   final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
 
   const WatchPartyScreen({
     super.key,
     this.host,
     this.code,
+    this.passcode,
     this.onJoinMediaStream,
   });
 
@@ -95,7 +97,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   void didUpdateWidget(WatchPartyScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.host != null && widget.code != null &&
-        (widget.host != oldWidget.host || widget.code != oldWidget.code)) {
+        (widget.host != oldWidget.host || widget.code != oldWidget.code || widget.passcode != oldWidget.passcode)) {
       _handleDeepLinkJoin();
     }
   }
@@ -217,15 +219,47 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
     });
   }
 
-  Future<void> _handleDeepLinkJoin({String? host, String? code}) async {
+  Future<void> _handleDeepLinkJoin({String? host, String? code, String? passcode}) async {
     final targetHost = host ?? widget.host!;
     final targetCode = code ?? widget.code!;
+    final targetPasscode = passcode ?? widget.passcode;
+    
+    if (!mounted) return;
+
+    if (targetPasscode != null && targetPasscode.isNotEmpty) {
+      try {
+        final decryptedJson = WatchPartyCrypto.decrypt(targetCode, targetPasscode, targetHost);
+        final parsed = jsonDecode(decryptedJson) as Map<String, dynamic>;
+
+        final db = parsed['db'] as String;
+        final key = parsed['key'] as String;
+        final turnUser = parsed['turn_user'] as String?;
+        final turnPass = parsed['turn_pass'] as String?;
+        _lobbyPasscode = targetPasscode;
+
+        setState(() {
+          _isLoading = true;
+          _isHosting = false;
+          _statusMessage = 'Connecting to signaling channel...';
+        });
+
+        _activeDatabase = SupabaseWatchPartyDatabase(projectId: db, anonKey: key);
+        _joinerService = WatchPartyJoinerService(
+          database: _activeDatabase!,
+          hostName: targetHost,
+          userName: ref.read(watchPartySettingsProvider).watchPartyUsername,
+          turnUsername: turnUser,
+          turnPassword: turnPass,
+        );
+        _joinerService!.addListener(_onJoinerUpdate);
+        await _joinerService!.join();
+        return;
+      } catch (_) {}
+    }
     
     final passcodeController = TextEditingController();
     bool obscureText = true;
     String? dialogErrorText;
-    
-    if (!mounted) return;
     
     showDialog<void>(
       context: context,

@@ -86,7 +86,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
       'turn_pass': settings.watchPartyTurnPassword.trim(),
     });
     final encryptedCode = WatchPartyCrypto.encrypt(jsonStr, widget.session.passcode, widget.session.hostName);
-    return '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(widget.session.hostName)}&code=${Uri.encodeComponent(encryptedCode)}';
+    return '${WatchPartyConfig.redirectUrl}?host=${Uri.encodeComponent(widget.session.hostName)}&code=${Uri.encodeComponent(encryptedCode)}&passcode=${Uri.encodeComponent(widget.session.passcode)}';
   }
 
   void _copyInviteLink() {
@@ -224,6 +224,13 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
     }
   }
 
+  void _copyPasscode() {
+    final passcode = widget.session.passcode;
+    if (passcode.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: passcode));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -252,13 +259,25 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
           PopupMenuButton<String>(
             surfaceTintColor: Colors.transparent,
             onSelected: (val) {
-              if (val == 'people') {
+              if (val == 'passcode') {
+                _copyPasscode();
+              } else if (val == 'people') {
                 _showPeopleDialog();
               } else if (val == 'logs') {
                 _showDiagnosticsLogs();
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'passcode',
+                child: Row(
+                  children: [
+                    Icon(Icons.key_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('Copy Passcode'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'people',
                 child: Row(
