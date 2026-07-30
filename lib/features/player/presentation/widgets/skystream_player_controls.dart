@@ -411,6 +411,13 @@ class SkyStreamPlayerControlsState
   }
 
   Future<void> _enterPip() async {
+    ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false);
+    if (Platform.isAndroid || Platform.isIOS) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
     await _platformService.enterPip(_isPlaying);
   }
 
@@ -1466,7 +1473,9 @@ class SkyStreamPlayerControlsState
     // ReadingOrderTraversalPolicy gives geometric D-pad navigation so focus
     // can always reach a neighbouring control. The chrome is also fully gated
     // off while the sources side panel owns the screen.
-    final chromeVisible = _isVisible && !_panelOpen;
+    final size = MediaQuery.sizeOf(context);
+    final isSmallWindow = size.width < 480 || size.height < 320;
+    final chromeVisible = _isVisible && !_panelOpen && !isSmallWindow;
     final controlsWidget = FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),
       child: ExcludeFocus(
@@ -1540,7 +1549,7 @@ class SkyStreamPlayerControlsState
       ),
     );
 
-    if (activeSession != null && activeSession.isPausedForMembers) {
+    if (activeSession != null && activeSession.isPausedForMembers && !isSmallWindow) {
       return Stack(
         children: [
           controlsWidget,

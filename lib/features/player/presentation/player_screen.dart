@@ -672,7 +672,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
                     final orientation = MediaQuery.of(context).orientation;
                     final isPortrait = orientation == Orientation.portrait;
-                    final showChatPanel = activeSession != null ? (isPortrait || showLandscapeChat) : showLandscapeChat;
+                    final size = MediaQuery.sizeOf(context);
+                    final isSmallWindow = size.width < 480 || size.height < 320;
+                    final showChatPanel = !isSmallWindow && showLandscapeChat;
 
                     if (orientation != _lastOrientation) {
                       _lastOrientation = orientation;
