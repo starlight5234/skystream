@@ -24,6 +24,9 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   String? _kickMessage;
   StreamSubscription<Map<String, dynamic>?>? _lobbyDbSubscription;
   VoidCallback? onAllGuestsLeft;
+  void Function(String requesterName)? onSyncStateRequested;
+  void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
+  void Function(String cmd, int positionMs)? onPlayerCommandReceived;
   
   Timer? _keepAliveTimer;
   DateTime _lastSeen = DateTime.now();
@@ -147,11 +150,36 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             _kickMessage = 'You have been kicked from the watch party by the host.';
             notifyListeners();
             return;
+          } else if (action == 'get_sync_state') {
+            final requester = decoded['requester'] as String? ?? 'Friend';
+            onSyncStateRequested?.call(requester);
+          } else if (action == 'sync_state_response') {
+            final positionMs = decoded['positionMs'] as int? ?? 0;
+            final isPlaying = decoded['isPlaying'] as bool? ?? false;
+            onSyncStateReceived?.call(positionMs, isPlaying);
+          } else if (action == 'player_command') {
+            final cmd = decoded['cmd'] as String? ?? 'ping';
+            final positionMs = decoded['positionMs'] as int? ?? 0;
+            onPlayerCommandReceived?.call(cmd, positionMs);
           }
           return;
         }
 
-        if (type == 'chat') {
+        if (type == 'media_card') {
+          _lastSeen = DateTime.now();
+          final mediaPayload = decoded['media'] as Map<String, dynamic>?;
+          final sender = decoded['sender'] as String? ?? 'Friend';
+          if (mediaPayload != null) {
+            _messages.add({
+              'type': 'media_card',
+              'sender': sender,
+              'media': mediaPayload,
+              'isMe': false,
+              'time': DateTime.now(),
+            });
+            notifyListeners();
+          }
+        } else if (type == 'chat') {
           _lastSeen = DateTime.now();
           final text = decoded['text'] as String;
           final sender = decoded['sender'] as String? ?? 'Friend';
@@ -304,6 +332,94 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     }
     _outboxQueue.removeWhere(toRemove.contains);
     notifyListeners();
+  }
+
+  void sendMediaCard(Map<String, dynamic> mediaPayload) {
+    final messageItem = {
+      'type': 'media_card',
+      'sender': _userName,
+      'media': mediaPayload,
+      'isMe': true,
+      'time': DateTime.now(),
+      'status': 'sending',
+    };
+
+    if (_isHost) {
+      if (_creatorService != null) {
+        _creatorService!.messageBroker.broadcastMediaCard(_userName, mediaPayload);
+        messageItem['status'] = 'sent';
+      }
+      notifyListeners();
+      return;
+    }
+
+    final isChannelOpen = _dataChannel != null &&
+        _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen &&
+        !_isReconnecting;
+
+    if (isChannelOpen) {
+      try {
+        final jsonMsg = jsonEncode({
+          'type': 'media_card',
+          'sender': _userName,
+          'media': mediaPayload,
+        });
+        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+        messageItem['status'] = 'sent';
+      } catch (_) {
+        messageItem['status'] = 'pending';
+      }
+    }
+
+    _messages.add(messageItem);
+    notifyListeners();
+  }
+
+  void requestSyncState() {
+    final payload = {
+      'type': 'control',
+      'action': 'get_sync_state',
+      'requester': _userName,
+    };
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastRawJson(payload);
+    } else if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+      } catch (_) {}
+    }
+  }
+
+  void sendSyncStateResponse(int positionMs, bool isPlaying) {
+    final payload = {
+      'type': 'control',
+      'action': 'sync_state_response',
+      'positionMs': positionMs,
+      'isPlaying': isPlaying,
+    };
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastRawJson(payload);
+    } else if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+      } catch (_) {}
+    }
+  }
+
+  void sendPlayerCommand(String cmd, int positionMs) {
+    final payload = {
+      'type': 'control',
+      'action': 'player_command',
+      'cmd': cmd,
+      'positionMs': positionMs,
+    };
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastRawJson(payload);
+    } else if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+      } catch (_) {}
+    }
   }
 
   void sendMessage(String text) {

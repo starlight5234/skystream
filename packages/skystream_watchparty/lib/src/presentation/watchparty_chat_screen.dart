@@ -14,10 +14,12 @@ import 'widgets/watchparty_chat_body.dart';
 
 class WatchPartyChatScreen extends ConsumerStatefulWidget {
   final ActiveWatchPartyState session;
+  final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
 
   const WatchPartyChatScreen({
     super.key,
     required this.session,
+    this.onJoinMediaStream,
   });
 
   @override
@@ -287,6 +289,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
         passcode: widget.session.passcode,
         creatorService: widget.session.creatorService,
         onCopyInviteLink: _copyInviteLink,
+        onJoinMediaStream: widget.onJoinMediaStream,
       ),
     );
   }

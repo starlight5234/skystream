@@ -10,6 +10,7 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
   final String passcode;
   final WatchPartyCreatorService? creatorService;
   final VoidCallback? onCopyInviteLink;
+  final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
 
   const WatchPartyChatBody({
     super.key,
@@ -18,6 +19,7 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
     required this.passcode,
     this.creatorService,
     this.onCopyInviteLink,
+    this.onJoinMediaStream,
   });
 
   @override
@@ -192,6 +194,143 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
               itemBuilder: (context, index) {
                 final msg = messages[index];
                 final isSystem = msg['type'] == 'system';
+                final isMediaCard = msg['type'] == 'media_card';
+
+                if (isMediaCard) {
+                  final isMe = msg['isMe'] as bool? ?? false;
+                  final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
+                  final media = (msg['media'] as Map<String, dynamic>?) ?? {};
+                  final title = media['title'] as String? ?? 'Shared Media';
+                  final posterUrl = media['posterUrl'] as String?;
+                  final providerName = media['providerName'] as String? ?? '';
+                  final isTvShow = media['isTvShow'] as bool? ?? false;
+                  final season = media['season'] as int?;
+                  final episodeNumber = media['episodeNumber'] as int?;
+                  final episodeName = media['episodeName'] as String?;
+
+                  return Align(
+                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      width: 260,
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.movie_outlined,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '$sender shared media',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (posterUrl != null && posterUrl.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.network(
+                                    posterUrl,
+                                    width: 45,
+                                    height: 65,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  width: 45,
+                                  height: 65,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(Icons.movie, size: 24),
+                                ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    if (isTvShow && season != null && episodeNumber != null) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'S$season E$episodeNumber ${episodeName != null ? "• $episodeName" : ""}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                      ),
+                                    ],
+                                    if (providerName.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        providerName,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Theme.of(context).colorScheme.outline,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                widget.onJoinMediaStream?.call(media);
+                              },
+                              icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                              label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
 
                 if (isSystem) {
                   return Align(

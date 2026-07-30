@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:skystream/features/home/presentation/home_screen.dart';
@@ -19,6 +20,8 @@ import '../../core/storage/settings_repository.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:flutter/foundation.dart';
 import '../logger/app_logger.dart';
+
+import '../../features/details/presentation/playback_launcher.dart';
 
 part 'app_router.g.dart';
 
@@ -122,8 +125,15 @@ class WatchPartyRoute extends GoRouteData with $WatchPartyRoute {
   final String? code;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      WatchPartyScreen(host: host, code: code);
+  Widget build(BuildContext context, GoRouterState state) => Consumer(
+        builder: (context, ref, _) => WatchPartyScreen(
+          host: host,
+          code: code,
+          onJoinMediaStream: (payload) {
+            PlaybackLauncher.launchWatchPartyMedia(ref, context, payload);
+          },
+        ),
+      );
 }
 
 class SettingsBranchData extends StatefulShellBranchData {

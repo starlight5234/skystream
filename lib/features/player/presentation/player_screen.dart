@@ -171,6 +171,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         episode: widget.episode,
         videoViewController: _videoViewController,
       );
+
+      final activeParty = ref.read(activeWatchPartyProvider);
+      if (activeParty != null) {
+        if (activeParty.isPausedForMembers) {
+          _playerController.pause();
+        }
+
+        activeParty.chatService.onSyncStateRequested = (requester) {
+          final currentMs = _player.state.position.inMilliseconds;
+          final isPlaying = _player.state.playing;
+          activeParty.chatService.sendSyncStateResponse(currentMs, isPlaying);
+          if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
+            ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
+            _playerController.play();
+          }
+        };
+
+        activeParty.chatService.onSyncStateReceived = (positionMs, isPlaying) {
+          _playerController.seekTo(Duration(milliseconds: positionMs));
+          if (isPlaying) {
+            _playerController.play();
+          } else {
+            _playerController.pause();
+          }
+        };
+
+        activeParty.chatService.onPlayerCommandReceived = (cmd, positionMs) {
+          if (cmd == 'play') {
+            _playerController.play();
+          } else if (cmd == 'pause') {
+            _playerController.pause();
+          } else if (cmd == 'seek') {
+            _playerController.seekTo(Duration(milliseconds: positionMs));
+          }
+        };
+
+        if (!activeParty.isHost) {
+          activeParty.chatService.requestSyncState();
+        }
+      }
     });
   }
 
@@ -748,6 +788,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               isLoading: isLoading,
                               player: _player,
                               videoViewController: _videoViewController,
+                              item: widget.item,
+                              episode: widget.episode,
                               title: widget.item.title,
                               subtitle: ref
                                   .read(playerControllerProvider)

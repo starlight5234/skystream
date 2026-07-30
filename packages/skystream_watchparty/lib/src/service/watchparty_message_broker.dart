@@ -112,11 +112,22 @@ class WatchPartyMessageBroker extends ChangeNotifier {
 
       lastSeen[guestName] = DateTime.now();
 
-      if (type == 'chat') {
+      if (type == 'media_card') {
+        _messages.add({
+          'type': 'media_card',
+          'sender': decoded['sender'] ?? guestName,
+          'media': decoded['media'],
+          'isMe': false,
+          'time': DateTime.now(),
+        });
+        notifyListeners();
+        _relayRawJson(decoded, excludeSender: guestName);
+      } else if (type == 'chat') {
         final text = decoded['text'] as String;
         final sender = decoded['sender'] as String? ?? guestName;
 
         _messages.add({
+          'type': 'chat',
           'text': text,
           'sender': sender,
           'isMe': false,
@@ -129,6 +140,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     } catch (_) {
       lastSeen[guestName] = DateTime.now();
       _messages.add({
+        'type': 'chat',
         'text': rawText,
         'sender': guestName,
         'isMe': false,
@@ -136,6 +148,48 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       });
       notifyListeners();
       _relayMessage(guestName, rawText);
+    }
+  }
+
+  void broadcastMediaCard(String sender, Map<String, dynamic> mediaPayload) {
+    final payload = {
+      'type': 'media_card',
+      'sender': sender,
+      'media': mediaPayload,
+    };
+    final jsonMsg = jsonEncode(payload);
+    for (final channel in _activeDataChannels.values) {
+      try {
+        channel.send(RTCDataChannelMessage(jsonMsg));
+      } catch (_) {}
+    }
+    _messages.add({
+      'type': 'media_card',
+      'sender': sender,
+      'media': mediaPayload,
+      'isMe': true,
+      'time': DateTime.now(),
+    });
+    notifyListeners();
+  }
+
+  void broadcastRawJson(Map<String, dynamic> payload) {
+    final jsonMsg = jsonEncode(payload);
+    for (final channel in _activeDataChannels.values) {
+      try {
+        channel.send(RTCDataChannelMessage(jsonMsg));
+      } catch (_) {}
+    }
+  }
+
+  void _relayRawJson(Map<String, dynamic> payload, {required String excludeSender}) {
+    final jsonMsg = jsonEncode(payload);
+    for (final entry in _activeDataChannels.entries) {
+      if (entry.key != excludeSender) {
+        try {
+          entry.value.send(RTCDataChannelMessage(jsonMsg));
+        } catch (_) {}
+      }
     }
   }
 

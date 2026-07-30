@@ -15,6 +15,10 @@ class ActiveWatchPartyState {
   final String passcode;
   final WatchPartyChatService chatService;
 
+  final Map<String, dynamic>? activeMediaPayload;
+  final bool waitForMembers;
+  final bool isPausedForMembers;
+
   const ActiveWatchPartyState({
     this.peerConnection,
     this.dataChannel,
@@ -25,7 +29,31 @@ class ActiveWatchPartyState {
     required this.userName,
     required this.passcode,
     required this.chatService,
+    this.activeMediaPayload,
+    this.waitForMembers = false,
+    this.isPausedForMembers = false,
   });
+
+  ActiveWatchPartyState copyWith({
+    Map<String, dynamic>? activeMediaPayload,
+    bool? waitForMembers,
+    bool? isPausedForMembers,
+  }) {
+    return ActiveWatchPartyState(
+      peerConnection: peerConnection,
+      dataChannel: dataChannel,
+      creatorService: creatorService,
+      database: database,
+      isHost: isHost,
+      hostName: hostName,
+      userName: userName,
+      passcode: passcode,
+      chatService: chatService,
+      activeMediaPayload: activeMediaPayload ?? this.activeMediaPayload,
+      waitForMembers: waitForMembers ?? this.waitForMembers,
+      isPausedForMembers: isPausedForMembers ?? this.isPausedForMembers,
+    );
+  }
 }
 
 class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
@@ -34,6 +62,22 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 
   void setActiveSession(ActiveWatchPartyState session) {
     state = session;
+  }
+
+  void setActiveMedia(Map<String, dynamic>? mediaPayload, {bool waitForMembers = false}) {
+    if (state == null) return;
+    state = state!.copyWith(
+      activeMediaPayload: mediaPayload,
+      waitForMembers: waitForMembers,
+      isPausedForMembers: waitForMembers,
+    );
+  }
+
+  void unpauseForMembers() {
+    if (state == null) return;
+    state = state!.copyWith(
+      isPausedForMembers: false,
+    );
   }
 
   void clearSession() {

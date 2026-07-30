@@ -53,6 +53,8 @@ class SkyStreamPlayerControls extends ConsumerStatefulWidget {
   /// subtree). This is the single mechanism that keeps D-pad alive after the
   /// controls auto-hide — replacing the old `primaryFocus.unfocus()` dance.
   final VoidCallback? onRequestRootFocus;
+  final MultimediaItem? item;
+  final Episode? episode;
 
   const SkyStreamPlayerControls({
     super.key,
@@ -71,6 +73,8 @@ class SkyStreamPlayerControls extends ConsumerStatefulWidget {
     this.onVisibilityChanged,
     this.onRequestRootFocus,
     this.isLoading = false,
+    this.item,
+    this.episode,
   });
 
   final bool isLoading;
@@ -1346,6 +1350,32 @@ class SkyStreamPlayerControlsState
     final activeSession = ref.watch(activeWatchPartyProvider);
 
     final actions = <Widget>[
+      if (activeSession != null)
+        PlayerIconButton(
+          icon: Icons.share_rounded,
+          tooltip: 'Share to WatchParty',
+          onPressed: () {
+            final currentItem = widget.item;
+            final currentEpisode = widget.episode;
+            final titleText = widget.title ?? currentItem?.title ?? 'Shared Media';
+            if (currentItem != null || titleText.isNotEmpty) {
+              final payload = {
+                'title': titleText,
+                'posterUrl': currentItem?.posterUrl,
+                'mediaUrl': currentItem?.url ?? '',
+                'isTvShow': currentEpisode != null || (currentItem?.episodes != null && currentItem!.episodes!.isNotEmpty),
+                'episodeUrl': currentEpisode?.url,
+                'season': currentEpisode?.season,
+                'episodeNumber': currentEpisode?.episode,
+                'episodeName': currentEpisode?.name,
+                'providerName': currentItem?.provider,
+              };
+              activeSession.chatService.sendMediaCard(payload);
+              ref.read(notificationServiceProvider).showInfo('Media card shared to WatchParty!');
+            }
+          },
+          isTv: _isTv,
+        ),
       PlayerIconButton(
         icon: Icons.chat_rounded,
         tooltip: 'Toggle Chat',
@@ -1437,7 +1467,7 @@ class SkyStreamPlayerControlsState
     // can always reach a neighbouring control. The chrome is also fully gated
     // off while the sources side panel owns the screen.
     final chromeVisible = _isVisible && !_panelOpen;
-    return FocusTraversalGroup(
+    final controlsWidget = FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),
       child: ExcludeFocus(
         excluding: !chromeVisible,
@@ -1509,6 +1539,22 @@ class SkyStreamPlayerControlsState
         ),
       ),
     );
+
+    if (activeSession != null && activeSession.isPausedForMembers) {
+      return Stack(
+        children: [
+          controlsWidget,
+          WatchPartyWaitOverlay(
+            onPlayNow: () {
+              ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
+              _togglePlay();
+            },
+          ),
+        ],
+      );
+    }
+
+    return controlsWidget;
   }
 
   /// Absorbs taps and drags over the chrome bars so interacting with the

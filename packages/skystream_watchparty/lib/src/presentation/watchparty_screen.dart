@@ -54,11 +54,13 @@ void showWatchPartyUsernameDialog(BuildContext context, WidgetRef ref) {
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? host;
   final String? code;
+  final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
 
   const WatchPartyScreen({
     super.key,
     this.host,
     this.code,
+    this.onJoinMediaStream,
   });
 
   @override
@@ -664,7 +666,10 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   Widget build(BuildContext context) {
     final activeSession = ref.watch(activeWatchPartyProvider);
     if (activeSession != null) {
-      return WatchPartyChatScreen(session: activeSession);
+      return WatchPartyChatScreen(
+        session: activeSession,
+        onJoinMediaStream: widget.onJoinMediaStream,
+      );
     }
 
     final settings = ref.watch(watchPartySettingsProvider);
