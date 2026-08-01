@@ -146,7 +146,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
       if (hostAnswer != null) continue;
       if (_kickedGuests.contains(guestName)) continue;
-      _pendingGuests.remove(guestName);
+      if (_pendingGuests.contains(guestName)) continue;
 
       var targetGuestName = guestName;
       final existingDc = activeDataChannels[guestName];

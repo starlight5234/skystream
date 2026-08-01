@@ -256,91 +256,95 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
   int _reconnectAttempts = 0;
   bool _isReconnecting = false;
+  bool _isAttemptingReconnect = false;
 
   Future<void> _attemptReconnection() async {
-    if (_isReconnecting || _connectionClosed) return;
-
-    // Check if host deleted the lobby before attempting reconnection
-    try {
-      final lobby = await _database.getLobby(hostName: _hostName);
-      if (lobby == null) {
-        _connectionClosed = true;
-        _isReconnecting = false;
-        _kickMessage = 'The host has ended the watch party.';
-        notifyListeners();
-        return;
-      }
-    } catch (_) {}
-
+    if (_isAttemptingReconnect || _connectionClosed) return;
+    _isAttemptingReconnect = true;
     _isReconnecting = true;
     _reconnectAttempts++;
     notifyListeners();
 
     try {
-      final lobby = await _database.getLobby(hostName: _hostName);
-      if (lobby == null) {
-        _connectionClosed = true;
-        _isReconnecting = false;
-        _kickMessage = 'The host has ended the watch party.';
-        notifyListeners();
-        return;
-      }
-    } catch (_) {}
-    
-    if (_joinerService == null && !_isHost) {
-      final loadedSettings = await WatchPartySettings.loadFromPrefs();
-      _joinerService = WatchPartyJoinerService(loadedSettings, _database);
-    }
-
-    final joiner = _joinerService;
-    if (joiner == null) {
-      _connectionClosed = true;
-      _kickMessage = 'Reconnection failed: Joiner service is unavailable.';
-      _isReconnecting = false;
-      notifyListeners();
-      return;
-    }
-
-    final success = await joiner.reconnect(
-      hostName: _hostName,
-      guestName: _userName,
-      passcode: _passcode,
-    );
-    if (success) {
-      _peerConnection = joiner.peerConnection;
-      _dataChannel = joiner.dataChannel;
-      _isReconnecting = false;
-      _reconnectAttempts = 0;
-      _lastSeen = DateTime.now();
-      _setupGuestListeners();
-      _flushOutbox();
-      _addSystemMessage('Reconnected to host.');
-      notifyListeners();
-    } else {
-      _isReconnecting = false;
-      
-      // Check if lobby was closed while reconnecting
       try {
         final lobby = await _database.getLobby(hostName: _hostName);
         if (lobby == null) {
-          _connectionClosed = true;
-          _kickMessage = 'The host has ended the watch party.';
-          notifyListeners();
-          return;
+          // Double check after 1s delay to confirm it wasn't a transient phone-wake socket initialization error
+          await Future<void>.delayed(const Duration(seconds: 1));
+          final recheck = await _database.getLobby(hostName: _hostName);
+          if (recheck == null) {
+            _connectionClosed = true;
+            _isReconnecting = false;
+            _kickMessage = 'The host has ended the watch party.';
+            notifyListeners();
+            return;
+          }
         }
-      } catch (_) {}
+      } catch (_) {
+        // Transient network socket initialization error on phone wake - continue with reconnect attempt
+      }
 
-      if (_reconnectAttempts >= 3) {
+      if (_joinerService == null && !_isHost) {
+        final loadedSettings = await WatchPartySettings.loadFromPrefs();
+        _joinerService = WatchPartyJoinerService(loadedSettings, _database);
+      }
+
+      final joiner = _joinerService;
+      if (joiner == null) {
         _connectionClosed = true;
-        _kickMessage = 'Connection lost after 3 reconnection attempts.';
+        _kickMessage = 'Reconnection failed: Joiner service is unavailable.';
+        _isReconnecting = false;
+        notifyListeners();
+        return;
+      }
+
+      final success = await joiner.reconnect(
+        hostName: _hostName,
+        guestName: _userName,
+        passcode: _passcode,
+      );
+
+      if (success) {
+        _peerConnection = joiner.peerConnection;
+        _dataChannel = joiner.dataChannel;
+        _isReconnecting = false;
+        _reconnectAttempts = 0;
+        _lastSeen = DateTime.now();
+        _setupGuestListeners();
+        _flushOutbox();
+        _addSystemMessage('Reconnected to host.');
         notifyListeners();
       } else {
-        notifyListeners();
-        await Future<void>.delayed(const Duration(seconds: 4));
-        if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
-          _attemptReconnection();
+        _isReconnecting = false;
+        
+        try {
+          final lobby = await _database.getLobby(hostName: _hostName);
+          if (lobby == null) {
+            _connectionClosed = true;
+            _kickMessage = 'The host has ended the watch party.';
+            notifyListeners();
+            return;
+          }
+        } catch (_) {}
+
+        if (_reconnectAttempts >= 3) {
+          _connectionClosed = true;
+          _kickMessage = 'Connection lost after 3 reconnection attempts.';
+          notifyListeners();
+        } else {
+          notifyListeners();
+          await Future<void>.delayed(const Duration(seconds: 3));
+          if (!_connectionClosed && _reconnectAttempts < 3) {
+            _isAttemptingReconnect = false;
+            _attemptReconnection();
+            return;
+          }
         }
       }
+    } catch (_) {
+      _isReconnecting = false;
+    } finally {
+      _isAttemptingReconnect = false;
     }
   }
 
