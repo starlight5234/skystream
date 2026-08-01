@@ -47,9 +47,13 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   }
 
   void registerGuest(String guestName, RTCDataChannel channel) {
+    final isRejoining = lastSeen.containsKey(guestName);
     lastSeen[guestName] = DateTime.now();
-    _addSystemMessage('$guestName has joined the watch party');
-    _broadcastSystemMessage('$guestName has joined the watch party');
+
+    if (!isRejoining) {
+      _addSystemMessage('$guestName has joined the watch party');
+      _broadcastSystemMessage('$guestName has joined the watch party');
+    }
 
     // Sync existing chat history to reconnected guest
     for (final msg in _messages) {

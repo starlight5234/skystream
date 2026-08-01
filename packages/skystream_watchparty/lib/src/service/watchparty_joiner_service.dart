@@ -251,14 +251,31 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
       unawaited(_lobbySubscription!.cancel());
       _lobbySubscription = null;
     }
-    _pollTimer?.cancel();
+        _pollTimer?.cancel();
     _pollTimer = null;
     super.cleanup();
   }
 
-  Future<bool> reconnect() async {
+  Future<bool> reconnect({
+    String? hostName,
+    String? guestName,
+    String? passcode,
+  }) async {
     logMessage('Reconnection handshake initiated...');
     
+    final targetHost = hostName ?? _activeHostName;
+    final targetGuest = guestName ?? _activeGuestName;
+    final targetPasscode = passcode ?? _activePasscode;
+
+    if (targetHost == null || targetGuest == null || targetPasscode == null) {
+      logMessage('Reconnection failed: Missing room credentials.');
+      return false;
+    }
+    
+    _activeHostName = targetHost;
+    _activeGuestName = targetGuest;
+    _activePasscode = targetPasscode;
+
     _lobbySubscription?.cancel();
     _lobbySubscription = null;
     _pollTimer?.cancel();
@@ -285,15 +302,15 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
  
     try {
       await startJoining(
-        _activeHostName!,
-        _activeGuestName!,
-        _activePasscode!,
+        targetHost,
+        targetGuest,
+        targetPasscode,
         customTurnUsername: _customTurnUsername,
         customTurnPassword: _customTurnPassword,
       );
       
       int duration = 0;
-      while (isLoading && !connectionSuccess && error == null && duration < 30) {
+      while (isLoading && !connectionSuccess && error == null && duration < 20) {
         await Future<void>.delayed(const Duration(seconds: 1));
         duration++;
       }

@@ -213,9 +213,9 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
       ),
     );
 
+    // Retain _creatorService and _joinerService so reconnection handshake can send new SDP offer
     setState(() {
-      _creatorService = null;
-      _joinerService = null;
+      _isLoading = false;
     });
   }
 

@@ -183,28 +183,6 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
             ),
           )
         else ...[
-          if (widget.chatService.isReconnecting)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              color: Colors.orange.withOpacity(0.9),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Reconnecting to host (Attempt ${widget.chatService.reconnectAttempts}/3)...',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,

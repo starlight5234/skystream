@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import '../config/watchparty_settings.dart';
 import '../data/watchparty_database.dart';
 import 'watchparty_creator_service.dart';
 import 'watchparty_joiner_service.dart';
@@ -11,11 +12,11 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   RTCPeerConnection? _peerConnection;
   RTCDataChannel? _dataChannel;
   final WatchPartyCreatorService? _creatorService;
-  final WatchPartyJoinerService? _joinerService;
+  WatchPartyJoinerService? _joinerService;
   final WatchPartyDatabase _database;
   final bool _isHost;
   final String _hostName;
-  final String _userName;
+  String _userName;
   final String _passcode;
 
   final List<Map<String, dynamic>> _messages = [];
@@ -150,6 +151,13 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             _kickMessage = 'You have been kicked from the watch party by the host.';
             notifyListeners();
             return;
+          } else if (action == 'assigned_name') {
+            final newName = decoded['name'] as String?;
+            if (newName != null && newName.isNotEmpty) {
+              _userName = newName;
+              _addSystemMessage('Your display name in this lobby was set to "$newName".');
+              notifyListeners();
+            }
           } else if (action == 'msg_ack') {
             _lastSeen = DateTime.now();
             final msgId = decoded['msgId'] as String?;
@@ -187,7 +195,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
               'type': 'media_card',
               'sender': sender,
               'media': mediaPayload,
-              'isMe': false,
+              'isMe': sender == _userName,
               'time': DateTime.now(),
             });
             notifyListeners();
@@ -200,7 +208,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             'type': 'chat',
             'text': text,
             'sender': sender,
-            'isMe': false,
+            'isMe': sender == _userName,
             'time': DateTime.now(),
           });
           notifyListeners();
@@ -267,7 +275,23 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     _isReconnecting = true;
     _reconnectAttempts++;
     notifyListeners();
+
+    try {
+      final lobby = await _database.getLobby(hostName: _hostName);
+      if (lobby == null) {
+        _connectionClosed = true;
+        _isReconnecting = false;
+        _kickMessage = 'The host has ended the watch party.';
+        notifyListeners();
+        return;
+      }
+    } catch (_) {}
     
+    if (_joinerService == null && !_isHost) {
+      final loadedSettings = await WatchPartySettings.loadFromPrefs();
+      _joinerService = WatchPartyJoinerService(loadedSettings, _database);
+    }
+
     final joiner = _joinerService;
     if (joiner == null) {
       _connectionClosed = true;
@@ -277,7 +301,11 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    final success = await joiner.reconnect();
+    final success = await joiner.reconnect(
+      hostName: _hostName,
+      guestName: _userName,
+      passcode: _passcode,
+    );
     if (success) {
       _peerConnection = joiner.peerConnection;
       _dataChannel = joiner.dataChannel;
@@ -290,13 +318,25 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     } else {
       _isReconnecting = false;
+      
+      // Check if lobby was closed while reconnecting
+      try {
+        final lobby = await _database.getLobby(hostName: _hostName);
+        if (lobby == null) {
+          _connectionClosed = true;
+          _kickMessage = 'The host has ended the watch party.';
+          notifyListeners();
+          return;
+        }
+      } catch (_) {}
+
       if (_reconnectAttempts >= 3) {
         _connectionClosed = true;
         _kickMessage = 'Connection lost after 3 reconnection attempts.';
         notifyListeners();
       } else {
         notifyListeners();
-        await Future<void>.delayed(const Duration(seconds: 5));
+        await Future<void>.delayed(const Duration(seconds: 4));
         if (!_connectionClosed && !_isReconnecting && _reconnectAttempts < 3) {
           _attemptReconnection();
         }

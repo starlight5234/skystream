@@ -82,6 +82,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Orientation? _lastOrientation;
   late final PlayerController _playerController;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
+  StreamSubscription<bool>? _playingStreamSub;
 
   @override
   void initState() {
@@ -177,6 +178,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (activeParty.isPausedForMembers) {
           _playerController.pause();
         }
+
+        _playingStreamSub?.cancel();
+        _playingStreamSub = _player.stream.playing.listen((playing) {
+          if (playing) {
+            final party = ref.read(activeWatchPartyProvider);
+            if (party != null && party.isPausedForMembers) {
+              _playerController.pause();
+            }
+          }
+        });
 
         activeParty.chatService.onSyncStateRequested = (requester) {
           final currentMs = _player.state.position.inMilliseconds;
@@ -298,6 +309,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
+    _playingStreamSub?.cancel();
     _settingsSub?.close();
     _playerController.disposeController();
 

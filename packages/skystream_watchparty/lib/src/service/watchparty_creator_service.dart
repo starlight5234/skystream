@@ -146,46 +146,75 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
       if (hostAnswer != null) continue;
       if (_kickedGuests.contains(guestName)) continue;
-      if (_pendingGuests.contains(guestName)) continue;
+      _pendingGuests.remove(guestName);
+
+      var targetGuestName = guestName;
+      final existingDc = activeDataChannels[guestName];
+
       if (activeConnections.containsKey(guestName)) {
-        logMessage('Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...');
-        _disconnectGuest(guestName, silentReconnect: true);
+        if (existingDc != null && existingDc.state == RTCDataChannelState.RTCDataChannelOpen) {
+          int count = 2;
+          while (activeConnections.containsKey('$guestName ($count)') ||
+              activeDataChannels.containsKey('$guestName ($count)')) {
+            count++;
+          }
+          targetGuestName = '$guestName ($count)';
+          logMessage(
+            'Duplicate username "$guestName" detected for active session. Disambiguating to "$targetGuestName"...',
+          );
+        } else {
+          logMessage(
+            'Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...',
+          );
+          _disconnectGuest(guestName, silentReconnect: true);
+        }
       }
 
       _pendingGuests.add(guestName);
-      logMessage('Guest offer received from "$guestName". Processing connection in background...');
+      logMessage('Guest offer received from "$targetGuestName". Processing connection in background...');
 
       unawaited(Future(() async {
         try {
           final guestOfferSdp = WatchPartyCrypto.decrypt(encryptedOffer, _roomPasscode!, _activeHostName!);
-          logMessage('Initializing PeerConnection for guest "$guestName"...');
+          logMessage('Initializing PeerConnection for guest "$targetGuestName"...');
 
           final pc = await WebRTCConnectionManager.createConnection(settings, logCallback: logMessage);
-          activeConnections[guestName] = pc;
-          _setupGuestConnectionListeners(guestName, pc);
+          activeConnections[targetGuestName] = pc;
+          _setupGuestConnectionListeners(targetGuestName, pc);
 
           pc.onDataChannel = (dc) {
-            logMessage('Data channel received from guest: "$guestName"');
+            logMessage('Data channel received from guest: "$targetGuestName"');
             hasAnyGuestJoined = true;
-            activeDataChannels[guestName] = dc;
-            messageBroker.registerGuest(guestName, dc);
+            activeDataChannels[targetGuestName] = dc;
+            messageBroker.registerGuest(targetGuestName, dc);
+
+            if (targetGuestName != guestName) {
+              final nameMsg = jsonEncode({
+                'type': 'control',
+                'action': 'assigned_name',
+                'name': targetGuestName,
+              });
+              try {
+                dc.send(RTCDataChannelMessage(nameMsg));
+              } catch (_) {}
+            }
 
             dc.onDataChannelState = (state) {
               final strState = state.toString().split('.').last;
-              logMessage('Guest data channel state for "$guestName" changed to: $strState');
+              logMessage('Guest data channel state for "$targetGuestName" changed to: $strState');
               if (state == RTCDataChannelState.RTCDataChannelClosed) {
-                _disconnectGuest(guestName);
+                _disconnectGuest(targetGuestName);
               }
             };
 
-            onGuestConnected?.call(guestName, dc);
+            onGuestConnected?.call(targetGuestName, dc);
             notifyListeners();
           };
 
-          logMessage('Setting remote description (Guest Offer) for "$guestName"...');
+          logMessage('Setting remote description (Guest Offer) for "$targetGuestName"...');
           await pc.setRemoteDescription(RTCSessionDescription(guestOfferSdp, 'offer'));
 
-          logMessage('Creating local SDP answer for "$guestName"...');
+          logMessage('Creating local SDP answer for "$targetGuestName"...');
           final answer = await pc.createAnswer({
             'mandatory': {
               'OfferToReceiveAudio': false,
@@ -194,26 +223,26 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
             'optional': [],
           });
 
-          logMessage('Setting local description (Answer) for "$guestName"...');
+          logMessage('Setting local description (Answer) for "$targetGuestName"...');
           await pc.setLocalDescription(answer);
 
-          logMessage('Waiting for local ICE candidate gathering for "$guestName"...');
+          logMessage('Waiting for local ICE candidate gathering for "$targetGuestName"...');
           await _waitForGuestIceGatheringCompletion(pc);
 
           final localDesc = await pc.getLocalDescription();
           final fullSdp = localDesc?.sdp ?? answer.sdp;
 
-          logMessage('Encrypting and writing SDP answer for "$guestName" to database...');
+          logMessage('Encrypting and writing SDP answer for "$targetGuestName" to database...');
           final encryptedAnswer = WatchPartyCrypto.encrypt(fullSdp!, _roomPasscode!, _activeHostName!);
           await database.respondToLobby(
             hostName: _activeHostName!,
             guestName: guestName,
             sdpAnswer: encryptedAnswer,
           );
-          logMessage('SDP answer registered successfully for "$guestName".');
+          logMessage('SDP answer registered successfully for "$targetGuestName".');
         } catch (e) {
-          logMessage('ERROR handshaking with guest "$guestName": $e');
-          _disconnectGuest(guestName);
+          logMessage('ERROR handshaking with guest "$targetGuestName": $e');
+          _disconnectGuest(targetGuestName);
         } finally {
           _pendingGuests.remove(guestName);
         }

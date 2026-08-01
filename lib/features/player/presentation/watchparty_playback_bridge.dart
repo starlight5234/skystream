@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/domain/entity/multimedia_item.dart';
@@ -36,6 +39,20 @@ class WatchPartyPlaybackBridge {
     if (promptResult != null && promptResult.choice == WatchPartyPlayChoice.watchTogether) {
       final item = detailedItem ?? baseItem;
       final episode = item.episodes?.firstWhereOrNull((e) => e.url == url);
+
+      String? repoUrl;
+      if (item.provider != null && item.provider!.isNotEmpty) {
+        final extState = ref.read(extensionsControllerProvider);
+        if (extState is ExtensionsSuccess) {
+          for (final entry in extState.availablePlugins.entries) {
+            if (entry.value.any((p) => p.packageName == item.provider || p.name == item.provider)) {
+              repoUrl = entry.key;
+              break;
+            }
+          }
+        }
+      }
+
       final payload = {
         'title': item.title,
         'posterUrl': item.posterUrl,
@@ -46,6 +63,7 @@ class WatchPartyPlaybackBridge {
         'episodeNumber': episode?.episode,
         'episodeName': episode?.name,
         'providerName': item.provider,
+        'repoUrl': repoUrl,
       };
       activeParty.chatService.sendMediaCard(payload);
       ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
@@ -66,14 +84,27 @@ class WatchPartyPlaybackBridge {
     final title = mediaPayload['title'] as String? ?? 'Shared Media';
     final posterUrl = mediaPayload['posterUrl'] as String?;
     final providerName = mediaPayload['providerName'] as String?;
+    final repoUrl = mediaPayload['repoUrl'] as String?;
     final season = mediaPayload['season'] as int? ?? 0;
     final episodeNumber = mediaPayload['episodeNumber'] as int? ?? 0;
     final episodeName = mediaPayload['episodeName'] as String?;
 
+    try {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } catch (_) {}
+
     final launcher = ref.read(playbackLauncherProvider);
 
     if (providerName != null && providerName.isNotEmpty) {
-      final ready = await _ensureExtensionInstalled(ref, context, providerName);
+      final ready = await _ensureExtensionInstalled(
+        ref,
+        context,
+        providerName,
+        repoUrl: repoUrl,
+      );
       if (!ready || !context.mounted) return;
     }
 
@@ -108,8 +139,9 @@ class WatchPartyPlaybackBridge {
   static Future<bool> _ensureExtensionInstalled(
     WidgetRef ref,
     BuildContext context,
-    String providerName,
-  ) async {
+    String providerName, {
+    String? repoUrl,
+  }) async {
     if (providerName.isEmpty) return true;
 
     final manager = ref.read(extensionManagerProvider.notifier);
@@ -122,7 +154,9 @@ class WatchPartyPlaybackBridge {
     unawaited(
       LoadingDialog.show(
         context,
-        message: 'Installing required extension ($providerName)...',
+        message: repoUrl != null
+            ? 'Fetching repository & installing $providerName...'
+            : 'Installing required extension ($providerName)...',
         onCancel: () {
           dialogDismissed = true;
         },
@@ -133,7 +167,7 @@ class WatchPartyPlaybackBridge {
       final extController = ref.read(extensionsControllerProvider.notifier);
       await extController.ensureInitialized();
 
-      final state = ref.read(extensionsControllerProvider);
+      var state = ref.read(extensionsControllerProvider);
       ExtensionPlugin? targetPlugin;
 
       if (state is ExtensionsSuccess) {
@@ -148,8 +182,27 @@ class WatchPartyPlaybackBridge {
         }
       }
 
+      // If missing and repoUrl is provided, add the repo automatically!
+      if (targetPlugin == null && repoUrl != null && repoUrl.isNotEmpty) {
+        await extController.addRepository(repoUrl);
+        state = ref.read(extensionsControllerProvider);
+        if (state is ExtensionsSuccess) {
+          for (final list in state.availablePlugins.values) {
+            final found = list.firstWhereOrNull(
+              (p) => p.packageName == providerName || p.name == providerName,
+            );
+            if (found != null) {
+              targetPlugin = found;
+              break;
+            }
+          }
+        }
+      }
+
       if (targetPlugin != null) {
         await extController.installPlugin(targetPlugin);
+        final updatedState = ref.read(extensionsControllerProvider);
+        await manager.syncFromPlugins(updatedState.installedPlugins);
       }
     } catch (_) {}
 
@@ -163,7 +216,7 @@ class WatchPartyPlaybackBridge {
 
     if (!nowInstalled && context.mounted) {
       ref.read(notificationServiceProvider).showError(
-            'Could not install missing extension "$providerName". Please install it from Extensions.',
+            'Extension "$providerName" could not be installed automatically.',
           );
       return false;
     }
