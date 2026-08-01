@@ -28,6 +28,7 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
 
 class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
   final _messageController = TextEditingController();
+  final _messageFocusNode = FocusNode();
   final _scrollController = ScrollController();
   bool _hasGuestJoinedBefore = false;
 
@@ -57,6 +58,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
     widget.chatService.removeListener(_onChatUpdate);
     widget.creatorService?.removeListener(_onCreatorUpdate);
     _messageController.dispose();
+    _messageFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -101,6 +103,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
     if (text.isEmpty) return;
     widget.chatService.sendMessage(text);
     _messageController.clear();
+    _messageFocusNode.requestFocus();
     _scrollToBottom();
   }
 
@@ -114,35 +117,6 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
 
     return Column(
       children: [
-        if (widget.chatService.isReconnecting)
-          Container(
-            width: double.infinity,
-            color: Colors.amber,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Reconnecting to host (Attempt ${widget.chatService.reconnectAttempts}/3)...',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         if (isHostWaiting)
           Expanded(
             child: Center(
@@ -360,9 +334,9 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                   );
                 }
 
-                final isMe = msg['isMe'] as bool;
+                final isMe = (msg['isMe'] as bool?) ?? false;
                 final sender = msg['sender'] as String? ?? (isMe ? 'You' : 'Friend');
-                final text = msg['text'] as String;
+                final text = (msg['text'] as String?) ?? '';
 
                 final reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
                 final isEmojiReaction = reactions.contains(text.trim());
@@ -447,12 +421,19 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                                 ),
                               ),
                             ),
-                            if (isMe && msg['status'] == 'pending') ...[
+                            if (isMe && (msg['status'] == 'sending' || msg['status'] == 'pending')) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.schedule,
                                 size: 11,
                                 color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
+                              ),
+                            ] else if (isMe && msg['status'] == 'failed') ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.error_outline,
+                                size: 12,
+                                color: Colors.orangeAccent,
                               ),
                             ],
                           ],
@@ -516,6 +497,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                     children: [
                       Expanded(
                         child: TextField(
+                          focusNode: _messageFocusNode,
                           controller: _messageController,
                           decoration: const InputDecoration(
                             hintText: 'Type a message...',

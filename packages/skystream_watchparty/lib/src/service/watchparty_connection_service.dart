@@ -109,15 +109,29 @@ abstract class WatchPartyConnectionService extends ChangeNotifier {
     }
   }
 
+  Timer? _iceFailureGraceTimer;
+
   void setupConnectionListeners(RTCPeerConnection pc) {
     pc.onIceConnectionState = (state) {
       _currentIceConnectionState = state.toString().split('.').last;
       logMessage('ICE Connection State: $_currentIceConnectionState');
-      if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        logMessage('ICE Connection failed definitively.');
-        error = 'ICE Connection failed. Peer connection could not be established.\n\n'
-            'Please verify your TURN server configuration credentials in settings if you are connecting across separate networks.';
-        cleanup();
+
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _iceFailureGraceTimer?.cancel();
+        _iceFailureGraceTimer = null;
+      } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        logMessage('ICE Connection failure detected. Waiting 5s grace period for potential recovery...');
+        _iceFailureGraceTimer?.cancel();
+        _iceFailureGraceTimer = Timer(const Duration(seconds: 5), () {
+          if (_currentIceConnectionState == 'RTCIceConnectionStateFailed' ||
+              _currentIceConnectionState == 'failed') {
+            logMessage('ICE Connection failed definitively after grace window.');
+            error = 'ICE Connection failed. Peer connection could not be established.\n\n'
+                'Please verify your TURN server configuration credentials in settings if you are connecting across separate networks.';
+            cleanup();
+          }
+        });
       }
       notifyListeners();
     };
@@ -229,6 +243,9 @@ abstract class WatchPartyConnectionService extends ChangeNotifier {
   }
 
   void cleanup() {
+    _iceFailureGraceTimer?.cancel();
+    _iceFailureGraceTimer = null;
+
     if (_iceGatheringCompleter != null && !_iceGatheringCompleter!.isCompleted) {
       _iceGatheringCompleter!.complete();
     }

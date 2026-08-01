@@ -714,12 +714,37 @@ class SkyStreamPlayerControlsState
   // ------------------------------------
 
   void _togglePlay() {
+    final activeSession = ref.read(activeWatchPartyProvider);
+    if (activeSession != null && !activeSession.canControlPlayback) {
+      ref.read(notificationServiceProvider).showInfo(
+        'Only the stream host (${activeSession.mediaSharer ?? "sharer"}) can control playback.',
+      );
+      return;
+    }
+    final wasPlaying = _isPlaying;
     unawaited(ref.read(playerControllerProvider.notifier).togglePlayPause());
+    if (activeSession != null) {
+      activeSession.chatService.sendPlayerCommand(
+        wasPlaying ? 'pause' : 'play',
+        _position.inMilliseconds,
+      );
+    }
   }
 
   void _seekRelative(Duration amount) {
+    final activeSession = ref.read(activeWatchPartyProvider);
+    if (activeSession != null && !activeSession.canControlPlayback) {
+      ref.read(notificationServiceProvider).showInfo(
+        'Only the stream host (${activeSession.mediaSharer ?? "sharer"}) can control playback.',
+      );
+      return;
+    }
+    final target = _position + amount;
     unawaited(ref.read(playerControllerProvider.notifier).seekRelative(amount));
     _startHideTimer();
+    if (activeSession != null) {
+      activeSession.chatService.sendPlayerCommand('seek', target.inMilliseconds);
+    }
   }
 
   void _toggleLock() {
@@ -937,9 +962,11 @@ class SkyStreamPlayerControlsState
     final sourceAttempts = ref.watch(
       playerControllerProvider.select((s) => s.sourceAttempts),
     );
+    final activeSession = ref.watch(activeWatchPartyProvider);
     // Guard against PiP or small window size
+    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final size = MediaQuery.sizeOf(context);
-    final isSmallWindow = size.width < 300 || size.height < 200;
+    final isSmallWindow = isDesktop && (size.width < 300 || size.height < 200);
 
     if (_isInPip || isSmallWindow) return const SizedBox.shrink();
 
@@ -1052,16 +1079,21 @@ class SkyStreamPlayerControlsState
                         opacity: _isVisible ? 1.0 : 0.0,
                         duration: _animDuration,
                         child: Center(
-                          child: PlayerPlayPauseButton(
-                            player: widget.player,
-                            videoViewController: widget.videoViewController,
-                            isLoading: widget.isLoading,
-                            isTv: _isTv,
-                            size: 82,
-                            backgroundColor: Colors.black.withValues(
-                              alpha: 0.32,
-                            ),
-                            onPressed: _togglePlay,
+                          child: Builder(
+                            builder: (context) {
+                              final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+                              return PlayerPlayPauseButton(
+                                player: widget.player,
+                                videoViewController: widget.videoViewController,
+                                isLoading: widget.isLoading,
+                                isTv: _isTv,
+                                size: isPortrait ? 58 : 82,
+                                backgroundColor: Colors.black.withValues(
+                                  alpha: 0.32,
+                                ),
+                                onPressed: _togglePlay,
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -1128,18 +1160,31 @@ class SkyStreamPlayerControlsState
                   ),
 
                 // Resume Prompt Button
-                if (resumePromptPosition != null ||
-                    resumePromptPercentage != null)
+                if ((resumePromptPosition != null ||
+                        resumePromptPercentage != null) &&
+                    (activeSession == null || activeSession.canControlPlayback))
                   ResumePromptOverlay(
                     focusNode: _resumeFocusNode,
                     positionMs: resumePromptPosition,
                     percentage: resumePromptPercentage,
-                    onResume: () => ref
-                        .read(playerControllerProvider.notifier)
-                        .confirmResume(),
-                    onStartOver: () => ref
-                        .read(playerControllerProvider.notifier)
-                        .dismissResumePrompt(),
+                    onResume: () {
+                      ref
+                          .read(playerControllerProvider.notifier)
+                          .confirmResume();
+                      final activeSession = ref.read(activeWatchPartyProvider);
+                      if (activeSession != null && resumePromptPosition != null) {
+                        activeSession.chatService.sendPlayerCommand('seek', resumePromptPosition);
+                      }
+                    },
+                    onStartOver: () {
+                      ref
+                          .read(playerControllerProvider.notifier)
+                          .dismissResumePrompt();
+                      final activeSession = ref.read(activeWatchPartyProvider);
+                      if (activeSession != null) {
+                        activeSession.chatService.sendPlayerCommand('seek', 0);
+                      }
+                    },
                     isTv: _isTv,
                   ),
 
@@ -1476,7 +1521,7 @@ class SkyStreamPlayerControlsState
     // can always reach a neighbouring control. The chrome is also fully gated
     // off while the sources side panel owns the screen.
     final size = MediaQuery.sizeOf(context);
-    final isSmallWindow = size.width < 480 || size.height < 320;
+    final isSmallWindow = isDesktop && (size.width < 480 || size.height < 320);
     final chromeVisible = _isVisible && !_panelOpen && !isSmallWindow;
     final controlsWidget = FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),

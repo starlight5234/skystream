@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/supabase_watchparty_database.dart';
 import '../config/watchparty_config.dart';
+import '../config/watchparty_settings.dart';
 import '../service/watchparty_chat_service.dart';
 import '../service/watchparty_crypto.dart';
 import 'providers/active_watchparty_provider.dart';
@@ -52,7 +53,8 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
 
   void _showDisconnectDialog() {
     final chatService = widget.session.chatService;
-    final msg = chatService.kickMessage ?? 'The peer has disconnected from the watch party.';
+    final msg = chatService.kickMessage ?? 'The host has ended the watch party.';
+    final isKicked = chatService.kickMessage?.toLowerCase().contains('kicked') == true;
 
     showDialog<void>(
       context: context,
@@ -61,7 +63,7 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
         canPop: false,
         child: AlertDialog(
           surfaceTintColor: Colors.transparent,
-          title: Text(chatService.kickMessage != null ? 'Kicked from Room' : 'Connection Lost'),
+          title: Text(isKicked ? 'Kicked from Room' : 'Watch Party Ended'),
           content: Text(msg),
           actions: [
             TextButton(
@@ -302,13 +304,61 @@ class _WatchPartyChatScreenState extends ConsumerState<WatchPartyChatScreen> {
           ),
         ],
       ),
-      body: WatchPartyChatBody(
-        chatService: widget.session.chatService,
-        isHost: widget.session.isHost,
-        passcode: widget.session.passcode,
-        creatorService: widget.session.creatorService,
-        onCopyInviteLink: _copyInviteLink,
-        onJoinMediaStream: widget.onJoinMediaStream,
+      body: Column(
+        children: [
+          if (!widget.session.isHost)
+            AnimatedBuilder(
+              animation: widget.session.chatService,
+              builder: (context, _) {
+                if (!widget.session.chatService.isReconnecting) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  color: Colors.amber.shade900,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Reconnecting to WatchParty...',
+                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          widget.session.chatService.manualRetryReconnect();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Text(
+                          'Retry Now',
+                          style: TextStyle(decoration: TextDecoration.underline, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          Expanded(
+            child: WatchPartyChatBody(
+              chatService: widget.session.chatService,
+              isHost: widget.session.isHost,
+              passcode: widget.session.passcode,
+              creatorService: widget.session.creatorService,
+              onCopyInviteLink: _copyInviteLink,
+              onJoinMediaStream: widget.onJoinMediaStream,
+            ),
+          ),
+        ],
       ),
     );
   }

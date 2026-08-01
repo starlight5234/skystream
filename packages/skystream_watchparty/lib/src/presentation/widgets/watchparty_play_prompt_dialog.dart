@@ -9,10 +9,12 @@ enum WatchPartyPlayChoice {
 class WatchPartyPlayResult {
   final WatchPartyPlayChoice choice;
   final bool waitForMembers;
+  final bool allowMemberControl;
 
   const WatchPartyPlayResult({
     required this.choice,
     required this.waitForMembers,
+    this.allowMemberControl = false,
   });
 }
 
@@ -41,11 +43,13 @@ class WatchPartyPlayPromptDialog extends StatefulWidget {
 
 class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog> {
   late bool _waitForMembers;
+  late bool _allowMemberControl;
 
   @override
   void initState() {
     super.initState();
     _waitForMembers = widget.settings.waitForMembersDefault;
+    _allowMemberControl = widget.settings.allowMemberControlDefault;
   }
 
   void _onToggleWaitForMembers(bool? value) {
@@ -55,6 +59,14 @@ class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog>
     });
     // Persist memory-based preference asynchronously
     widget.settings.update(waitForMembersDefault: value);
+  }
+
+  void _onToggleAllowMemberControl(bool? value) {
+    if (value == null) return;
+    setState(() {
+      _allowMemberControl = value;
+    });
+    widget.settings.update(allowMemberControlDefault: value);
   }
 
   @override
@@ -107,6 +119,30 @@ class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog>
               ),
             ),
           ),
+          const SizedBox(height: 4),
+          InkWell(
+            onTap: () => _onToggleAllowMemberControl(!_allowMemberControl),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _allowMemberControl,
+                    onChanged: _onToggleAllowMemberControl,
+                    activeColor: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  const Expanded(
+                    child: Text(
+                      'Allow members to control playback',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
       actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -118,6 +154,7 @@ class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog>
               const WatchPartyPlayResult(
                 choice: WatchPartyPlayChoice.skip,
                 waitForMembers: false,
+                allowMemberControl: false,
               ),
             );
           },
@@ -130,6 +167,7 @@ class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog>
               WatchPartyPlayResult(
                 choice: WatchPartyPlayChoice.watchTogether,
                 waitForMembers: _waitForMembers,
+                allowMemberControl: _allowMemberControl,
               ),
             );
           },

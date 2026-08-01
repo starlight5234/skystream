@@ -104,14 +104,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       if (!_isTv) {
-        if (activeSession == null) {
+        try {
           SystemChrome.setPreferredOrientations([
             DeviceOrientation.landscapeLeft,
             DeviceOrientation.landscapeRight,
           ]);
-        } else {
-          SystemChrome.setPreferredOrientations([]);
-        }
+        } catch (_) {}
       }
     }
     WakelockPlus.enable();
@@ -175,8 +173,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final activeParty = ref.read(activeWatchPartyProvider);
       if (activeParty != null) {
-        if (activeParty.isPausedForMembers) {
+        void pauseBothEngines() {
           _playerController.pause();
+          try {
+            _videoViewController.pause();
+          } catch (_) {}
+        }
+
+        if (activeParty.isPausedForMembers) {
+          pauseBothEngines();
         }
 
         _playingStreamSub?.cancel();
@@ -184,18 +189,45 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (playing) {
             final party = ref.read(activeWatchPartyProvider);
             if (party != null && party.isPausedForMembers) {
-              _playerController.pause();
+              pauseBothEngines();
             }
           }
         });
 
+        void exoListener() {
+          if (_videoViewController.playbackState.value == vv.VideoControllerPlaybackState.playing) {
+            final party = ref.read(activeWatchPartyProvider);
+            if (party != null && party.isPausedForMembers) {
+              pauseBothEngines();
+            }
+          }
+        }
+
+        _videoViewController.playbackState.addListener(exoListener);
+
+        activeParty.chatService.onGuestConnected = (guestName) {
+          if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
+            ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
+            scheduleMicrotask(() {
+              _playerController.play();
+            });
+          }
+        };
+
         activeParty.chatService.onSyncStateRequested = (requester) {
-          final currentMs = _player.state.position.inMilliseconds;
-          final isPlaying = _player.state.playing;
+          final isExo = ref.read(playerControllerProvider).useExoPlayer;
+          final currentMs = isExo
+              ? _videoViewController.position.value
+              : _player.state.position.inMilliseconds;
+          final isPlaying = isExo
+              ? _videoViewController.playbackState.value == vv.VideoControllerPlaybackState.playing
+              : _player.state.playing;
           activeParty.chatService.sendSyncStateResponse(currentMs, isPlaying);
           if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
             ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
-            _playerController.play();
+            scheduleMicrotask(() {
+              _playerController.play();
+            });
           }
         };
 
@@ -218,7 +250,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           }
         };
 
-        if (!activeParty.isHost) {
+        if (!activeParty.isPausedForMembers) {
           activeParty.chatService.requestSyncState();
         }
       }
@@ -227,7 +259,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false);
+      if (!_isTv && (Platform.isAndroid || Platform.isIOS)) {
+        try {
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        } catch (_) {}
+      }
+
       final ctrl = ref.read(playerControllerProvider);
       _wasPlayingBeforeBackground = ctrl.useExoPlayer
           ? _videoViewController.playbackState.value ==
@@ -311,6 +353,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _playingStreamSub?.cancel();
     _settingsSub?.close();
+
+    try {
+      final activeParty = ref.read(activeWatchPartyProvider);
+      if (activeParty != null) {
+        activeParty.chatService.onGuestConnected = null;
+        activeParty.chatService.onSyncStateRequested = null;
+        activeParty.chatService.onSyncStateReceived = null;
+        activeParty.chatService.onPlayerCommandReceived = null;
+      }
+    } catch (_) {}
+
     _playerController.disposeController();
 
     _player.dispose();
@@ -669,6 +722,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   builder: (context, ref, _) {
                     final activeSession = ref.watch(activeWatchPartyProvider);
                     ref.listen<ActiveWatchPartyState?>(activeWatchPartyProvider, (previous, next) {
+                      if (previous?.isPausedForMembers == true && next?.isPausedForMembers == false) {
+                        scheduleMicrotask(() {
+                          _playerController.play();
+                        });
+                      }
                       if (!_isTv && (Platform.isAndroid || Platform.isIOS)) {
                         if (next == null) {
                           SystemChrome.setPreferredOrientations([
@@ -684,9 +742,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
                     final orientation = MediaQuery.of(context).orientation;
                     final isPortrait = orientation == Orientation.portrait;
-                    final size = MediaQuery.sizeOf(context);
-                    final isSmallWindow = size.width < 480 || size.height < 320;
-                    final showChatPanel = !isSmallWindow && showLandscapeChat;
+                    final showChatPanel = showLandscapeChat || (activeSession != null && isPortrait);
 
                     if (orientation != _lastOrientation) {
                       _lastOrientation = orientation;

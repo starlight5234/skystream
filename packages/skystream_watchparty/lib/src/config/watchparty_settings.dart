@@ -10,6 +10,7 @@ class WatchPartySettings {
   final String turnPassword;
   final bool debugEnabled;
   final bool waitForMembersDefault;
+  final bool allowMemberControlDefault;
 
   const WatchPartySettings({
     this.username = '',
@@ -19,6 +20,7 @@ class WatchPartySettings {
     this.turnPassword = '',
     this.debugEnabled = false,
     this.waitForMembersDefault = true,
+    this.allowMemberControlDefault = false,
   });
 
   bool get isConfigured => projectId.trim().isNotEmpty && anonKey.trim().isNotEmpty;
@@ -31,6 +33,7 @@ class WatchPartySettings {
     String? turnPassword,
     bool? debugEnabled,
     bool? waitForMembersDefault,
+    bool? allowMemberControlDefault,
   }) {
     return WatchPartySettings(
       username: username ?? this.username,
@@ -40,6 +43,7 @@ class WatchPartySettings {
       turnPassword: turnPassword ?? this.turnPassword,
       debugEnabled: debugEnabled ?? this.debugEnabled,
       waitForMembersDefault: waitForMembersDefault ?? this.waitForMembersDefault,
+      allowMemberControlDefault: allowMemberControlDefault ?? this.allowMemberControlDefault,
     );
   }
 
@@ -51,6 +55,7 @@ class WatchPartySettings {
     String? turnPassword,
     bool? debugEnabled,
     bool? waitForMembersDefault,
+    bool? allowMemberControlDefault,
   }) async {
     final updated = copyWith(
       username: username,
@@ -60,6 +65,7 @@ class WatchPartySettings {
       turnPassword: turnPassword,
       debugEnabled: debugEnabled,
       waitForMembersDefault: waitForMembersDefault,
+      allowMemberControlDefault: allowMemberControlDefault,
     );
     await updated.saveToPrefs();
     return updated;
@@ -83,6 +89,7 @@ class WatchPartySettings {
       turnPassword: prefs.getString('watchparty_turn_password') ?? prefs.getString('watchPartyTurnPassword') ?? '',
       debugEnabled: prefs.getBool('watchparty_debug_enabled') ?? prefs.getBool('watchparty_debug_logs') ?? false,
       waitForMembersDefault: prefs.getBool('watchparty_wait_for_members') ?? true,
+      allowMemberControlDefault: prefs.getBool('watchparty_allow_member_control') ?? false,
     );
   }
 
@@ -95,5 +102,6 @@ class WatchPartySettings {
     await prefs.setString('watchparty_turn_password', turnPassword);
     await prefs.setBool('watchparty_debug_enabled', debugEnabled);
     await prefs.setBool('watchparty_wait_for_members', waitForMembersDefault);
+    await prefs.setBool('watchparty_allow_member_control', allowMemberControlDefault);
   }
 }

@@ -17,6 +17,7 @@ import '../../../core/utils/app_utils.dart';
 import '../../../shared/widgets/loading_dialog.dart';
 import 'package:collection/collection.dart';
 import 'package:skystream/l10n/generated/app_localizations.dart';
+import '../../../core/services/watchparty_bridge_interface.dart';
 import '../../player/presentation/watchparty_playback_bridge.dart';
 import '../../settings/presentation/player_settings_provider.dart';
 import 'details_controller.dart';
@@ -43,16 +44,17 @@ class PlaybackLauncher {
     final settings = await _ref.read(playerSettingsProvider.future);
     if (!context.mounted) return;
 
-    // WatchParty Playback Interception Check
+    // Decoupled WatchParty Playback Interception Check
     if (!isJoiningStream) {
-      await WatchPartyPlaybackBridge.handlePlaybackInterception(
+      final interceptor = _ref.read(watchPartyPlaybackInterceptorProvider);
+      final intercepted = await interceptor.interceptPlayback(
         _ref,
         context,
         url,
         baseItem: baseItem,
         detailedItem: detailedItem,
       );
-      if (!context.mounted) return;
+      if (intercepted || !context.mounted) return;
     }
 
     // Smart Intercept: Check if this item/episode is downloaded

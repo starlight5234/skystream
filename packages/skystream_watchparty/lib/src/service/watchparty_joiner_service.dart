@@ -232,6 +232,12 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
   }
 
   void cancelJoining() {
+    if (_activeHostName != null && _activeGuestName != null && !connectionSuccess) {
+      unawaited(database.leaveLobby(
+        hostName: _activeHostName!,
+        guestName: _activeGuestName!,
+      ).catchError((_) {}));
+    }
     cleanup();
     isLoading = false;
     connectionSuccess = false;
@@ -241,17 +247,11 @@ class WatchPartyJoinerService extends WatchPartyConnectionService {
   @override
   void cleanup() {
     isLoading = false;
-    if (_activeHostName != null && _activeGuestName != null && !connectionSuccess) {
-      unawaited(database.leaveLobby(
-        hostName: _activeHostName!,
-        guestName: _activeGuestName!,
-      ).catchError((_) {}));
-    }
     if (_lobbySubscription != null) {
       unawaited(_lobbySubscription!.cancel());
       _lobbySubscription = null;
     }
-        _pollTimer?.cancel();
+    _pollTimer?.cancel();
     _pollTimer = null;
     super.cleanup();
   }

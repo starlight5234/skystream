@@ -34,6 +34,19 @@ class ActiveWatchPartyState {
     this.isPausedForMembers = false,
   });
 
+  String? get mediaSharer =>
+      activeMediaPayload?['sharer'] as String? ??
+      activeMediaPayload?['sender'] as String?;
+
+  bool get allowMemberControl =>
+      activeMediaPayload?['allowMemberControl'] as bool? ?? false;
+
+  bool get isMediaSharer =>
+      mediaSharer == null || mediaSharer == userName;
+
+  bool get canControlPlayback =>
+      isMediaSharer || allowMemberControl;
+
   ActiveWatchPartyState copyWith({
     Map<String, dynamic>? activeMediaPayload,
     bool? waitForMembers,

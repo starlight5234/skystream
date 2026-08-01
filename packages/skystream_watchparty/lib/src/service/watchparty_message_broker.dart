@@ -11,6 +11,9 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   Timer? _keepAliveTimer;
   void Function(String guestName)? onGuestTimeout;
   void Function(String guestName)? onGuestLeaveRequest;
+  void Function(String requesterName)? onSyncStateRequested;
+  void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
+  void Function(String cmd, int positionMs)? onPlayerCommandReceived;
 
   WatchPartyMessageBroker(this._activeDataChannels) {
     _startKeepAliveTimer();
@@ -30,12 +33,12 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         } catch (_) {}
       }
 
-      // Check timeouts (24 seconds)
+      // Check timeouts (45 seconds to accommodate temporary phone sleep/lock)
       final deadGuests = <String>[];
       for (final entry in _activeDataChannels.entries) {
         final guest = entry.key;
         final lastTime = lastSeen[guest] ?? now;
-        if (now.difference(lastTime) > const Duration(seconds: 24)) {
+        if (now.difference(lastTime) > const Duration(seconds: 45)) {
           deadGuests.add(guest);
         }
       }
@@ -55,18 +58,43 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       _broadcastSystemMessage('$guestName has joined the watch party');
     }
 
-    // Sync existing chat history to reconnected guest
-    for (final msg in _messages) {
-      if (msg['type'] == 'chat') {
-        try {
-          final syncMsg = jsonEncode({
-            'type': 'chat',
-            'sender': msg['sender'] ?? 'Host',
-            'text': msg['text'] ?? '',
-          });
-          channel.send(RTCDataChannelMessage(syncMsg));
-        } catch (_) {}
-      }
+    // Sync full existing chat history (chat, media cards) to reconnected guest
+    // Use batching with small yields to prevent saturating the WebRTC send buffer
+    if (_messages.isNotEmpty) {
+      final historySnapshot = List<Map<String, dynamic>>.from(_messages);
+      unawaited(Future(() async {
+        const batchSize = 15;
+        for (int i = 0; i < historySnapshot.length; i += batchSize) {
+          if (channel.state != RTCDataChannelState.RTCDataChannelOpen) break;
+          final end = (i + batchSize < historySnapshot.length) ? i + batchSize : historySnapshot.length;
+          final batch = historySnapshot.sublist(i, end);
+          for (final msg in batch) {
+            try {
+              final type = msg['type'] as String?;
+              if (type == 'chat') {
+                final syncMsg = jsonEncode({
+                  'type': 'chat',
+                  'msgId': msg['msgId'],
+                  'sender': msg['sender'] ?? 'Host',
+                  'text': msg['text'] ?? '',
+                });
+                channel.send(RTCDataChannelMessage(syncMsg));
+              } else if (type == 'media_card') {
+                final syncMsg = jsonEncode({
+                  'type': 'media_card',
+                  'msgId': msg['msgId'],
+                  'sender': msg['sender'] ?? 'Host',
+                  'media': msg['media'],
+                });
+                channel.send(RTCDataChannelMessage(syncMsg));
+              }
+            } catch (_) {}
+          }
+          if (end < historySnapshot.length) {
+            await Future<void>.delayed(const Duration(milliseconds: 15));
+          }
+        }
+      }));
     }
 
     channel.onMessage = (message) {
@@ -91,6 +119,26 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         } catch (_) {}
       }
     }
+  }
+
+  void _addDeduplicatedMessage(Map<String, dynamic> item) {
+    final msgId = item['msgId'] as String?;
+    final text = item['text'] as String?;
+    final sender = item['sender'] as String?;
+
+    if (msgId != null && msgId.isNotEmpty) {
+      final exists = _messages.any((m) => m['msgId'] == msgId);
+      if (exists) return;
+    } else if (text != null && sender != null) {
+      final exists = _messages.any((m) =>
+          m['sender'] == sender &&
+          m['text'] == text &&
+          DateTime.now().difference((m['time'] as DateTime? ?? DateTime.now())).inSeconds < 5);
+      if (exists) return;
+    }
+
+    _messages.add(item);
+    notifyListeners();
   }
 
   void _handleGuestMessage(String guestName, RTCDataChannel channel, String rawText) {
@@ -118,6 +166,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           lastSeen[guestName] = DateTime.now();
         } else if (action == 'leave') {
           onGuestLeaveRequest?.call(guestName);
+        } else if (action == 'get_sync_state') {
+          final requester = decoded['requester'] as String? ?? guestName;
+          onSyncStateRequested?.call(requester);
+          _relayRawJson(decoded, excludeChannelKey: guestName);
+        } else if (action == 'sync_state_response') {
+          final positionMs = decoded['positionMs'] as int? ?? 0;
+          final isPlaying = decoded['isPlaying'] as bool? ?? false;
+          onSyncStateReceived?.call(positionMs, isPlaying);
+          _relayRawJson(decoded, excludeChannelKey: guestName);
+        } else if (action == 'player_command') {
+          final cmd = decoded['cmd'] as String? ?? 'ping';
+          final positionMs = decoded['positionMs'] as int? ?? 0;
+          onPlayerCommandReceived?.call(cmd, positionMs);
+          _relayRawJson(decoded, excludeChannelKey: guestName);
         }
         return;
       }
@@ -125,47 +187,48 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       lastSeen[guestName] = DateTime.now();
 
       if (type == 'media_card') {
-        _messages.add({
+        _addDeduplicatedMessage({
           'type': 'media_card',
+          'msgId': msgId,
           'sender': decoded['sender'] ?? guestName,
           'media': decoded['media'],
           'isMe': false,
           'time': DateTime.now(),
         });
-        notifyListeners();
-        _relayRawJson(decoded, excludeSender: guestName);
+        _relayRawJson(decoded, excludeChannelKey: guestName);
       } else if (type == 'chat') {
         final text = decoded['text'] as String;
         final sender = decoded['sender'] as String? ?? guestName;
 
-        _messages.add({
+        _addDeduplicatedMessage({
           'type': 'chat',
+          'msgId': msgId,
           'text': text,
           'sender': sender,
           'isMe': false,
           'time': DateTime.now(),
         });
-        notifyListeners();
 
-        _relayMessage(sender, text);
+        _relayMessage(sender, text, msgId: msgId, excludeChannelKey: guestName);
       }
     } catch (_) {
       lastSeen[guestName] = DateTime.now();
-      _messages.add({
+      _addDeduplicatedMessage({
         'type': 'chat',
         'text': rawText,
         'sender': guestName,
         'isMe': false,
         'time': DateTime.now(),
       });
-      notifyListeners();
-      _relayMessage(guestName, rawText);
+      _relayMessage(guestName, rawText, excludeChannelKey: guestName);
     }
   }
 
-  void broadcastMediaCard(String sender, Map<String, dynamic> mediaPayload) {
+  void broadcastMediaCard(String sender, Map<String, dynamic> mediaPayload, {String? msgId}) {
+    final effectiveMsgId = msgId ?? '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
     final payload = {
       'type': 'media_card',
+      'msgId': effectiveMsgId,
       'sender': sender,
       'media': mediaPayload,
     };
@@ -175,14 +238,14 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         channel.send(RTCDataChannelMessage(jsonMsg));
       } catch (_) {}
     }
-    _messages.add({
+    _addDeduplicatedMessage({
       'type': 'media_card',
+      'msgId': effectiveMsgId,
       'sender': sender,
       'media': mediaPayload,
       'isMe': true,
       'time': DateTime.now(),
     });
-    notifyListeners();
   }
 
   void broadcastRawJson(Map<String, dynamic> payload) {
@@ -194,10 +257,10 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     }
   }
 
-  void _relayRawJson(Map<String, dynamic> payload, {required String excludeSender}) {
+  void _relayRawJson(Map<String, dynamic> payload, {required String excludeChannelKey}) {
     final jsonMsg = jsonEncode(payload);
     for (final entry in _activeDataChannels.entries) {
-      if (entry.key != excludeSender) {
+      if (entry.key != excludeChannelKey) {
         try {
           entry.value.send(RTCDataChannelMessage(jsonMsg));
         } catch (_) {}
@@ -205,26 +268,28 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     }
   }
 
-  void broadcastChatMessage(String sender, String text) {
-    final jsonMsg = jsonEncode({'type': 'chat', 'sender': sender, 'text': text});
+  void broadcastChatMessage(String sender, String text, {String? msgId}) {
+    final effectiveMsgId = msgId ?? '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
+    final jsonMsg = jsonEncode({'type': 'chat', 'msgId': effectiveMsgId, 'sender': sender, 'text': text});
     for (final channel in _activeDataChannels.values) {
       try {
         channel.send(RTCDataChannelMessage(jsonMsg));
       } catch (_) {}
     }
-    _messages.add({
+    _addDeduplicatedMessage({
+      'type': 'chat',
+      'msgId': effectiveMsgId,
       'text': text,
       'sender': sender,
       'isMe': true,
       'time': DateTime.now(),
     });
-    notifyListeners();
   }
 
-  void _relayMessage(String sender, String text) {
-    final jsonMsg = jsonEncode({'type': 'chat', 'sender': sender, 'text': text});
+  void _relayMessage(String sender, String text, {String? msgId, String? excludeChannelKey}) {
+    final jsonMsg = jsonEncode({'type': 'chat', 'msgId': msgId, 'sender': sender, 'text': text});
     for (final entry in _activeDataChannels.entries) {
-      if (entry.key != sender) {
+      if (entry.key != excludeChannelKey) {
         try {
           entry.value.send(RTCDataChannelMessage(jsonMsg));
         } catch (_) {}

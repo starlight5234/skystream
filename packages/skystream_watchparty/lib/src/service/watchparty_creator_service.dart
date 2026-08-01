@@ -22,6 +22,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   final Set<String> _kickedGuests = {};
   late final WatchPartyMessageBroker messageBroker;
   bool hasAnyGuestJoined = false;
+  bool _lobbyDeleted = false;
 
   void Function(String guestName, RTCDataChannel channel)? onGuestConnected;
   void Function(String guestName)? onGuestDisconnected;
@@ -45,6 +46,8 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     resetState();
     isLoading = true;
     _lobbyReady = false;
+    _lobbyDeleted = false;
+    hasAnyGuestJoined = false;
     _activeHostName = hostName;
 
     if (customPasscode != null && customPasscode.trim().isNotEmpty) {
@@ -114,7 +117,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
             return;
           }
 
-          if (_lobbySubscription != null) {
+          if (_lobbySubscription != null && _lobbyReady && error == null) {
             final signaling = _parseSignaling(row['signaling']);
             if (signaling.isNotEmpty) {
               _processGuestOffers(signaling);
@@ -149,25 +152,12 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       if (_pendingGuests.contains(guestName)) continue;
 
       var targetGuestName = guestName;
-      final existingDc = activeDataChannels[guestName];
 
-      if (activeConnections.containsKey(guestName)) {
-        if (existingDc != null && existingDc.state == RTCDataChannelState.RTCDataChannelOpen) {
-          int count = 2;
-          while (activeConnections.containsKey('$guestName ($count)') ||
-              activeDataChannels.containsKey('$guestName ($count)')) {
-            count++;
-          }
-          targetGuestName = '$guestName ($count)';
-          logMessage(
-            'Duplicate username "$guestName" detected for active session. Disambiguating to "$targetGuestName"...',
-          );
-        } else {
-          logMessage(
-            'Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...',
-          );
-          _disconnectGuest(guestName, silentReconnect: true);
-        }
+      if (activeConnections.containsKey(guestName) || activeDataChannels.containsKey(guestName)) {
+        logMessage(
+          'Guest "$guestName" sent a new offer (reconnection). Cleaning up old connection...',
+        );
+        _disconnectGuest(guestName, silentReconnect: true);
       }
 
       _pendingGuests.add(guestName);
@@ -231,6 +221,11 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
           final localDesc = await pc.getLocalDescription();
           final fullSdp = localDesc?.sdp ?? answer.sdp;
+
+          if (!_lobbyReady || _activeHostName == null || _roomPasscode == null) {
+            _disconnectGuest(targetGuestName);
+            return;
+          }
 
           logMessage('Encrypting and writing SDP answer for "$targetGuestName" to database...');
           final encryptedAnswer = WatchPartyCrypto.encrypt(fullSdp!, _roomPasscode!, _activeHostName!);
@@ -299,7 +294,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       unawaited(dc.close());
     }
 
-    if (!silentReconnect) {
+    if (!silentReconnect && _activeHostName != null) {
       unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
       messageBroker.unregisterGuest(guestName);
       onGuestDisconnected?.call(guestName);
@@ -317,7 +312,8 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     }
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    if (_activeHostName != null && _roomPasscode != null) {
+    if (!_lobbyDeleted && _activeHostName != null && _roomPasscode != null) {
+      _lobbyDeleted = true;
       final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);
       await database.deleteLobby(hostName: _activeHostName!, passcodeHash: hash);
     }
@@ -380,7 +376,8 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
   @override
   void cleanup() {
-    if (_activeHostName != null && _roomPasscode != null) {
+    if (!_lobbyDeleted && _activeHostName != null && _roomPasscode != null) {
+      _lobbyDeleted = true;
       final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);
       unawaited(database.deleteLobby(hostName: _activeHostName!, passcodeHash: hash).catchError((_) {}));
     }
@@ -395,7 +392,6 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       unawaited(dc.close());
     }
     activeDataChannels.clear();
-    hasAnyGuestJoined = false;
 
     for (final pc in activeConnections.values) {
       unawaited(pc.dispose());
