@@ -33,6 +33,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   void Function(String requesterName)? onSyncStateRequested;
   void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
   void Function(String cmd, int positionMs)? onPlayerCommandReceived;
+  void Function(String sharerName)? onSharerLeftStream;
   
   Timer? _keepAliveTimer;
   DateTime _lastSeen = DateTime.now();
@@ -136,6 +137,10 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       onPlayerCommandReceived?.call(cmd, pos);
     };
 
+    _creatorService!.messageBroker.onSharerLeftStream = (sharer) {
+      onSharerLeftStream?.call(sharer);
+    };
+
     _creatorService!.onGuestDisconnected = (guestName) {
       if (_creatorService!.activeDataChannels.isEmpty) {
         onAllGuestsLeft?.call();
@@ -229,6 +234,9 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             final cmd = decoded['cmd'] as String? ?? 'ping';
             final positionMs = decoded['positionMs'] as int? ?? 0;
             onPlayerCommandReceived?.call(cmd, positionMs);
+          } else if (action == 'sharer_left_stream') {
+            final sharer = decoded['sharer'] as String? ?? 'Sharer';
+            onSharerLeftStream?.call(sharer);
           }
           return;
         }
@@ -263,6 +271,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
           });
         }
       } catch (_) {
+        if (message.text.trim().startsWith('{')) return;
         _lastSeen = DateTime.now();
         _addDeduplicatedMessage({
           'type': 'chat',
@@ -681,6 +690,21 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       'action': 'player_command',
       'cmd': cmd,
       'positionMs': positionMs,
+    };
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastRawJson(payload);
+    } else if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+      } catch (_) {}
+    }
+  }
+
+  void notifySharerLeftStream() {
+    final payload = {
+      'type': 'control',
+      'action': 'sharer_left_stream',
+      'sharer': _userName,
     };
     if (_isHost && _creatorService != null) {
       _creatorService!.messageBroker.broadcastRawJson(payload);

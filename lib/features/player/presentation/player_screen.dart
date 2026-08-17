@@ -22,6 +22,7 @@ import '../../../../features/settings/presentation/player_settings_provider.dart
 import 'widgets/skystream_player_controls.dart';
 import 'widgets/hotstar_player_style.dart';
 import 'player_controller.dart';
+import 'watchparty_playback_bridge.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final MultimediaItem item;
@@ -191,7 +192,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    if (state == AppLifecycleState.paused || (isMobile && state == AppLifecycleState.inactive)) {
       ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false);
       if (!_isTv && (Platform.isAndroid || Platform.isIOS)) {
         try {
@@ -285,6 +287,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _playingStreamSub?.cancel();
     _settingsSub?.close();
+
+    final session = ref.read(activeWatchPartyProvider);
+    if (session != null && session.isMediaSharer && !session.allowMemberControl) {
+      session.chatService.notifySharerLeftStream();
+    }
+
     _syncCoordinator?.dispose();
 
     _playerController.disposeController();
@@ -814,7 +822,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                 child: playerStack,
                               ),
                               Expanded(
-                                child: WatchPartyPlayerChatPanel(session: activeSession),
+                                child: WatchPartyPlayerChatPanel(
+                                  session: activeSession,
+                                  onJoinMediaStream: (mediaPayload) {
+                                    WatchPartyPlaybackBridge.launchMedia(ref, context, mediaPayload);
+                                  },
+                                ),
                               ),
                             ],
                           ),
@@ -827,7 +840,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               left: false,
                               top: false,
                               bottom: false,
-                              child: WatchPartyPlayerChatPanel(session: activeSession),
+                              child: WatchPartyPlayerChatPanel(
+                                session: activeSession,
+                                onJoinMediaStream: (mediaPayload) {
+                                  WatchPartyPlaybackBridge.launchMedia(ref, context, mediaPayload);
+                                },
+                              ),
                             ),
                           ],
                         );

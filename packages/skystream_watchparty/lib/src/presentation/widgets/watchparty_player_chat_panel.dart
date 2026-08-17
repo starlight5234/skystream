@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../config/watchparty_config.dart';
-import '../../config/watchparty_crypto.dart';
+import '../../service/watchparty_crypto.dart';
 import '../../config/watchparty_settings.dart';
 import '../../data/supabase_watchparty_database.dart';
 import '../../service/watchparty_chat_service.dart';
@@ -21,12 +21,14 @@ class WatchPartyPlayerChatPanel extends ConsumerStatefulWidget {
   final ActiveWatchPartyState? session;
   final VoidCallback? onClose;
   final void Function(String message)? onShowNotification;
+  final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
 
   const WatchPartyPlayerChatPanel({
     super.key,
     this.session,
     this.onClose,
     this.onShowNotification,
+    this.onJoinMediaStream,
   });
 
   @override
@@ -545,6 +547,7 @@ class _WatchPartyPlayerChatPanelState extends ConsumerState<WatchPartyPlayerChat
                     passcode: session.passcode,
                     creatorService: session.creatorService,
                     onCopyInviteLink: _copyInviteLink,
+                    onJoinMediaStream: widget.onJoinMediaStream,
                   ),
                 ),
               ],

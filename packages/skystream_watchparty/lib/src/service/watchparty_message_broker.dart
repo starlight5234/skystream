@@ -14,6 +14,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   void Function(String requesterName)? onSyncStateRequested;
   void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
   void Function(String cmd, int positionMs)? onPlayerCommandReceived;
+  void Function(String sharerName)? onSharerLeftStream;
 
   WatchPartyMessageBroker(this._activeDataChannels) {
     _startKeepAliveTimer();
@@ -180,6 +181,10 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           final positionMs = decoded['positionMs'] as int? ?? 0;
           onPlayerCommandReceived?.call(cmd, positionMs);
           _relayRawJson(decoded, excludeChannelKey: guestName);
+        } else if (action == 'sharer_left_stream') {
+          final sharer = decoded['sharer'] as String? ?? guestName;
+          onSharerLeftStream?.call(sharer);
+          _relayRawJson(decoded, excludeChannelKey: guestName);
         }
         return;
       }
@@ -212,6 +217,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         _relayMessage(sender, text, msgId: msgId, excludeChannelKey: guestName);
       }
     } catch (_) {
+      if (rawText.trim().startsWith('{')) return;
       lastSeen[guestName] = DateTime.now();
       _addDeduplicatedMessage({
         'type': 'chat',

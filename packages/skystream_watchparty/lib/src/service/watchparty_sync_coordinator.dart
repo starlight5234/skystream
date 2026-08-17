@@ -13,7 +13,7 @@ abstract class WatchPartyPlayerAdapter {
 }
 
 class WatchPartySyncCoordinator {
-  final Ref ref;
+  final WidgetRef ref;
   final WatchPartyPlayerAdapter adapter;
 
   bool _isHandlingRemoteCommand = false;
@@ -100,6 +100,14 @@ class WatchPartySyncCoordinator {
       _isHandlingRemoteCommand = false;
     };
 
+    chatService.onSharerLeftStream = (sharerName) {
+      if (_disposed) return;
+      ref.read(activeWatchPartyProvider.notifier).unlockPlaybackControl();
+      adapter.showNotification(
+        'Stream sharer ($sharerName) left the player. Playback controls unlocked.',
+      );
+    };
+
     if (!session.isPausedForMembers) {
       chatService.requestSyncState();
     }
@@ -169,6 +177,7 @@ class WatchPartySyncCoordinator {
         session.chatService.onSyncStateRequested = null;
         session.chatService.onSyncStateReceived = null;
         session.chatService.onPlayerCommandReceived = null;
+        session.chatService.onSharerLeftStream = null;
       }
     } catch (_) {}
   }
