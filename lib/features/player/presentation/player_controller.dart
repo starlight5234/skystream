@@ -528,6 +528,7 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   int? _pendingResumeSeekPosition;
+  void Function(String action, int positionMs)? onPlaybackAction;
   double? _pendingResumeSeekPercentage;
   bool _isApplyingPendingResumeSeek = false;
   double _lastNonZeroVolumeLevel = 1.0;
@@ -2314,6 +2315,7 @@ class PlayerController extends Notifier<PlayerState> {
     _isNextEpisodeOverlayForced = false;
 
     final clamped = position < Duration.zero ? Duration.zero : position;
+    onPlaybackAction?.call('seek', clamped.inMilliseconds);
 
     if (state.useExoPlayer && _videoViewController != null) {
       _videoViewController!.seekTo(clamped.inMilliseconds, fast: fast);
@@ -2334,6 +2336,11 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> play() async {
+    final startPos = state.useExoPlayer && _videoViewController != null
+        ? _videoViewController!.position.value
+        : _player.state.position.inMilliseconds;
+    onPlaybackAction?.call('play', startPos);
+
     if (state.useExoPlayer && _videoViewController != null) {
       _videoViewController!.play();
     } else {
@@ -2366,6 +2373,11 @@ class PlayerController extends Notifier<PlayerState> {
   }
 
   Future<void> pause() async {
+    final pausePos = state.useExoPlayer && _videoViewController != null
+        ? _videoViewController!.position.value
+        : _player.state.position.inMilliseconds;
+    onPlaybackAction?.call('pause', pausePos);
+
     if (state.useExoPlayer && _videoViewController != null) {
       _videoViewController!.pause();
     } else {

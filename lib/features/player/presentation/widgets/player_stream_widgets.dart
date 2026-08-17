@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:video_view/video_view.dart' as vv;
-import 'package:skystream_watchparty/skystream_watchparty.dart';
-import '../../../../core/services/notification_service.dart';
 import '../player_controller.dart';
 import '../../../../shared/widgets/custom_widgets.dart';
 import '../../../settings/presentation/player_settings_provider.dart';
@@ -349,21 +347,9 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
               displayDuration: displayDuration,
               bufferWidget: bufferWidget,
               canSeek: canSeek,
-              onSeekEnd: (val) {
-                final activeSession = ref.read(activeWatchPartyProvider);
-                if (activeSession != null && !activeSession.canControlPlayback) {
-                  ref.read(notificationServiceProvider).showInfo(
-                    'Only the stream host (${activeSession.mediaSharer ?? "sharer"}) can control playback.',
-                  );
-                  return;
-                }
-                ref
-                    .read(playerControllerProvider.notifier)
-                    .seekTo(Duration(milliseconds: val.toInt()));
-                if (activeSession != null) {
-                  activeSession.chatService.sendPlayerCommand('seek', val.toInt());
-                }
-              },
+              onSeekEnd: (val) => ref
+                  .read(playerControllerProvider.notifier)
+                  .seekTo(Duration(milliseconds: val.toInt())),
               isLive: isLive,
               skipSegments: skipSegments,
             );

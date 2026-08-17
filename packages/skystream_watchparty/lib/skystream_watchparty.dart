@@ -18,3 +18,5 @@ export 'src/presentation/watchparty_chat_screen.dart';
 export 'src/presentation/widgets/watchparty_chat_body.dart';
 export 'src/presentation/widgets/watchparty_play_prompt_dialog.dart';
 export 'src/presentation/widgets/watchparty_wait_overlay.dart';
+export 'src/presentation/widgets/watchparty_player_chat_panel.dart';
+export 'src/service/watchparty_sync_coordinator.dart';

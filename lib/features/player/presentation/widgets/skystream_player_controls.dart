@@ -714,37 +714,12 @@ class SkyStreamPlayerControlsState
   // ------------------------------------
 
   void _togglePlay() {
-    final activeSession = ref.read(activeWatchPartyProvider);
-    if (activeSession != null && !activeSession.canControlPlayback) {
-      ref.read(notificationServiceProvider).showInfo(
-        'Only the stream host (${activeSession.mediaSharer ?? "sharer"}) can control playback.',
-      );
-      return;
-    }
-    final wasPlaying = _isPlaying;
     unawaited(ref.read(playerControllerProvider.notifier).togglePlayPause());
-    if (activeSession != null) {
-      activeSession.chatService.sendPlayerCommand(
-        wasPlaying ? 'pause' : 'play',
-        _position.inMilliseconds,
-      );
-    }
   }
 
   void _seekRelative(Duration amount) {
-    final activeSession = ref.read(activeWatchPartyProvider);
-    if (activeSession != null && !activeSession.canControlPlayback) {
-      ref.read(notificationServiceProvider).showInfo(
-        'Only the stream host (${activeSession.mediaSharer ?? "sharer"}) can control playback.',
-      );
-      return;
-    }
-    final target = _position + amount;
     unawaited(ref.read(playerControllerProvider.notifier).seekRelative(amount));
     _startHideTimer();
-    if (activeSession != null) {
-      activeSession.chatService.sendPlayerCommand('seek', target.inMilliseconds);
-    }
   }
 
   void _toggleLock() {
@@ -1167,24 +1142,12 @@ class SkyStreamPlayerControlsState
                     focusNode: _resumeFocusNode,
                     positionMs: resumePromptPosition,
                     percentage: resumePromptPercentage,
-                    onResume: () {
-                      ref
-                          .read(playerControllerProvider.notifier)
-                          .confirmResume();
-                      final activeSession = ref.read(activeWatchPartyProvider);
-                      if (activeSession != null && resumePromptPosition != null) {
-                        activeSession.chatService.sendPlayerCommand('seek', resumePromptPosition);
-                      }
-                    },
-                    onStartOver: () {
-                      ref
-                          .read(playerControllerProvider.notifier)
-                          .dismissResumePrompt();
-                      final activeSession = ref.read(activeWatchPartyProvider);
-                      if (activeSession != null) {
-                        activeSession.chatService.sendPlayerCommand('seek', 0);
-                      }
-                    },
+                    onResume: () => ref
+                        .read(playerControllerProvider.notifier)
+                        .confirmResume(),
+                    onStartOver: () => ref
+                        .read(playerControllerProvider.notifier)
+                        .dismissResumePrompt(),
                     isTv: _isTv,
                   ),
 
