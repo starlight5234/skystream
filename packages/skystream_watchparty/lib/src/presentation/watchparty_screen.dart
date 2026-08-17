@@ -185,7 +185,7 @@ class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
 
     final settings = ref.read(watchPartySettingsProvider);
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
-    final resolvedUserName = settings.watchPartyUsername;
+    final resolvedUserName = settings.watchPartyUsername.isNotEmpty ? settings.watchPartyUsername : (isHost ? 'Host' : 'Guest');
 
     final chatService = WatchPartyChatService(
       peerConnection: peerConnection,

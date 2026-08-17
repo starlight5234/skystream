@@ -20,6 +20,7 @@ import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/providers/device_info_provider.dart';
 import '../../../../features/settings/presentation/player_settings_provider.dart';
 import 'widgets/skystream_player_controls.dart';
+import 'widgets/player_control_components.dart';
 import 'widgets/hotstar_player_style.dart';
 import 'player_controller.dart';
 import 'watchparty_playback_bridge.dart';
@@ -80,7 +81,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final PlayerController _playerController;
   WatchPartySyncCoordinator? _syncCoordinator;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
-  StreamSubscription<bool>? _playingStreamSub;
 
   int get _currentPositionMs {
     if (ref.read(playerControllerProvider).useExoPlayer) {
@@ -187,6 +187,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ref: ref,
         adapter: _PlayerScreenWatchPartyAdapter(this),
       )..attach();
+
+      final currentParty = ref.read(activeWatchPartyProvider);
+      if (currentParty != null && currentParty.isPausedForMembers) {
+        scheduleMicrotask(() {
+          if (ref.read(playerControllerProvider).useExoPlayer) {
+            _videoViewController.pause();
+          } else {
+            _player.pause();
+          }
+        });
+      }
     });
   }
 
@@ -210,7 +221,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 vv.VideoControllerPlaybackState.playing
           : _player.state.playing;
       _playerController.saveProgress();
-      _playerController.pause();
+      if (ctrl.useExoPlayer) {
+        _videoViewController.pause();
+      } else {
+        _player.pause();
+      }
 
       // Tear down any in-flight space-hold speed boost. If the user is
       // holding space (2× speed) and the OS backgrounds the app, the
@@ -248,7 +263,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (_wasPlayingBeforeBackground) {
         _wasPlayingBeforeBackground = false;
         WakelockPlus.enable();
-        _playerController.play();
+        if (ref.read(playerControllerProvider).useExoPlayer) {
+          _videoViewController.play();
+        } else {
+          _player.play();
+        }
       }
     }
   }
@@ -285,17 +304,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    _playingStreamSub?.cancel();
     _settingsSub?.close();
 
     final session = ref.read(activeWatchPartyProvider);
-    if (session != null && session.isMediaSharer && !session.allowMemberControl) {
-      session.chatService.notifySharerLeftStream();
+    if (session != null) {
+      if (session.isMediaSharer && !session.allowMemberControl) {
+        session.chatService.notifySharerLeftStream();
+      }
+      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(null);
     }
 
     _syncCoordinator?.dispose();
 
     _playerController.disposeController();
+
+    try {
+      _videoViewController.pause();
+      _videoViewController.close();
+    } catch (_) {}
+    try {
+      _player.stop();
+    } catch (_) {}
 
     _player.dispose();
     _videoViewController.dispose();
@@ -656,18 +685,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       _syncCoordinator?.onSessionChanged(previous, next);
                       if (previous?.isPausedForMembers == true && next?.isPausedForMembers == false) {
                         scheduleMicrotask(() {
-                          _playerController.play();
+                          if (ref.read(playerControllerProvider).useExoPlayer) {
+                            _videoViewController.play();
+                          } else {
+                            _player.play();
+                          }
                         });
-                      }
-                      if (!_isTv && (Platform.isAndroid || Platform.isIOS)) {
-                        if (next == null) {
-                          SystemChrome.setPreferredOrientations([
-                            DeviceOrientation.landscapeLeft,
-                            DeviceOrientation.landscapeRight,
-                          ]);
-                        } else {
-                          SystemChrome.setPreferredOrientations([]);
-                        }
                       }
                     });
 
@@ -800,6 +823,71 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               onBackPointer: _handleBack,
                               onRequestRootFocus: () =>
                                   _rootFocusNode.requestFocus(),
+                              onEnterPip: () => ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false),
+                              onTogglePlay: _syncCoordinator != null && activeSession != null
+                                  ? () => _syncCoordinator!.handleUserTogglePlay()
+                                  : null,
+                              onSeekTo: _syncCoordinator != null && activeSession != null
+                                  ? (target) => _syncCoordinator!.handleUserSeek(target)
+                                  : null,
+                              onSeekRelative: _syncCoordinator != null && activeSession != null
+                                  ? (offset) {
+                                      final maxDur = ref.read(playerControllerProvider).useExoPlayer
+                                          ? Duration(milliseconds: _videoViewController.mediaInfo.value?.duration ?? 0)
+                                          : _player.state.duration;
+                                      _syncCoordinator!.handleUserSeekRelative(offset, maxDur);
+                                    }
+                                  : null,
+                              customActions: [
+                                if (activeSession != null)
+                                  PlayerIconButton(
+                                    icon: Icons.share_rounded,
+                                    tooltip: 'Share to WatchParty',
+                                    onPressed: () {
+                                      final currentItem = widget.item;
+                                      final currentEpisode = widget.episode;
+                                      final titleText = currentItem.title;
+                                      final isMovie = currentItem.contentType == MultimediaContentType.movie || currentEpisode?.name == 'Full Movie';
+                                      final isTvShow = !isMovie && (currentItem.contentType == MultimediaContentType.series || currentItem.contentType == MultimediaContentType.anime || (currentItem.episodes != null && currentItem.episodes!.length > 1));
+                                      final payload = {
+                                        'title': titleText,
+                                        'posterUrl': currentItem.posterUrl,
+                                        'mediaUrl': currentItem.url,
+                                        'isTvShow': isTvShow,
+                                        'episodeUrl': currentEpisode?.url,
+                                        'season': isMovie ? null : currentEpisode?.season,
+                                        'episodeNumber': isMovie ? null : currentEpisode?.episode,
+                                        'episodeName': isMovie ? null : currentEpisode?.name,
+                                        'providerName': currentItem.provider,
+                                      };
+                                      activeSession.chatService.sendMediaCard(payload);
+                                      ref.read(notificationServiceProvider).showInfo('Media card shared to WatchParty!');
+                                    },
+                                    isTv: _isTv,
+                                  ),
+                                if (activeSession != null)
+                                  PlayerIconButton(
+                                    icon: Icons.chat_rounded,
+                                    tooltip: 'Toggle Chat',
+                                    onPressed: () {
+                                      ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
+                                    },
+                                    isTv: _isTv,
+                                    highlight: ref.watch(watchPartyLandscapeChatProvider),
+                                  ),
+                              ],
+                              overlayWidget: activeSession != null && activeSession.isPausedForMembers
+                                  ? WatchPartyWaitOverlay(
+                                      onPlayNow: () {
+                                        ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
+                                        if (ref.read(playerControllerProvider).useExoPlayer) {
+                                          _videoViewController.play();
+                                        } else {
+                                          _player.play();
+                                        }
+                                      },
+                                    )
+                                  : null,
                               onVisibilityChanged: (v) {
                                 if (mounted) {
                                   _controlsVisible.value = v;
@@ -874,21 +962,34 @@ class _PlayerScreenWatchPartyAdapter implements WatchPartyPlayerAdapter {
   bool get isPlaying => _state._isCurrentlyPlaying;
 
   @override
-  void play() => _state._playerController.play();
+  void play() {
+    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
+      _state._videoViewController.play();
+    } else {
+      _state._player.play();
+    }
+  }
 
   @override
-  void pause() => _state._playerController.pause();
+  void pause() {
+    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
+      _state._videoViewController.pause();
+    } else {
+      _state._player.pause();
+    }
+  }
 
   @override
-  void seekTo(Duration position) => _state._playerController.seekTo(position);
+  void seekTo(Duration position) {
+    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
+      _state._videoViewController.seekTo(position.inMilliseconds);
+    } else {
+      _state._player.seek(position);
+    }
+  }
 
   @override
   void showNotification(String message) {
     _state.ref.read(notificationServiceProvider).showInfo(message);
-  }
-
-  @override
-  void setPlaybackActionListener(void Function(String action, int positionMs)? listener) {
-    _state._playerController.onPlaybackAction = listener;
   }
 }

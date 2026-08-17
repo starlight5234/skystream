@@ -15,6 +15,7 @@ class PlayerProgressBar extends ConsumerStatefulWidget {
   final vv.VideoController? videoViewController;
   final VoidCallback? onSeekStart;
   final VoidCallback? onSeekEnd;
+  final void Function(Duration target)? onSeekTo;
 
   /// On TV the scrubber becomes a focusable element: D-pad Left/Right seek by
   /// the configured step and the thumb enlarges while focused. Off TV the
@@ -30,6 +31,7 @@ class PlayerProgressBar extends ConsumerStatefulWidget {
     this.videoViewController,
     this.onSeekStart,
     this.onSeekEnd,
+    this.onSeekTo,
     this.isTv = false,
     this.focusNode,
     this.onArrowUp,
@@ -281,9 +283,14 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
               displayDuration: displayDuration,
               bufferWidget: null,
               canSeek: canSeek,
-              onSeekEnd: (val) => ref
-                  .read(playerControllerProvider.notifier)
-                  .seekTo(Duration(milliseconds: val.toInt())),
+              onSeekEnd: (val) {
+                if (widget.onSeekTo != null) {
+                  widget.onSeekTo!(Duration(milliseconds: val.toInt()));
+                } else {
+                  widget.videoViewController?.seekTo(val.toInt());
+                }
+                widget.onSeekEnd?.call();
+              },
               isLive: isLive,
               skipSegments: skipSegments,
             );
@@ -347,9 +354,14 @@ class _PlayerProgressBarState extends ConsumerState<PlayerProgressBar> {
               displayDuration: displayDuration,
               bufferWidget: bufferWidget,
               canSeek: canSeek,
-              onSeekEnd: (val) => ref
-                  .read(playerControllerProvider.notifier)
-                  .seekTo(Duration(milliseconds: val.toInt())),
+              onSeekEnd: (val) {
+                if (widget.onSeekTo != null) {
+                  widget.onSeekTo!(Duration(milliseconds: val.toInt()));
+                } else {
+                  widget.player.seek(Duration(milliseconds: val.toInt()));
+                }
+                widget.onSeekEnd?.call();
+              },
               isLive: isLive,
               skipSegments: skipSegments,
             );

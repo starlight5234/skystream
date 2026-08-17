@@ -41,8 +41,12 @@ class ActiveWatchPartyState {
   bool get allowMemberControl =>
       activeMediaPayload?['allowMemberControl'] as bool? ?? false;
 
-  bool get isMediaSharer =>
-      mediaSharer == null || mediaSharer == userName;
+  bool get isMediaSharer {
+    if (mediaSharer != null && mediaSharer!.isNotEmpty && userName.isNotEmpty) {
+      return mediaSharer == userName;
+    }
+    return isHost;
+  }
 
   bool get canControlPlayback =>
       isMediaSharer || allowMemberControl;
@@ -94,10 +98,16 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
   }
 
   void unlockPlaybackControl() {
-    if (state == null || state!.activeMediaPayload == null) return;
-    final updatedPayload = Map<String, dynamic>.from(state!.activeMediaPayload!);
-    updatedPayload['allowMemberControl'] = true;
-    state = state!.copyWith(activeMediaPayload: updatedPayload);
+    if (state == null) return;
+    if (state!.activeMediaPayload != null) {
+      final updatedPayload = Map<String, dynamic>.from(state!.activeMediaPayload!);
+      updatedPayload['allowMemberControl'] = true;
+      state = state!.copyWith(activeMediaPayload: updatedPayload);
+    } else {
+      state = state!.copyWith(
+        activeMediaPayload: {'allowMemberControl': true},
+      );
+    }
   }
 
   void clearSession() {

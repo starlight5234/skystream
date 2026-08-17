@@ -11,7 +11,6 @@ import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:video_view/video_view.dart' as vv;
 import '../../../../l10n/generated/app_localizations.dart';
 import '../player_controller.dart';
-import 'package:skystream_watchparty/skystream_watchparty.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/domain/entity/multimedia_item.dart';
 import '../../../../core/models/torrent_status.dart';
@@ -72,11 +71,23 @@ class SkyStreamPlayerControls extends ConsumerStatefulWidget {
     this.onResize,
     this.onVisibilityChanged,
     this.onRequestRootFocus,
+    this.customActions,
+    this.overlayWidget,
+    this.onEnterPip,
+    this.onTogglePlay,
+    this.onSeekTo,
+    this.onSeekRelative,
     this.isLoading = false,
     this.item,
     this.episode,
   });
 
+  final List<Widget>? customActions;
+  final Widget? overlayWidget;
+  final VoidCallback? onEnterPip;
+  final VoidCallback? onTogglePlay;
+  final void Function(Duration target)? onSeekTo;
+  final void Function(Duration offset)? onSeekRelative;
   final bool isLoading;
 
   @override
@@ -411,7 +422,7 @@ class SkyStreamPlayerControlsState
   }
 
   Future<void> _enterPip() async {
-    ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false);
+    widget.onEnterPip?.call();
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
@@ -714,11 +725,44 @@ class SkyStreamPlayerControlsState
   // ------------------------------------
 
   void _togglePlay() {
-    unawaited(ref.read(playerControllerProvider.notifier).togglePlayPause());
+    if (widget.onTogglePlay != null) {
+      widget.onTogglePlay!();
+      return;
+    }
+    if (widget.videoViewController != null) {
+      final state = widget.videoViewController!.playbackState.value;
+      if (state == vv.VideoControllerPlaybackState.playing) {
+        widget.videoViewController!.pause();
+      } else {
+        widget.videoViewController!.play();
+      }
+    } else {
+      widget.player.playOrPause();
+    }
   }
 
   void _seekRelative(Duration amount) {
-    unawaited(ref.read(playerControllerProvider.notifier).seekRelative(amount));
+    if (widget.onSeekRelative != null) {
+      widget.onSeekRelative!(amount);
+      _startHideTimer();
+      return;
+    }
+    if (widget.videoViewController != null) {
+      final pos = widget.videoViewController!.position.value;
+      final dur = widget.videoViewController!.mediaInfo.value?.duration ?? 0;
+      final target = (pos + amount.inMilliseconds).clamp(0, dur);
+      widget.videoViewController!.seekTo(target);
+    } else {
+      final pos = widget.player.state.position;
+      final dur = widget.player.state.duration;
+      final target = pos + amount;
+      final clamped = target < Duration.zero
+          ? Duration.zero
+          : target > dur
+              ? dur
+              : target;
+      widget.player.seek(clamped);
+    }
     _startHideTimer();
   }
 
@@ -937,7 +981,6 @@ class SkyStreamPlayerControlsState
     final sourceAttempts = ref.watch(
       playerControllerProvider.select((s) => s.sourceAttempts),
     );
-    final activeSession = ref.watch(activeWatchPartyProvider);
     // Guard against PiP or small window size
     final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final size = MediaQuery.sizeOf(context);
@@ -1135,9 +1178,8 @@ class SkyStreamPlayerControlsState
                   ),
 
                 // Resume Prompt Button
-                if ((resumePromptPosition != null ||
-                        resumePromptPercentage != null) &&
-                    (activeSession == null || activeSession.canControlPlayback))
+                if (resumePromptPosition != null ||
+                    resumePromptPercentage != null)
                   ResumePromptOverlay(
                     focusNode: _resumeFocusNode,
                     positionMs: resumePromptPosition,
@@ -1362,46 +1404,8 @@ class SkyStreamPlayerControlsState
         ),
     ];
 
-    final activeSession = ref.watch(activeWatchPartyProvider);
-
     final actions = <Widget>[
-      if (activeSession != null)
-        PlayerIconButton(
-          icon: Icons.share_rounded,
-          tooltip: 'Share to WatchParty',
-          onPressed: () {
-            final currentItem = widget.item;
-            final currentEpisode = widget.episode;
-            final titleText = widget.title ?? currentItem?.title ?? 'Shared Media';
-            if (currentItem != null || titleText.isNotEmpty) {
-              final isMovie = currentItem?.contentType == MultimediaContentType.movie || currentEpisode?.name == 'Full Movie';
-              final isTvShow = !isMovie && (currentItem?.contentType == MultimediaContentType.series || currentItem?.contentType == MultimediaContentType.anime || (currentItem?.episodes != null && currentItem!.episodes!.length > 1));
-              final payload = {
-                'title': titleText,
-                'posterUrl': currentItem?.posterUrl,
-                'mediaUrl': currentItem?.url ?? '',
-                'isTvShow': isTvShow,
-                'episodeUrl': currentEpisode?.url,
-                'season': isMovie ? null : currentEpisode?.season,
-                'episodeNumber': isMovie ? null : currentEpisode?.episode,
-                'episodeName': isMovie ? null : currentEpisode?.name,
-                'providerName': currentItem?.provider,
-              };
-              activeSession.chatService.sendMediaCard(payload);
-              ref.read(notificationServiceProvider).showInfo('Media card shared to WatchParty!');
-            }
-          },
-          isTv: _isTv,
-        ),
-      PlayerIconButton(
-        icon: Icons.chat_rounded,
-        tooltip: 'Toggle Chat',
-        onPressed: () {
-          ref.read(watchPartyLandscapeChatProvider.notifier).toggle();
-        },
-        isTv: _isTv,
-        highlight: ref.watch(watchPartyLandscapeChatProvider),
-      ),
+      if (widget.customActions != null) ...widget.customActions!,
       if (supportsPlaybackSpeed)
         PlayerIconButton(
           icon: Icons.speed,
@@ -1520,6 +1524,8 @@ class SkyStreamPlayerControlsState
                       player: widget.player,
                       videoViewController: widget.videoViewController,
                       onSeekStart: _cancelHideTimer,
+                      onSeekTo: widget.onSeekTo,
+                      onSeekEnd: _startHideTimer,
                       isTv: _isTv,
                       focusNode: _scrubFocusNode,
                       onArrowUp: () {
@@ -1559,16 +1565,11 @@ class SkyStreamPlayerControlsState
       ),
     );
 
-    if (activeSession != null && activeSession.isPausedForMembers && !isSmallWindow) {
+    if (widget.overlayWidget != null && !isSmallWindow) {
       return Stack(
         children: [
           controlsWidget,
-          WatchPartyWaitOverlay(
-            onPlayNow: () {
-              ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
-              _togglePlay();
-            },
-          ),
+          widget.overlayWidget!,
         ],
       );
     }

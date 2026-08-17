@@ -255,7 +255,7 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
         if (!completer.isCompleted) completer.complete();
       }
     };
-    await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+    await completer.future.timeout(const Duration(milliseconds: 1500), onTimeout: () {});
   }
 
   void kickGuest(String guestName) {
@@ -341,7 +341,18 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
       final strState = state.toString().split('.').last;
       logMessage('ICE connection state for "$guestName" changed to: $strState');
       if (state == RTCIceConnectionState.RTCIceConnectionStateFailed ||
-          state == RTCIceConnectionState.RTCIceConnectionStateClosed) {
+          state == RTCIceConnectionState.RTCIceConnectionStateClosed ||
+          state == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+        _disconnectGuest(guestName);
+      }
+    };
+
+    pc.onConnectionState = (state) {
+      final strState = state.toString().split('.').last;
+      logMessage('Peer connection state for "$guestName" changed to: $strState');
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         _disconnectGuest(guestName);
       }
     };

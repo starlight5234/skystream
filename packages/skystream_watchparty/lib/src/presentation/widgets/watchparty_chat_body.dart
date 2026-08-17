@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../service/watchparty_chat_service.dart';
 import '../../service/watchparty_creator_service.dart';
+import '../providers/active_watchparty_provider.dart';
 
 class WatchPartyChatBody extends ConsumerStatefulWidget {
   final WatchPartyChatService chatService;
@@ -283,22 +284,91 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                             ],
                           ),
                           const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                widget.onJoinMediaStream?.call(media);
-                              },
-                              icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                              label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final activeSession = ref.watch(activeWatchPartyProvider);
+                              final activeMedia = activeSession?.activeMediaPayload;
+                              final bool isCurrentlyWatching;
+                              if (activeMedia == null) {
+                                isCurrentlyWatching = false;
+                              } else {
+                                final bool activeIsTv = activeMedia['isTvShow'] == true || activeMedia['episodeNumber'] != null;
+                                final bool cardIsTv = media['isTvShow'] == true || media['episodeNumber'] != null;
+                                if (activeIsTv || cardIsTv) {
+                                  final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
+                                  final cardTitle = media['title']?.toString().toLowerCase().trim();
+                                  final sameShow = (activeTitle != null && activeTitle == cardTitle) ||
+                                      (activeMedia['mediaUrl'] != null && activeMedia['mediaUrl'] == media['mediaUrl']);
+                                  final sameSeason = activeMedia['season'] == media['season'];
+                                  final sameEpisode = activeMedia['episodeNumber'] == media['episodeNumber'];
+                                  isCurrentlyWatching = sameShow && sameSeason && sameEpisode;
+                                } else {
+                                  final activeUrl = activeMedia['mediaUrl'];
+                                  final cardUrl = media['mediaUrl'];
+                                  final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
+                                  final cardTitle = media['title']?.toString().toLowerCase().trim();
+                                  isCurrentlyWatching = (activeUrl != null && activeUrl.isNotEmpty && activeUrl == cardUrl) ||
+                                      (activeTitle != null && activeTitle == cardTitle);
+                                }
+                              }
+
+                              if (isCurrentlyWatching) {
+                                return SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: null,
+                                    icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                                    label: const Text('Currently Watching', style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    if (activeMedia != null) {
+                                      final switchStream = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          surfaceTintColor: Colors.transparent,
+                                          title: const Text('Switch Stream?'),
+                                          content: Text(
+                                            'You are currently watching "${activeMedia['title'] ?? 'another video'}". Do you want to switch to "${media['title'] ?? 'this stream'}"?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(context, false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => Navigator.pop(context, true),
+                                              child: const Text('Switch'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (switchStream != true || !context.mounted) return;
+                                    }
+                                    widget.onJoinMediaStream?.call(media);
+                                  },
+                                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                  label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Theme.of(context).colorScheme.primary,
+                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

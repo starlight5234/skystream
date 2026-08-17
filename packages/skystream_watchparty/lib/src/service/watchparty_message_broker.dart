@@ -108,6 +108,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     _addSystemMessage('$guestName has left the watch party');
     _broadcastSystemMessage('$guestName has left the watch party');
 
+    onSharerLeftStream?.call(guestName);
+    final sharerLeftEvent = jsonEncode({
+      'type': 'control',
+      'action': 'sharer_left_stream',
+      'sharer': guestName,
+    });
+    for (final entry in _activeDataChannels.entries) {
+      if (entry.key != guestName) {
+        try {
+          entry.value.send(RTCDataChannelMessage(sharerLeftEvent));
+        } catch (_) {}
+      }
+    }
+
     final disconnectEvent = jsonEncode({
       'type': 'control',
       'action': 'peer_disconnected',

@@ -626,20 +626,8 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         });
         _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
       } catch (_) {
-        if (!_isReconnecting && !_isHandshakeInFlight) {
-          _backoffTimer?.cancel();
-          _backoffTimer = null;
-          _isReconnecting = true;
-          notifyListeners();
-          _attemptReconnection();
-        }
+        // Outbox queue will retry when channel state changes or on next flush
       }
-    } else if (!_isReconnecting && !_isHandshakeInFlight) {
-      _backoffTimer?.cancel();
-      _backoffTimer = null;
-      _isReconnecting = true;
-      notifyListeners();
-      _attemptReconnection();
     }
 
     // Unacknowledged timeout fallback
@@ -758,20 +746,8 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         });
         _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
       } catch (_) {
-        if (!_isReconnecting && !_isHandshakeInFlight) {
-          _backoffTimer?.cancel();
-          _backoffTimer = null;
-          _isReconnecting = true;
-          notifyListeners();
-          _attemptReconnection();
-        }
+        // Outbox queue will retry when channel state changes or on next flush
       }
-    } else if (!_isReconnecting && !_isHandshakeInFlight) {
-      _backoffTimer?.cancel();
-      _backoffTimer = null;
-      _isReconnecting = true;
-      notifyListeners();
-      _attemptReconnection();
     }
 
     // Unacknowledged timeout fallback
@@ -791,7 +767,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         await _creatorService!.cancelHosting();
       }
     } else {
-      if (_dataChannel != null) {
+      if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
         try {
           final jsonMsg = jsonEncode({'type': 'control', 'action': 'leave'});
           _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
@@ -800,6 +776,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await _database.leaveLobby(hostName: _hostName, guestName: _userName);
       } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       _cleanup();
     }
   }

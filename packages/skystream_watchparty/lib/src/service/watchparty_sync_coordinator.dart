@@ -9,14 +9,12 @@ abstract class WatchPartyPlayerAdapter {
   void pause();
   void seekTo(Duration position);
   void showNotification(String message);
-  void setPlaybackActionListener(void Function(String action, int positionMs)? listener);
 }
 
 class WatchPartySyncCoordinator {
   final WidgetRef ref;
   final WatchPartyPlayerAdapter adapter;
 
-  bool _isHandlingRemoteCommand = false;
   bool _disposed = false;
 
   WatchPartySyncCoordinator({
@@ -25,17 +23,6 @@ class WatchPartySyncCoordinator {
   });
 
   void attach() {
-    adapter.setPlaybackActionListener((action, positionMs) {
-      if (_isHandlingRemoteCommand || _disposed) return;
-      if (action == 'play') {
-        onUserPlay(positionMs);
-      } else if (action == 'pause') {
-        onUserPause(positionMs);
-      } else if (action == 'seek') {
-        onUserSeek(Duration(milliseconds: positionMs));
-      }
-    });
-
     final session = ref.read(activeWatchPartyProvider);
     if (session != null) {
       _bindSession(session);
@@ -57,6 +44,7 @@ class WatchPartySyncCoordinator {
         ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
         scheduleMicrotask(() {
           adapter.play();
+          chatService.sendPlayerCommand('play', adapter.positionMs);
         });
       }
     };
@@ -64,32 +52,31 @@ class WatchPartySyncCoordinator {
     chatService.onSyncStateRequested = (requester) {
       if (_disposed) return;
       final currentMs = adapter.positionMs;
-      final isPlaying = adapter.isPlaying;
+      final isWaiting = ref.read(activeWatchPartyProvider)?.isPausedForMembers == true;
+      final isPlaying = isWaiting ? true : adapter.isPlaying;
       chatService.sendSyncStateResponse(currentMs, isPlaying);
 
-      if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
+      if (isWaiting) {
         ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
         scheduleMicrotask(() {
           adapter.play();
+          chatService.sendPlayerCommand('play', currentMs);
         });
       }
     };
 
     chatService.onSyncStateReceived = (positionMs, isPlaying) {
       if (_disposed) return;
-      _isHandlingRemoteCommand = true;
       adapter.seekTo(Duration(milliseconds: positionMs));
       if (isPlaying) {
         adapter.play();
       } else {
         adapter.pause();
       }
-      _isHandlingRemoteCommand = false;
     };
 
     chatService.onPlayerCommandReceived = (cmd, positionMs) {
       if (_disposed) return;
-      _isHandlingRemoteCommand = true;
       if (cmd == 'play') {
         adapter.play();
       } else if (cmd == 'pause') {
@@ -97,7 +84,6 @@ class WatchPartySyncCoordinator {
       } else if (cmd == 'seek') {
         adapter.seekTo(Duration(milliseconds: positionMs));
       }
-      _isHandlingRemoteCommand = false;
     };
 
     chatService.onSharerLeftStream = (sharerName) {
@@ -113,12 +99,19 @@ class WatchPartySyncCoordinator {
     }
   }
 
-  /// Called when the local user initiates a play action.
-  /// Returns false if the action is restricted.
-  bool onUserPlay(int positionMs) {
-    if (_isHandlingRemoteCommand || _disposed) return true;
+  /// Handles user pressing play/pause in the UI.
+  /// Returns true if the action was executed.
+  bool handleUserTogglePlay() {
+    if (_disposed) return false;
     final session = ref.read(activeWatchPartyProvider);
-    if (session == null) return true;
+    if (session == null) {
+      if (adapter.isPlaying) {
+        adapter.pause();
+      } else {
+        adapter.play();
+      }
+      return true;
+    }
 
     if (!session.canControlPlayback) {
       adapter.showNotification(
@@ -127,34 +120,25 @@ class WatchPartySyncCoordinator {
       return false;
     }
 
-    session.chatService.sendPlayerCommand('play', positionMs);
-    return true;
-  }
-
-  /// Called when the local user initiates a pause action.
-  /// Returns false if the action is restricted.
-  bool onUserPause(int positionMs) {
-    if (_isHandlingRemoteCommand || _disposed) return true;
-    final session = ref.read(activeWatchPartyProvider);
-    if (session == null) return true;
-
-    if (!session.canControlPlayback) {
-      adapter.showNotification(
-        'Only the stream host (${session.mediaSharer ?? "sharer"}) can control playback.',
-      );
-      return false;
+    if (adapter.isPlaying) {
+      session.chatService.sendPlayerCommand('pause', adapter.positionMs);
+      adapter.pause();
+    } else {
+      session.chatService.sendPlayerCommand('play', adapter.positionMs);
+      adapter.play();
     }
-
-    session.chatService.sendPlayerCommand('pause', positionMs);
     return true;
   }
 
-  /// Called when the local user initiates a seek action.
-  /// Returns false if the action is restricted.
-  bool onUserSeek(Duration targetPosition) {
-    if (_isHandlingRemoteCommand || _disposed) return true;
+  /// Handles user seeking in the UI (scrubber release or chapter jump).
+  /// Returns true if the action was executed.
+  bool handleUserSeek(Duration targetPosition) {
+    if (_disposed) return false;
     final session = ref.read(activeWatchPartyProvider);
-    if (session == null) return true;
+    if (session == null) {
+      adapter.seekTo(targetPosition);
+      return true;
+    }
 
     if (!session.canControlPlayback) {
       adapter.showNotification(
@@ -164,12 +148,38 @@ class WatchPartySyncCoordinator {
     }
 
     session.chatService.sendPlayerCommand('seek', targetPosition.inMilliseconds);
+    adapter.seekTo(targetPosition);
+    return true;
+  }
+
+  /// Handles user relative seeking (+/- 10s skip).
+  /// Returns true if the action was executed.
+  bool handleUserSeekRelative(Duration offset, Duration maxDuration) {
+    if (_disposed) return false;
+    final session = ref.read(activeWatchPartyProvider);
+    final targetMs = (adapter.positionMs + offset.inMilliseconds)
+        .clamp(0, maxDuration.inMilliseconds);
+    final target = Duration(milliseconds: targetMs);
+
+    if (session == null) {
+      adapter.seekTo(target);
+      return true;
+    }
+
+    if (!session.canControlPlayback) {
+      adapter.showNotification(
+        'Only the stream host (${session.mediaSharer ?? "sharer"}) can control playback.',
+      );
+      return false;
+    }
+
+    session.chatService.sendPlayerCommand('seek', targetMs);
+    adapter.seekTo(target);
     return true;
   }
 
   void dispose() {
     _disposed = true;
-    adapter.setPlaybackActionListener(null);
     try {
       final session = ref.read(activeWatchPartyProvider);
       if (session != null) {
