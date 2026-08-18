@@ -419,8 +419,21 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (_) {
-      // Unexpected exception — keep _isReconnecting true so UI shows banner
-      // and user can tap "Retry Now"
+      // Unexpected exception — schedule backoff so the banner eventually
+      // clears or retries automatically rather than staying stuck forever.
+      if (!_connectionClosed) {
+        final backoffSeconds =
+            (_reconnectAttempts <= 1 ? 2 : 2 << (_reconnectAttempts - 1))
+                .clamp(2, 30);
+        _backoffTimer?.cancel();
+        _backoffTimer = Timer(Duration(seconds: backoffSeconds), () {
+          _backoffTimer = null;
+          if (!_connectionClosed && !_isHandshakeInFlight) {
+            _attemptReconnection();
+          }
+        });
+        notifyListeners();
+      }
     } finally {
       _isHandshakeInFlight = false;
     }

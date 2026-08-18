@@ -24,6 +24,7 @@ import 'widgets/player_control_components.dart';
 import 'widgets/hotstar_player_style.dart';
 import 'player_controller.dart';
 import 'watchparty_playback_bridge.dart';
+import 'watchparty_player_integration.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final MultimediaItem item;
@@ -79,23 +80,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Orientation? _lastOrientation;
   late final PlayerController _playerController;
-  WatchPartySyncCoordinator? _syncCoordinator;
+  WatchPartyPlayerIntegration? _watchPartyIntegration;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
-  ProviderSubscription<ActiveWatchPartyState?>? _sessionSub;
-
-  int get _currentPositionMs {
-    if (ref.read(playerControllerProvider).useExoPlayer) {
-      return _videoViewController.position.value;
-    }
-    return _player.state.position.inMilliseconds;
-  }
-
-  bool get _isCurrentlyPlaying {
-    if (ref.read(playerControllerProvider).useExoPlayer) {
-      return _videoViewController.playbackState.value == vv.VideoControllerPlaybackState.playing;
-    }
-    return _player.state.playing;
-  }
 
   @override
   void initState() {
@@ -184,17 +170,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         videoViewController: _videoViewController,
       );
 
-      _syncCoordinator = WatchPartySyncCoordinator(
+      final wpAdapter = PlayerScreenWatchPartyAdapter(
         ref: ref,
-        adapter: _PlayerScreenWatchPartyAdapter(this),
-      )..attach();
-
-      _sessionSub = ref.listenManual<ActiveWatchPartyState?>(
-        activeWatchPartyProvider,
-        (previous, next) {
-          _syncCoordinator?.onSessionChanged(previous, next);
-        },
+        player: _player,
+        videoViewController: _videoViewController,
       );
+      _watchPartyIntegration = WatchPartyPlayerIntegration(
+        ref: ref,
+        adapter: wpAdapter,
+      )..attach();
     });
   }
 
@@ -301,9 +285,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    _sessionSub?.close();
-    _syncCoordinator?.dispose();
+    _watchPartyIntegration?.dispose();
     _settingsSub?.close();
+
+    _spaceHoldTimer?.cancel();
+    _spaceHoldTimer = null;
+    if (_spaceHeldForSpeed) {
+      final previousSpeed = _speedBeforeSpaceHold ?? 1.0;
+      _spaceHeldForSpeed = false;
+      _speedBeforeSpaceHold = null;
+      unawaited(_player.setRate(previousSpeed));
+    }
 
     _playerController.disposeController();
 
@@ -320,11 +312,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // value the user set, until they manually adjust again (audit H4).
     // Idempotent and safe on platforms without an override active.
     unawaited(ScreenBrightness().resetApplicationScreenBrightness());
-    _spaceHoldTimer?.cancel();
-    if (_spaceHeldForSpeed) {
-      final previousSpeed = _speedBeforeSpaceHold ?? 1.0;
-      unawaited(_playerController.setPlaybackSpeed(previousSpeed));
-    }
     if (!Platform.isAndroid && !Platform.isIOS) {
       try {
         windowManager.setFullScreen(false);
@@ -669,19 +656,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 child: Consumer(
                   builder: (context, ref, _) {
                     final activeSession = ref.watch(activeWatchPartyProvider);
-                    ref.listen<ActiveWatchPartyState?>(activeWatchPartyProvider, (previous, next) {
-                      _syncCoordinator?.onSessionChanged(previous, next);
-                      if (previous?.isPausedForMembers == true && next?.isPausedForMembers == false) {
-                        scheduleMicrotask(() {
-                          if (ref.read(playerControllerProvider).useExoPlayer) {
-                            _videoViewController.play();
-                          } else {
-                            _player.play();
-                          }
-                        });
-                      }
-                    });
-
                     final showLandscapeChat = ref.watch(watchPartyLandscapeChatProvider);
                     final orientation = MediaQuery.of(context).orientation;
                     final isPortrait = orientation == Orientation.portrait;
@@ -812,18 +786,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               onRequestRootFocus: () =>
                                   _rootFocusNode.requestFocus(),
                               onEnterPip: () => ref.read(watchPartyLandscapeChatProvider.notifier).setVisible(false),
-                              onTogglePlay: _syncCoordinator != null && activeSession != null
-                                  ? () => _syncCoordinator!.handleUserTogglePlay()
+                              onTogglePlay: _watchPartyIntegration != null && activeSession != null
+                                  ? () => _watchPartyIntegration!.handleUserTogglePlay()
                                   : null,
-                              onSeekTo: _syncCoordinator != null && activeSession != null
-                                  ? (target) => _syncCoordinator!.handleUserSeek(target)
+                              onSeekTo: _watchPartyIntegration != null && activeSession != null
+                                  ? (target) => _watchPartyIntegration!.handleUserSeek(target)
                                   : null,
-                              onSeekRelative: _syncCoordinator != null && activeSession != null
+                              onSeekRelative: _watchPartyIntegration != null && activeSession != null
                                   ? (offset) {
                                       final maxDur = ref.read(playerControllerProvider).useExoPlayer
                                           ? Duration(milliseconds: _videoViewController.mediaInfo.value?.duration ?? 0)
                                           : _player.state.duration;
-                                      _syncCoordinator!.handleUserSeekRelative(offset, maxDur);
+                                      _watchPartyIntegration!.handleUserSeekRelative(offset, maxDur);
                                     }
                                   : null,
                               customActions: [
@@ -847,8 +821,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                         'episodeNumber': isMovie ? null : currentEpisode?.episode,
                                         'episodeName': isMovie ? null : currentEpisode?.name,
                                         'providerName': currentItem.provider,
+                                        'sharer': activeSession.userName,
                                       };
                                       activeSession.chatService.sendMediaCard(payload);
+                                      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(payload);
                                       ref.read(notificationServiceProvider).showInfo('Media card shared to WatchParty!');
                                     },
                                     isTv: _isTv,
@@ -867,12 +843,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               overlayWidget: activeSession != null && activeSession.isPausedForMembers
                                   ? WatchPartyWaitOverlay(
                                       onPlayNow: () {
-                                        ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
-                                        if (ref.read(playerControllerProvider).useExoPlayer) {
-                                          _videoViewController.play();
-                                        } else {
-                                          _player.play();
-                                        }
+                                        _watchPartyIntegration?.handlePlayNow();
                                       },
                                     )
                                   : null,
@@ -901,7 +872,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                 child: WatchPartyPlayerChatPanel(
                                   session: activeSession,
                                   onJoinMediaStream: (mediaPayload) {
-                                    WatchPartyPlaybackBridge.launchMedia(ref, context, mediaPayload);
+                                    WatchPartyPlaybackBridge.launchMedia(
+                                      ref,
+                                      context,
+                                      mediaPayload,
+                                      replaceCurrentRoute: true,
+                                    );
                                   },
                                 ),
                               ),
@@ -919,7 +895,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               child: WatchPartyPlayerChatPanel(
                                 session: activeSession,
                                 onJoinMediaStream: (mediaPayload) {
-                                  WatchPartyPlaybackBridge.launchMedia(ref, context, mediaPayload);
+                                  WatchPartyPlaybackBridge.launchMedia(
+                                    ref,
+                                    context,
+                                    mediaPayload,
+                                    replaceCurrentRoute: true,
+                                  );
                                 },
                               ),
                             ),
@@ -939,55 +920,4 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 }
 
-class _PlayerScreenWatchPartyAdapter implements WatchPartyPlayerAdapter {
-  final _PlayerScreenState _state;
-  _PlayerScreenWatchPartyAdapter(this._state);
 
-  @override
-  int get positionMs => _state._currentPositionMs;
-
-  @override
-  bool get isPlaying => _state._isCurrentlyPlaying;
-
-  @override
-  VoidCallback registerPlayingListener(VoidCallback onPlayingChanged) {
-    final sub = _state._player.stream.playing.listen((_) => onPlayingChanged());
-    _state._videoViewController.playbackState.addListener(onPlayingChanged);
-    return () {
-      sub.cancel();
-      _state._videoViewController.playbackState.removeListener(onPlayingChanged);
-    };
-  }
-
-  @override
-  void play() {
-    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
-      _state._videoViewController.play();
-    } else {
-      _state._player.play();
-    }
-  }
-
-  @override
-  void pause() {
-    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
-      _state._videoViewController.pause();
-    } else {
-      _state._player.pause();
-    }
-  }
-
-  @override
-  void seekTo(Duration position) {
-    if (_state.ref.read(playerControllerProvider).useExoPlayer) {
-      _state._videoViewController.seekTo(position.inMilliseconds);
-    } else {
-      _state._player.seek(position);
-    }
-  }
-
-  @override
-  void showNotification(String message) {
-    _state.ref.read(notificationServiceProvider).showInfo(message);
-  }
-}

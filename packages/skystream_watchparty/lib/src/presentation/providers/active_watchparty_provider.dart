@@ -84,17 +84,9 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 
   void setActiveMedia(Map<String, dynamic>? mediaPayload, {bool waitForMembers = false}) {
     if (state == null) return;
-    state = ActiveWatchPartyState(
-      peerConnection: state!.peerConnection,
-      dataChannel: state!.dataChannel,
-      creatorService: state!.creatorService,
-      database: state!.database,
-      isHost: state!.isHost,
-      hostName: state!.hostName,
-      userName: state!.userName,
-      passcode: state!.passcode,
-      chatService: state!.chatService,
+    state = state!.copyWith(
       activeMediaPayload: mediaPayload,
+      clearActiveMedia: mediaPayload == null,
       waitForMembers: waitForMembers,
       isPausedForMembers: waitForMembers,
     );

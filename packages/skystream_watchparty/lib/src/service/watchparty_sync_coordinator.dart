@@ -19,7 +19,12 @@ class WatchPartySyncCoordinator {
 
   bool _disposed = false;
   ActiveWatchPartyState? _lastKnownSession;
+  // Cache the notifier so dispose() can clear activeMedia without calling
+  // ref.read() after the widget is unmounted (WidgetRef throws post-unmount).
+  ActiveWatchPartyNotifier? _notifier;
   VoidCallback? _playingListenerDispose;
+  Timer? _syncRequestTimer;
+  bool _isUnpausing = false;
 
   WatchPartySyncCoordinator({
     required this.ref,
@@ -41,6 +46,7 @@ class WatchPartySyncCoordinator {
 
   void _bindSession(ActiveWatchPartyState session) {
     _lastKnownSession = session;
+    _notifier = ref.read(activeWatchPartyProvider.notifier);
     final chatService = session.chatService;
 
     if (session.isPausedForMembers) {
@@ -57,11 +63,13 @@ class WatchPartySyncCoordinator {
 
     chatService.onGuestConnected = (guestName) {
       if (_disposed) return;
-      if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
+      if (!_isUnpausing && ref.read(activeWatchPartyProvider)?.isPausedForMembers == true) {
+        _isUnpausing = true;
         ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
         scheduleMicrotask(() {
           adapter.play();
           chatService.sendPlayerCommand('play', adapter.positionMs);
+          _isUnpausing = false;
         });
       }
     };
@@ -73,11 +81,13 @@ class WatchPartySyncCoordinator {
       final isPlaying = isWaiting ? true : adapter.isPlaying;
       chatService.sendSyncStateResponse(currentMs, isPlaying);
 
-      if (isWaiting) {
+      if (isWaiting && !_isUnpausing) {
+        _isUnpausing = true;
         ref.read(activeWatchPartyProvider.notifier).unpauseForMembers();
         scheduleMicrotask(() {
           adapter.play();
           chatService.sendPlayerCommand('play', currentMs);
+          _isUnpausing = false;
         });
       }
     };
@@ -112,7 +122,9 @@ class WatchPartySyncCoordinator {
     };
 
     if (!session.isPausedForMembers) {
-      Future.delayed(const Duration(milliseconds: 500), () {
+      _syncRequestTimer?.cancel();
+      _syncRequestTimer = Timer(const Duration(milliseconds: 500), () {
+        _syncRequestTimer = null;
         if (!_disposed && ref.read(activeWatchPartyProvider)?.isPausedForMembers != true) {
           chatService.requestSyncState();
         }
@@ -201,19 +213,25 @@ class WatchPartySyncCoordinator {
 
   void dispose() {
     _disposed = true;
+    _syncRequestTimer?.cancel();
+    _syncRequestTimer = null;
+    _isUnpausing = false;
     _playingListenerDispose?.call();
     _playingListenerDispose = null;
 
     final session = _lastKnownSession;
+    final notifier = _notifier;
     _lastKnownSession = null;
+    _notifier = null;
 
     if (session != null) {
       if (session.isMediaSharer && !session.allowMemberControl) {
         session.chatService.notifySharerLeftStream();
       }
-      try {
-        ref.read(activeWatchPartyProvider.notifier).setActiveMedia(null);
-      } catch (_) {}
+      // Use the cached notifier — avoids calling ref.read() after the
+      // WidgetRef is invalidated post-unmount (which throws StateError,
+      // silently caught, leaving activeMediaPayload stuck non-null).
+      notifier?.setActiveMedia(null);
 
       session.chatService.onGuestConnected = null;
       session.chatService.onSyncStateRequested = null;

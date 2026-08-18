@@ -40,6 +40,7 @@ class PlaybackLauncher {
     required MultimediaItem baseItem,
     MultimediaItem? detailedItem,
     bool isJoiningStream = false,
+    bool replaceCurrentRoute = false,
   }) async {
     final settings = await _ref.read(playerSettingsProvider.future);
     if (!context.mounted) return;
@@ -88,13 +89,18 @@ class PlaybackLauncher {
         }
       });
     } else {
-      await PlayerRoute(
+      final route = PlayerRoute(
         $extra: PlayerRouteExtra(
           item: detailedItem ?? baseItem,
           videoUrl: finalUrl,
           episode: episode,
         ),
-      ).push<void>(context);
+      );
+      if (replaceCurrentRoute) {
+        route.pushReplacement(context);
+      } else {
+        await route.push<void>(context);
+      }
     }
   }
 

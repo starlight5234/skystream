@@ -117,8 +117,9 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
   static Future<void> launchMedia(
     WidgetRef ref,
     BuildContext context,
-    Map<String, dynamic> mediaPayload,
-  ) async {
+    Map<String, dynamic> mediaPayload, {
+    bool replaceCurrentRoute = false,
+  }) async {
     final activeParty = ref.read(activeWatchPartyProvider);
     if (activeParty != null) {
       ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
@@ -174,6 +175,7 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
       baseItem: item,
       detailedItem: item,
       isJoiningStream: true,
+      replaceCurrentRoute: replaceCurrentRoute,
     );
   }
 
