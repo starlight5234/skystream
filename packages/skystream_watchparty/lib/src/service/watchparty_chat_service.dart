@@ -50,6 +50,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     required String hostName,
     required String userName,
     required String passcode,
+    this.onStreamStarted,
   })  : _peerConnection = peerConnection,
         _dataChannel = dataChannel,
         _creatorService = creatorService,
@@ -438,6 +439,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         _lastSeen = DateTime.now();
         _setupGuestListeners();
         _flushOutbox();
+        requestSyncVotes();
         if (_messages.isEmpty || _messages.last['text'] != 'Reconnected to host.') {
           _addSystemMessage('Reconnected to host.');
         }
@@ -906,6 +908,21 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  void requestSyncVotes() {
+    final payload = {
+      'type': 'control',
+      'action': 'request_sync_votes',
+      'requester': _userName,
+    };
+    if (_isHost && _creatorService != null) {
+      notifyListeners();
+    } else if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
+      } catch (_) {}
+    }
+  }
+
   void _cleanup() {
     WidgetsBinding.instance.removeObserver(this);
     _clearGuestChannelCallbacks();
@@ -916,6 +933,13 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     _backoffTimer?.cancel();
     _backoffTimer = null;
     _isHandshakeInFlight = false;
+    onGuestConnected = null;
+    onSyncStateRequested = null;
+    onSyncStateReceived = null;
+    onPlayerCommandReceived = null;
+    onSharerLeftStream = null;
+    onStreamStarted = null;
+    onHostRejoined = null;
     if (_lobbyDbSubscription != null) {
       unawaited(_lobbyDbSubscription!.cancel());
       _lobbyDbSubscription = null;

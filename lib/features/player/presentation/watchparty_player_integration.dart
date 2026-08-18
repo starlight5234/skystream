@@ -27,6 +27,14 @@ class PlayerScreenWatchPartyAdapter implements WatchPartyPlayerAdapter {
   }
 
   @override
+  int get durationMs {
+    if (ref.read(playerControllerProvider).useExoPlayer) {
+      return videoViewController.mediaInfo.value?.duration ?? 0;
+    }
+    return player.state.duration.inMilliseconds;
+  }
+
+  @override
   bool get isPlaying {
     if (ref.read(playerControllerProvider).useExoPlayer) {
       return videoViewController.playbackState.value ==

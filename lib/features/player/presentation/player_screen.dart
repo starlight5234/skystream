@@ -30,12 +30,14 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final MultimediaItem item;
   final String videoUrl;
   final Episode? episode;
+  final bool isWatchPartyStream;
 
   const PlayerScreen({
     super.key,
     required this.item,
     required this.videoUrl,
     this.episode,
+    this.isWatchPartyStream = false,
   });
 
   @override
@@ -170,15 +172,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         videoViewController: _videoViewController,
       );
 
-      final wpAdapter = PlayerScreenWatchPartyAdapter(
-        ref: ref,
-        player: _player,
-        videoViewController: _videoViewController,
-      );
-      _watchPartyIntegration = WatchPartyPlayerIntegration(
-        ref: ref,
-        adapter: wpAdapter,
-      )..attach();
+      if (widget.isWatchPartyStream) {
+        final wpAdapter = PlayerScreenWatchPartyAdapter(
+          ref: ref,
+          player: _player,
+          videoViewController: _videoViewController,
+        );
+        _watchPartyIntegration = WatchPartyPlayerIntegration(
+          ref: ref,
+          adapter: wpAdapter,
+        )..attach();
+      }
     });
   }
 
@@ -855,6 +859,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                             ),
                           ),
                         ),
+                        if (activeSession != null)
+                          Positioned(
+                            top: 16,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: AnimatedBuilder(
+                                animation: activeSession.chatService,
+                                builder: (context, _) {
+                                  if (!activeSession.chatService.isReconnecting) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade900.withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black45,
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Reconnecting to WatchParty...',
+                                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        if (activeSession != null && controlsVisible)
+                          Positioned(
+                            top: isPortrait ? 16 : 24,
+                            right: isPortrait ? 16 : 80,
+                            child: IgnorePointer(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.sensors_rounded,
+                                      size: 13,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'Broadcasted by ${activeSession.mediaSharer ?? activeSession.hostName}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     );
 
@@ -871,14 +957,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               Expanded(
                                 child: WatchPartyPlayerChatPanel(
                                   session: activeSession,
-                                  onJoinMediaStream: (mediaPayload) {
-                                    WatchPartyPlaybackBridge.launchMedia(
-                                      ref,
-                                      context,
-                                      mediaPayload,
-                                      replaceCurrentRoute: true,
-                                    );
-                                  },
+                                  onShowNotification: (msg) => ref.read(notificationServiceProvider).showInfo(msg),
+                                  onJoinMediaStream: _handleInPlayerJoinMediaStream,
                                 ),
                               ),
                             ],
@@ -894,14 +974,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                               bottom: false,
                               child: WatchPartyPlayerChatPanel(
                                 session: activeSession,
-                                onJoinMediaStream: (mediaPayload) {
-                                  WatchPartyPlaybackBridge.launchMedia(
-                                    ref,
-                                    context,
-                                    mediaPayload,
-                                    replaceCurrentRoute: true,
-                                  );
-                                },
+                                onShowNotification: (msg) => ref.read(notificationServiceProvider).showInfo(msg),
+                                onJoinMediaStream: _handleInPlayerJoinMediaStream,
                               ),
                             ),
                           ],
@@ -916,6 +990,79 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ),
         );
       },
+    );
+  }
+
+  Future<void> _handleInPlayerJoinMediaStream(Map<String, dynamic> mediaPayload) async {
+    final providerName = mediaPayload['providerName'] as String?;
+    final repoUrl = mediaPayload['repoUrl'] as String?;
+    if (providerName != null && providerName.isNotEmpty) {
+      final ready = await WatchPartyPlaybackBridge.ensureExtensionInstalled(
+        ref,
+        context,
+        providerName,
+        repoUrl: repoUrl,
+      );
+      if (!ready || !mounted) return;
+    }
+
+    final mediaUrl = mediaPayload['mediaUrl'] as String? ?? '';
+    final episodeUrl = mediaPayload['episodeUrl'] as String?;
+    final title = mediaPayload['title'] as String? ?? 'Shared Media';
+    final posterUrl = mediaPayload['posterUrl'] as String?;
+    final season = mediaPayload['season'] as int? ?? 0;
+    final episodeNumber = mediaPayload['episodeNumber'] as int? ?? 0;
+    final episodeName = mediaPayload['episodeName'] as String?;
+
+    final episode = (episodeUrl != null && episodeUrl.isNotEmpty)
+        ? Episode(
+            name: episodeName ?? 'Episode $episodeNumber',
+            url: episodeUrl,
+            season: season,
+            episode: episodeNumber,
+          )
+        : null;
+
+    final item = MultimediaItem(
+      title: title,
+      url: mediaUrl,
+      posterUrl: posterUrl ?? '',
+      provider: providerName ?? '',
+      episodes: episode != null ? [episode] : null,
+    );
+
+    final targetUrl = (episodeUrl != null && episodeUrl.isNotEmpty) ? episodeUrl : mediaUrl;
+
+    final activeSession = ref.read(activeWatchPartyProvider);
+    final effectivePayload = Map<String, dynamic>.from(mediaPayload);
+    if (effectivePayload['sharer'] == null || (effectivePayload['sharer'] as String).isEmpty) {
+      effectivePayload['sharer'] = activeSession?.activeMediaPayload?['sharer'] ?? activeSession?.hostName ?? 'Host';
+    }
+    final allowMemberControl = (effectivePayload['allowMemberControl'] as bool?) ?? activeSession?.allowMemberControl ?? false;
+    effectivePayload['allowMemberControl'] = allowMemberControl;
+
+    ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
+      effectivePayload,
+      waitForMembers: effectivePayload['waitForMembers'] as bool? ?? false,
+      forceSyncOnRejoin: effectivePayload['forceSyncOnRejoin'] as bool? ?? false,
+    );
+
+    if (_watchPartyIntegration == null) {
+      final wpAdapter = PlayerScreenWatchPartyAdapter(
+        ref: ref,
+        player: _player,
+        videoViewController: _videoViewController,
+      );
+      _watchPartyIntegration = WatchPartyPlayerIntegration(
+        ref: ref,
+        adapter: wpAdapter,
+      )..attach();
+    }
+
+    await _playerController.loadMediaItem(
+      item: item,
+      videoUrl: targetUrl,
+      episode: episode,
     );
   }
 }

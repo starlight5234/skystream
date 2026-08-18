@@ -50,9 +50,17 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     if (activeParty == null) return false;
 
     final item = detailedItem ?? baseItem;
+    final isShareable = item.provider != null &&
+        item.provider!.isNotEmpty &&
+        !url.startsWith('file://') &&
+        !url.startsWith('/') &&
+        !item.url.startsWith('file://') &&
+        !item.url.startsWith('/');
+
     final promptResult = await WatchPartyPlayPromptDialog.show(
       context,
       title: item.title,
+      isShareable: isShareable,
     );
     if (!context.mounted) return true;
 
@@ -85,11 +93,16 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
         }
       }
 
+      final isTvShow = episode != null &&
+          (item.contentType == MultimediaContentType.series ||
+              item.contentType == MultimediaContentType.anime ||
+              (item.episodes != null && item.episodes!.length > 1));
+
       final payload = {
         'title': item.title,
         'posterUrl': item.posterUrl,
         'mediaUrl': item.url,
-        'isTvShow': episode != null || (item.episodes != null && item.episodes!.isNotEmpty),
+        'isTvShow': isTvShow,
         'episodeUrl': episode?.url,
         'season': episode?.season,
         'episodeNumber': episode?.episode,
@@ -121,10 +134,14 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     bool replaceCurrentRoute = false,
   }) async {
     final activeParty = ref.read(activeWatchPartyProvider);
+    final waitForMembers = mediaPayload['waitForMembers'] as bool? ?? false;
+    final forceSyncOnRejoin = mediaPayload['forceSyncOnRejoin'] as bool? ?? false;
+
     if (activeParty != null) {
       ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
         mediaPayload,
-        waitForMembers: false,
+        waitForMembers: waitForMembers,
+        forceSyncOnRejoin: forceSyncOnRejoin,
       );
     }
 
@@ -141,7 +158,7 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     final launcher = ref.read(playbackLauncherProvider);
 
     if (providerName != null && providerName.isNotEmpty) {
-      final ready = await _ensureExtensionInstalled(
+      final ready = await ensureExtensionInstalled(
         ref,
         context,
         providerName,
@@ -179,7 +196,7 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     );
   }
 
-  static Future<bool> _ensureExtensionInstalled(
+  static Future<bool> ensureExtensionInstalled(
     WidgetRef ref,
     BuildContext context,
     String providerName, {

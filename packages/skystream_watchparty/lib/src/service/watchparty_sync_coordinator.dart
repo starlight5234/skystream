@@ -5,6 +5,7 @@ import '../presentation/providers/active_watchparty_provider.dart';
 
 abstract class WatchPartyPlayerAdapter {
   int get positionMs;
+  int get durationMs;
   bool get isPlaying;
   void play();
   void pause();
@@ -25,11 +26,21 @@ class WatchPartySyncCoordinator {
   VoidCallback? _playingListenerDispose;
   Timer? _syncRequestTimer;
   bool _isUnpausing = false;
+  String? _syncedMediaKey;
 
   WatchPartySyncCoordinator({
     required this.ref,
     required this.adapter,
   });
+
+  String? _getMediaKey(Map<String, dynamic>? media) {
+    if (media == null) return null;
+    final ep = media['episodeUrl'] as String?;
+    if (ep != null && ep.isNotEmpty) return ep;
+    final mUrl = media['mediaUrl'] as String?;
+    if (mUrl != null && mUrl.isNotEmpty) return mUrl;
+    return '${media['title']}_${media['season']}_${media['episodeNumber']}';
+  }
 
   void attach() {
     final session = ref.read(activeWatchPartyProvider);
@@ -56,8 +67,20 @@ class WatchPartySyncCoordinator {
     _playingListenerDispose?.call();
     _playingListenerDispose = adapter.registerPlayingListener(() {
       if (_disposed) return;
-      if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true && adapter.isPlaying) {
+      final currentSession = ref.read(activeWatchPartyProvider);
+      if (currentSession?.isPausedForMembers == true && adapter.isPlaying) {
         adapter.pause();
+      }
+      final mediaKey = _getMediaKey(currentSession?.activeMediaPayload);
+      final hasValidPlayback = adapter.positionMs > 0 || adapter.durationMs > 0;
+      if (_syncedMediaKey != mediaKey &&
+          adapter.isPlaying &&
+          hasValidPlayback &&
+          currentSession != null &&
+          !currentSession.isHost &&
+          currentSession.isRoomStreamActive) {
+        _syncedMediaKey = mediaKey;
+        chatService.requestSyncState();
       }
     });
 
@@ -77,7 +100,7 @@ class WatchPartySyncCoordinator {
     chatService.onSyncStateRequested = (requester) {
       if (_disposed) return;
       final currentSession = ref.read(activeWatchPartyProvider);
-      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isMediaSharer) return;
+      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isHost) return;
 
       final currentMs = adapter.positionMs;
       final isWaiting = currentSession?.isPausedForMembers == true;
@@ -97,6 +120,8 @@ class WatchPartySyncCoordinator {
 
     chatService.onSyncStateReceived = (positionMs, isPlaying) {
       if (_disposed) return;
+      final currentSession = ref.read(activeWatchPartyProvider);
+      _syncedMediaKey = _getMediaKey(currentSession?.activeMediaPayload);
       adapter.seekTo(Duration(milliseconds: positionMs));
       if (isPlaying) {
         adapter.play();
@@ -108,7 +133,7 @@ class WatchPartySyncCoordinator {
     chatService.onPlayerCommandReceived = (cmd, positionMs) {
       if (_disposed) return;
       final currentSession = ref.read(activeWatchPartyProvider);
-      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isMediaSharer) return;
+      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isHost) return;
 
       if (cmd == 'play') {
         adapter.play();
@@ -137,15 +162,6 @@ class WatchPartySyncCoordinator {
           chatService.requestSyncState();
         }
       }
-    };
-
-    chatService.onStreamStarted = (mediaPayload, sharer, allowMemberControl, waitForMembers, forceSyncOnRejoin) {
-      if (_disposed) return;
-      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
-        mediaPayload,
-        waitForMembers: waitForMembers,
-        forceSyncOnRejoin: forceSyncOnRejoin,
-      );
     };
 
     if (session.isHost && session.activeMediaPayload != null) {
@@ -265,19 +281,20 @@ class WatchPartySyncCoordinator {
     _notifier = null;
 
     if (session != null) {
-      if (session.isMediaSharer && !session.allowMemberControl) {
-        session.chatService.notifySharerLeftStream();
+      if (session.isHost) {
+        if (!session.allowMemberControl) {
+          session.chatService.notifySharerLeftStream();
+        }
+        // Only clear active media if the host left the player
+        notifier?.setActiveMedia(null);
       }
-      // Use the cached notifier — avoids calling ref.read() after the
-      // WidgetRef is invalidated post-unmount (which throws StateError,
-      // silently caught, leaving activeMediaPayload stuck non-null).
-      notifier?.setActiveMedia(null);
 
       session.chatService.onGuestConnected = null;
       session.chatService.onSyncStateRequested = null;
       session.chatService.onSyncStateReceived = null;
       session.chatService.onPlayerCommandReceived = null;
       session.chatService.onSharerLeftStream = null;
+      session.chatService.onHostRejoined = null;
     }
   }
 }

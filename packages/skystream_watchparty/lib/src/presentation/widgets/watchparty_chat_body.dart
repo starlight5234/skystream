@@ -34,6 +34,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
   final _messageFocusNode = FocusNode();
   final _scrollController = ScrollController();
   bool _hasGuestJoinedBefore = false;
+  bool _isStartingStream = false;
 
   @override
   void initState() {
@@ -71,6 +72,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
     Map<String, dynamic> media, {
     bool isSwitching = false,
   }) async {
+    if (_isStartingStream) return;
     final title = media['title'] as String? ?? 'Media';
     bool allowMemberControl = false;
     bool waitForMembers = false;
@@ -157,6 +159,7 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Checkbox(
                             value: forceSyncOnRejoin,
@@ -164,9 +167,19 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                           ),
                           const SizedBox(width: 6),
                           const Expanded(
-                            child: Text(
-                              'Force sync members to host time on rejoin',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Always sync to my time when someone reconnects',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Members who reconnect will seek to your current playback position.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -197,7 +210,14 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
       },
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true && mounted && !_isStartingStream) {
+      _isStartingStream = true;
+      Timer(const Duration(seconds: 5), () {
+        if (mounted) {
+          _isStartingStream = false;
+        }
+      });
+
       final activeSession = ref.read(activeWatchPartyProvider);
       final mediaWithSettings = Map<String, dynamic>.from(media);
       mediaWithSettings['sharer'] = activeSession?.userName ?? 'Host';
@@ -487,7 +507,17 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                                         width: double.infinity,
                                         child: ElevatedButton.icon(
                                           onPressed: () {
-                                            widget.onJoinMediaStream?.call(media);
+                                            final payload = Map<String, dynamic>.from(media);
+                                            if (activeSession?.activeMediaPayload != null) {
+                                              final roomPayload = activeSession!.activeMediaPayload!;
+                                              payload['sharer'] = roomPayload['sharer'] ?? activeSession?.hostName ?? 'Host';
+                                              payload['allowMemberControl'] = roomPayload['allowMemberControl'] ?? false;
+                                              payload['waitForMembers'] = roomPayload['waitForMembers'] ?? false;
+                                              payload['forceSyncOnRejoin'] = roomPayload['forceSyncOnRejoin'] ?? false;
+                                            } else {
+                                              payload['sharer'] = activeSession?.hostName ?? 'Host';
+                                            }
+                                            widget.onJoinMediaStream?.call(payload);
                                           },
                                           icon: const Icon(Icons.play_arrow_rounded, size: 16),
                                           label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
@@ -767,82 +797,88 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
               },
             ),
           ),
-          SafeArea(
-            left: false,
-            right: false,
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outlineVariant
-                                .withValues(alpha: 0.4),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(15),
-                              onTap: () {
-                                widget.chatService.sendMessage(emoji);
-                                _scrollToBottom();
-                              },
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-                                child: Text(
-                                  emoji,
-                                  style: const TextStyle(fontSize: 18),
+          Builder(
+            builder: (context) {
+              final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+              return SafeArea(
+                left: false,
+                right: false,
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isKeyboardOpen)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant
+                                      .withValues(alpha: 0.4),
+                                  width: 1,
                                 ),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          focusNode: _messageFocusNode,
-                          controller: _messageController,
-                          decoration: const InputDecoration(
-                            hintText: 'Type a message...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(24)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: ['👍', '❤️', '😂', '😮', '😢', '🎉'].map((emoji) {
+                                  return InkWell(
+                                    borderRadius: BorderRadius.circular(15),
+                                    onTap: () {
+                                      widget.chatService.sendMessage(emoji);
+                                      _scrollToBottom();
+                                    },
+                                    child: Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                                      child: Text(
+                                        emoji,
+                                        style: const TextStyle(fontSize: 18),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                            contentPadding:
-                                EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           ),
-                          onSubmitted: (_) => _sendMessage(),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      FloatingActionButton(
-                        mini: true,
-                        onPressed: _sendMessage,
-                        child: const Icon(Icons.send_rounded),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              focusNode: _messageFocusNode,
+                              controller: _messageController,
+                              decoration: const InputDecoration(
+                                hintText: 'Type a message...',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.all(Radius.circular(24)),
+                                ),
+                                contentPadding:
+                                    EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                              onSubmitted: (_) => _sendMessage(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FloatingActionButton(
+                            mini: true,
+                            onPressed: _sendMessage,
+                            child: const Icon(Icons.send_rounded),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ]
       ],

@@ -50,12 +50,12 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
 
   ActiveWatchPartyState? _subscribedSession;
   bool _disconnectDialogShowing = false;
-  Map<String, dynamic>? _initialActiveMedia;
+  Map<String, dynamic>? _lastAcknowledgedMedia;
 
   @override
   void initState() {
     super.initState();
-    _initialActiveMedia = widget.session?.activeMediaPayload;
+    _lastAcknowledgedMedia = widget.session?.activeMediaPayload;
     _updateSessionSubscription();
   }
 
@@ -221,6 +221,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
     final settings = await WatchPartySettings.loadFromPrefs();
     final passcode = isHost ? (_creatorService?.roomPasscode ?? '') : (_lobbyPasscode ?? '');
     final resolvedUserName = settings.username.isNotEmpty ? settings.username : (isHost ? 'Host' : 'Guest');
+    final resolvedHostName = isHost ? resolvedUserName : hostName;
 
     final chatService = WatchPartyChatService(
       peerConnection: peerConnection,
@@ -229,7 +230,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
       joinerService: isHost ? null : _joinerService,
       database: ref.read(watchPartyDatabaseProvider),
       isHost: isHost,
-      hostName: hostName,
+      hostName: resolvedHostName,
       userName: resolvedUserName,
       passcode: passcode,
     );
@@ -241,7 +242,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
         creatorService: isHost ? _creatorService : null,
         database: ref.read(watchPartyDatabaseProvider),
         isHost: isHost,
-        hostName: hostName,
+        hostName: resolvedHostName,
         userName: resolvedUserName,
         passcode: passcode,
         chatService: chatService,
@@ -520,7 +521,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
     if (!widget.embedded || session.isHost) return const SizedBox.shrink();
     final currentRoomMedia = session.activeMediaPayload;
     if (currentRoomMedia == null) return const SizedBox.shrink();
-    if (ActiveWatchPartyState.isSameMedia(_initialActiveMedia, currentRoomMedia)) {
+    if (ActiveWatchPartyState.isSameMedia(_lastAcknowledgedMedia, currentRoomMedia)) {
       return const SizedBox.shrink();
     }
 
@@ -543,6 +544,9 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
           ),
           TextButton(
             onPressed: () {
+              setState(() {
+                _lastAcknowledgedMedia = currentRoomMedia;
+              });
               widget.onJoinMediaStream?.call(currentRoomMedia);
             },
             style: TextButton.styleFrom(

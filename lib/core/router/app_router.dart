@@ -195,10 +195,12 @@ class PlayerRouteExtra {
     required this.item,
     required this.videoUrl,
     this.episode,
+    this.isWatchPartyStream = false,
   });
   final MultimediaItem item;
   final String videoUrl;
   final Episode? episode;
+  final bool isWatchPartyStream;
 }
 
 class ViewAllRouteExtra {
@@ -278,6 +280,7 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
       item: $extra.item,
       videoUrl: $extra.videoUrl,
       episode: $extra.episode,
+      isWatchPartyStream: $extra.isWatchPartyStream,
     );
   }
 }

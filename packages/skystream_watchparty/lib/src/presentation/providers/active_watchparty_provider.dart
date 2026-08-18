@@ -39,24 +39,18 @@ class ActiveWatchPartyState {
   });
 
   String? get mediaSharer =>
-      activeMediaPayload?['sharer'] as String? ??
-      activeMediaPayload?['sender'] as String?;
+      activeMediaPayload?['sharer'] as String? ?? hostName;
 
   bool get allowMemberControl =>
       activeMediaPayload?['allowMemberControl'] as bool? ?? false;
 
-  bool get isMediaSharer {
-    if (mediaSharer != null && mediaSharer!.isNotEmpty && userName.isNotEmpty) {
-      return mediaSharer == userName;
-    }
-    return isHost;
-  }
+  bool get isMediaSharer => isHost;
 
   bool get canControlPlayback =>
-      isMediaSharer || allowMemberControl || isLocalControlUnlocked;
+      isHost || allowMemberControl || isLocalControlUnlocked;
 
   bool get shouldBroadcastPlayerCommands =>
-      isMediaSharer || (allowMemberControl && !isLocalControlUnlocked);
+      isHost || (allowMemberControl && !isLocalControlUnlocked);
 
   bool get isRoomStreamActive => activeMediaPayload != null;
 
@@ -115,6 +109,14 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 
   void setActiveSession(ActiveWatchPartyState session) {
     state = session;
+    session.chatService.onStreamStarted ??= (mediaPayload, sharer, allowMemberControl, waitForMembers, forceSyncOnRejoin) {
+      setActiveMedia(
+        mediaPayload,
+        waitForMembers: waitForMembers,
+        forceSyncOnRejoin: forceSyncOnRejoin,
+      );
+      ref.read(watchPartyStreamNotificationProvider.notifier).notifyStreamStarted(mediaPayload, sharer);
+    };
   }
 
   void setActiveMedia(
@@ -163,6 +165,40 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 final activeWatchPartyProvider =
     NotifierProvider<ActiveWatchPartyNotifier, ActiveWatchPartyState?>(() {
   return ActiveWatchPartyNotifier();
+});
+
+class WatchPartyStreamNotification {
+  final Map<String, dynamic> mediaPayload;
+  final String sharer;
+  final DateTime timestamp;
+
+  WatchPartyStreamNotification({
+    required this.mediaPayload,
+    required this.sharer,
+    required this.timestamp,
+  });
+}
+
+class WatchPartyStreamNotificationNotifier extends Notifier<WatchPartyStreamNotification?> {
+  @override
+  WatchPartyStreamNotification? build() => null;
+
+  void notifyStreamStarted(Map<String, dynamic> mediaPayload, String sharer) {
+    state = WatchPartyStreamNotification(
+      mediaPayload: mediaPayload,
+      sharer: sharer,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
+final watchPartyStreamNotificationProvider =
+    NotifierProvider<WatchPartyStreamNotificationNotifier, WatchPartyStreamNotification?>(() {
+  return WatchPartyStreamNotificationNotifier();
 });
 
 class WatchPartyLandscapeChatNotifier extends Notifier<bool> {

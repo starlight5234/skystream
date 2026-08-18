@@ -100,7 +100,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         'type': 'control',
         'action': 'stream_started',
         'media': currentActiveMedia,
-        'sharer': activeMediaSharer ?? 'Host',
+        'sharer': currentActiveMedia?['sharer'] ?? activeMediaSharer ?? 'Host',
         'allowMemberControl': allowMemberControl,
         'waitForMembers': false,
         'forceSyncOnRejoin': forceSyncOnRejoin,
@@ -258,7 +258,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           onSyncStateReceived?.call(positionMs, isPlaying);
           _relayRawJson(decoded, excludeChannelKey: guestName);
         } else if (action == 'player_command') {
-          if (activeMediaSharer != null && activeMediaSharer != guestName) {
+          if (!allowMemberControl) {
             return;
           }
           final cmd = decoded['cmd'] as String? ?? 'ping';
@@ -279,6 +279,16 @@ class WatchPartyMessageBroker extends ChangeNotifier {
             notifyListeners();
             _relayRawJson(decoded, excludeChannelKey: guestName);
           }
+        } else if (action == 'request_sync_votes') {
+          final serializedVotes = _mediaVotes.map((k, v) => MapEntry(k, v.toList()));
+          final syncVotesMsg = jsonEncode({
+            'type': 'control',
+            'action': 'sync_votes',
+            'votes': serializedVotes,
+          });
+          try {
+            channel.send(RTCDataChannelMessage(syncVotesMsg));
+          } catch (_) {}
         } else if (action == 'stream_started') {
           currentActiveMedia = decoded['media'] as Map<String, dynamic>?;
           activeMediaSharer = decoded['sharer'] as String? ?? guestName;

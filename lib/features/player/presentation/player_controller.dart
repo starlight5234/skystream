@@ -36,6 +36,7 @@ import '../../skip/data/intro_db_service.dart';
 import '../../skip/data/anime_skip_service.dart';
 import '../../skip/data/skip_service.dart';
 import '../../../../core/storage/settings_repository.dart';
+import 'package:skystream_watchparty/skystream_watchparty.dart';
 
 // Sentinel so copyWith can distinguish "not passed" from "explicitly null".
 const Object _keep = Object();
@@ -3198,6 +3199,34 @@ class PlayerController extends Notifier<PlayerState> {
     }
   }
 
+  void _syncWatchPartyEpisode(Episode nextEpisode, String targetUrl) {
+    try {
+      final activeSession = ref.read(activeWatchPartyProvider);
+      if (activeSession != null && activeSession.isHost) {
+        final currentPayload = activeSession.activeMediaPayload ?? {};
+        final updatedPayload = Map<String, dynamic>.from(currentPayload);
+        updatedPayload['episodeUrl'] = nextEpisode.url;
+        updatedPayload['season'] = nextEpisode.season;
+        updatedPayload['episodeNumber'] = nextEpisode.episode;
+        updatedPayload['episodeName'] = nextEpisode.name;
+
+        activeSession.chatService.broadcastStreamStarted(
+          updatedPayload,
+          allowMemberControl: activeSession.allowMemberControl,
+          waitForMembers: false,
+          forceSyncOnRejoin: activeSession.forceSyncOnRejoin,
+        );
+        ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
+          updatedPayload,
+          waitForMembers: false,
+          forceSyncOnRejoin: activeSession.forceSyncOnRejoin,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error syncing WatchParty episode: $e');
+    }
+  }
+
   Future<void> playNextEpisode() async {
     if (_item.contentType != MultimediaContentType.series) return;
 
@@ -3238,6 +3267,8 @@ class PlayerController extends Notifier<PlayerState> {
       _episode = nextEpisode;
       _userAddedExternalSubtitles.clear();
       _resetPerEpisodeState();
+
+      _syncWatchPartyEpisode(nextEpisode, finalUrl);
 
       // Refetch intro/outro/recap (IntroDB / AnimeSkip) for the new episode.
       // _resetPerEpisodeState() cleared the previous episode's segments, so
@@ -3324,6 +3355,8 @@ class PlayerController extends Notifier<PlayerState> {
 
     _userAddedExternalSubtitles.clear();
     _resetPerEpisodeState();
+
+    _syncWatchPartyEpisode(episode, finalUrl);
     
     unawaited(_fetchAndLogSkipSegments());
 
@@ -3334,6 +3367,46 @@ class PlayerController extends Notifier<PlayerState> {
 
     await _initStream(
       requestedPhaseKind: PlaybackUiPhaseKind.loadingNextEpisode,
+    );
+  }
+
+  Future<void> loadMediaItem({
+    required MultimediaItem item,
+    required String videoUrl,
+    Episode? episode,
+  }) async {
+    saveProgress();
+    await pause();
+    _item = item;
+    _videoUrl = videoUrl;
+    _episode = episode;
+    _hasConfirmedPlaybackFrame = false;
+    _suppressNextEpisodeDetection = true;
+    _userAddedExternalSubtitles.clear();
+    _resetPerEpisodeState();
+    unawaited(_fetchAndLogSkipSegments());
+
+    final imdbId =
+        item.imdbId ?? item.syncData?['imdbId'] ?? item.syncData?['imdb_id'];
+    final tmdbId = item.tmdbId;
+
+    String initialTitle = item.title;
+    if (episode != null && episode.name.isNotEmpty) {
+      initialTitle = "${item.title} - ${episode.name}";
+    }
+
+    state = state.copyWith(
+      playerTitle: initialTitle,
+      streamSubtitle: "Fetching sources...",
+      imdbId: imdbId,
+      tmdbId: tmdbId,
+      showEpisodeList: false,
+      showSourcesPanel: false,
+      showContentPanel: false,
+    );
+
+    await _initStream(
+      requestedPhaseKind: PlaybackUiPhaseKind.bootstrapping,
     );
   }
 

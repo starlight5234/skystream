@@ -94,6 +94,7 @@ class PlaybackLauncher {
           item: detailedItem ?? baseItem,
           videoUrl: finalUrl,
           episode: episode,
+          isWatchPartyStream: isJoiningStream,
         ),
       );
       if (replaceCurrentRoute) {
