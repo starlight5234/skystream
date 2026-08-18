@@ -81,6 +81,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final PlayerController _playerController;
   WatchPartySyncCoordinator? _syncCoordinator;
   ProviderSubscription<AsyncValue<PlayerSettings>>? _settingsSub;
+  ProviderSubscription<ActiveWatchPartyState?>? _sessionSub;
 
   int get _currentPositionMs {
     if (ref.read(playerControllerProvider).useExoPlayer) {
@@ -188,16 +189,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         adapter: _PlayerScreenWatchPartyAdapter(this),
       )..attach();
 
-      final currentParty = ref.read(activeWatchPartyProvider);
-      if (currentParty != null && currentParty.isPausedForMembers) {
-        scheduleMicrotask(() {
-          if (ref.read(playerControllerProvider).useExoPlayer) {
-            _videoViewController.pause();
-          } else {
-            _player.pause();
-          }
-        });
-      }
+      _sessionSub = ref.listenManual<ActiveWatchPartyState?>(
+        activeWatchPartyProvider,
+        (previous, next) {
+          _syncCoordinator?.onSessionChanged(previous, next);
+        },
+      );
     });
   }
 
@@ -304,27 +301,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
+    _sessionSub?.close();
+    _syncCoordinator?.dispose();
     _settingsSub?.close();
 
-    final session = ref.read(activeWatchPartyProvider);
-    if (session != null) {
-      if (session.isMediaSharer && !session.allowMemberControl) {
-        session.chatService.notifySharerLeftStream();
-      }
-      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(null);
-    }
-
-    _syncCoordinator?.dispose();
-
     _playerController.disposeController();
-
-    try {
-      _videoViewController.pause();
-      _videoViewController.close();
-    } catch (_) {}
-    try {
-      _player.stop();
-    } catch (_) {}
 
     _player.dispose();
     _videoViewController.dispose();
@@ -578,13 +559,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!Platform.isAndroid && !Platform.isIOS) {
       try {
         await windowManager.setFullScreen(false);
-        await Future<void>.delayed(const Duration(seconds: 1));
       } catch (e) {
         if (kDebugMode) debugPrint('PlayerScreen._handleBack: $e');
       }
     }
 
-    if (mounted) context.pop();
+    if (mounted) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/');
+      }
+    }
   }
 
   @override
@@ -960,6 +948,16 @@ class _PlayerScreenWatchPartyAdapter implements WatchPartyPlayerAdapter {
 
   @override
   bool get isPlaying => _state._isCurrentlyPlaying;
+
+  @override
+  VoidCallback registerPlayingListener(VoidCallback onPlayingChanged) {
+    final sub = _state._player.stream.playing.listen((_) => onPlayingChanged());
+    _state._videoViewController.playbackState.addListener(onPlayingChanged);
+    return () {
+      sub.cancel();
+      _state._videoViewController.playbackState.removeListener(onPlayingChanged);
+    };
+  }
 
   @override
   void play() {

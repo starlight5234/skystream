@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../presentation/providers/active_watchparty_provider.dart';
 
@@ -9,6 +10,7 @@ abstract class WatchPartyPlayerAdapter {
   void pause();
   void seekTo(Duration position);
   void showNotification(String message);
+  VoidCallback registerPlayingListener(VoidCallback onPlayingChanged);
 }
 
 class WatchPartySyncCoordinator {
@@ -16,6 +18,8 @@ class WatchPartySyncCoordinator {
   final WatchPartyPlayerAdapter adapter;
 
   bool _disposed = false;
+  ActiveWatchPartyState? _lastKnownSession;
+  VoidCallback? _playingListenerDispose;
 
   WatchPartySyncCoordinator({
     required this.ref,
@@ -36,7 +40,20 @@ class WatchPartySyncCoordinator {
   }
 
   void _bindSession(ActiveWatchPartyState session) {
+    _lastKnownSession = session;
     final chatService = session.chatService;
+
+    if (session.isPausedForMembers) {
+      scheduleMicrotask(() => adapter.pause());
+    }
+
+    _playingListenerDispose?.call();
+    _playingListenerDispose = adapter.registerPlayingListener(() {
+      if (_disposed) return;
+      if (ref.read(activeWatchPartyProvider)?.isPausedForMembers == true && adapter.isPlaying) {
+        adapter.pause();
+      }
+    });
 
     chatService.onGuestConnected = (guestName) {
       if (_disposed) return;
@@ -95,7 +112,11 @@ class WatchPartySyncCoordinator {
     };
 
     if (!session.isPausedForMembers) {
-      chatService.requestSyncState();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!_disposed && ref.read(activeWatchPartyProvider)?.isPausedForMembers != true) {
+          chatService.requestSyncState();
+        }
+      });
     }
   }
 
@@ -180,15 +201,25 @@ class WatchPartySyncCoordinator {
 
   void dispose() {
     _disposed = true;
-    try {
-      final session = ref.read(activeWatchPartyProvider);
-      if (session != null) {
-        session.chatService.onGuestConnected = null;
-        session.chatService.onSyncStateRequested = null;
-        session.chatService.onSyncStateReceived = null;
-        session.chatService.onPlayerCommandReceived = null;
-        session.chatService.onSharerLeftStream = null;
+    _playingListenerDispose?.call();
+    _playingListenerDispose = null;
+
+    final session = _lastKnownSession;
+    _lastKnownSession = null;
+
+    if (session != null) {
+      if (session.isMediaSharer && !session.allowMemberControl) {
+        session.chatService.notifySharerLeftStream();
       }
-    } catch (_) {}
+      try {
+        ref.read(activeWatchPartyProvider.notifier).setActiveMedia(null);
+      } catch (_) {}
+
+      session.chatService.onGuestConnected = null;
+      session.chatService.onSyncStateRequested = null;
+      session.chatService.onSyncStateReceived = null;
+      session.chatService.onPlayerCommandReceived = null;
+      session.chatService.onSharerLeftStream = null;
+    }
   }
 }

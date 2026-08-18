@@ -295,20 +295,31 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                                 final bool activeIsTv = activeMedia['isTvShow'] == true || activeMedia['episodeNumber'] != null;
                                 final bool cardIsTv = media['isTvShow'] == true || media['episodeNumber'] != null;
                                 if (activeIsTv || cardIsTv) {
-                                  final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
-                                  final cardTitle = media['title']?.toString().toLowerCase().trim();
-                                  final sameShow = (activeTitle != null && activeTitle == cardTitle) ||
-                                      (activeMedia['mediaUrl'] != null && activeMedia['mediaUrl'] == media['mediaUrl']);
-                                  final sameSeason = activeMedia['season'] == media['season'];
-                                  final sameEpisode = activeMedia['episodeNumber'] == media['episodeNumber'];
-                                  isCurrentlyWatching = sameShow && sameSeason && sameEpisode;
+                                  final activeEpUrl = activeMedia['episodeUrl'];
+                                  final cardEpUrl = media['episodeUrl'];
+                                  if (activeEpUrl != null && activeEpUrl.isNotEmpty && cardEpUrl != null && cardEpUrl.isNotEmpty) {
+                                    isCurrentlyWatching = activeEpUrl == cardEpUrl;
+                                  } else {
+                                    final activeUrl = activeMedia['mediaUrl'];
+                                    final cardUrl = media['mediaUrl'];
+                                    final sameUrl = activeUrl != null && activeUrl.isNotEmpty && activeUrl == cardUrl;
+                                    final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
+                                    final cardTitle = media['title']?.toString().toLowerCase().trim();
+                                    final sameTitle = activeTitle != null && activeTitle == cardTitle;
+                                    final sameSeason = activeMedia['season'] == media['season'];
+                                    final sameEpisode = activeMedia['episodeNumber'] == media['episodeNumber'];
+                                    isCurrentlyWatching = (sameUrl || sameTitle) && sameSeason && sameEpisode;
+                                  }
                                 } else {
                                   final activeUrl = activeMedia['mediaUrl'];
                                   final cardUrl = media['mediaUrl'];
-                                  final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
-                                  final cardTitle = media['title']?.toString().toLowerCase().trim();
-                                  isCurrentlyWatching = (activeUrl != null && activeUrl.isNotEmpty && activeUrl == cardUrl) ||
-                                      (activeTitle != null && activeTitle == cardTitle);
+                                  if (activeUrl != null && activeUrl.isNotEmpty && cardUrl != null && cardUrl.isNotEmpty) {
+                                    isCurrentlyWatching = activeUrl == cardUrl;
+                                  } else {
+                                    final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
+                                    final cardTitle = media['title']?.toString().toLowerCase().trim();
+                                    isCurrentlyWatching = activeTitle != null && activeTitle == cardTitle;
+                                  }
                                 }
                               }
 

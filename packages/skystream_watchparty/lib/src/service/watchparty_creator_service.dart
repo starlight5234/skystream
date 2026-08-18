@@ -20,6 +20,8 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   final Map<String, RTCDataChannel> activeDataChannels = {};
   final Set<String> _pendingGuests = {};
   final Set<String> _kickedGuests = {};
+  final Map<String, Timer> _disconnectGraceTimers = {};
+  final Set<String> _disconnectingGuests = {};
   late final WatchPartyMessageBroker messageBroker;
   bool hasAnyGuestJoined = false;
   bool _lobbyDeleted = false;
@@ -272,34 +274,43 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
   }
 
   void _disconnectGuest(String guestName, {bool silentReconnect = false}) {
+    _disconnectGraceTimers.remove(guestName)?.cancel();
     _pendingGuests.remove(guestName);
+
+    if (_disconnectingGuests.contains(guestName)) return;
     if (!activeConnections.containsKey(guestName) && !activeDataChannels.containsKey(guestName)) {
       return;
     }
-    logMessage('Disconnecting guest: "$guestName"${silentReconnect ? " (reconnect cleanup)" : ""}');
-    final pc = activeConnections.remove(guestName);
-    final dc = activeDataChannels.remove(guestName);
 
-    if (pc != null) {
-      pc.onIceConnectionState = null;
-      pc.onIceGatheringState = null;
-      pc.onSignalingState = null;
-      pc.onDataChannel = null;
-      unawaited(pc.dispose());
-    }
+    _disconnectingGuests.add(guestName);
+    try {
+      logMessage('Disconnecting guest: "$guestName"${silentReconnect ? " (reconnect cleanup)" : ""}');
+      final pc = activeConnections.remove(guestName);
+      final dc = activeDataChannels.remove(guestName);
 
-    if (dc != null) {
-      dc.onDataChannelState = null;
-      dc.onMessage = null;
-      unawaited(dc.close());
-    }
+      if (pc != null) {
+        pc.onIceConnectionState = null;
+        pc.onIceGatheringState = null;
+        pc.onSignalingState = null;
+        pc.onDataChannel = null;
+        unawaited(pc.dispose());
+      }
 
-    if (!silentReconnect && _activeHostName != null) {
-      unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
-      messageBroker.unregisterGuest(guestName);
-      onGuestDisconnected?.call(guestName);
+      if (dc != null) {
+        dc.onDataChannelState = null;
+        dc.onMessage = null;
+        unawaited(dc.close());
+      }
+
+      if (!silentReconnect && _activeHostName != null) {
+        unawaited(database.leaveLobby(hostName: _activeHostName!, guestName: guestName).catchError((_) {}));
+        messageBroker.unregisterGuest(guestName);
+        onGuestDisconnected?.call(guestName);
+      }
+      notifyListeners();
+    } finally {
+      _disconnectingGuests.remove(guestName);
     }
-    notifyListeners();
   }
 
   Future<void> cancelHosting() async {
@@ -340,9 +351,20 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
     pc.onIceConnectionState = (state) {
       final strState = state.toString().split('.').last;
       logMessage('ICE connection state for "$guestName" changed to: $strState');
-      if (state == RTCIceConnectionState.RTCIceConnectionStateFailed ||
-          state == RTCIceConnectionState.RTCIceConnectionStateClosed ||
-          state == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+      if (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+        // Allow 8-second grace period for transient network hiccups to recover
+        _disconnectGraceTimers[guestName]?.cancel();
+        _disconnectGraceTimers[guestName] = Timer(const Duration(seconds: 8), () {
+          _disconnectGraceTimers.remove(guestName);
+          _disconnectGuest(guestName);
+        });
+      } else if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        // Connection recovered — cancel grace timer
+        _disconnectGraceTimers.remove(guestName)?.cancel();
+      } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed ||
+          state == RTCIceConnectionState.RTCIceConnectionStateClosed) {
+        _disconnectGraceTimers.remove(guestName)?.cancel();
         _disconnectGuest(guestName);
       }
     };
@@ -387,6 +409,12 @@ class WatchPartyCreatorService extends WatchPartyConnectionService {
 
   @override
   void cleanup() {
+    for (final timer in _disconnectGraceTimers.values) {
+      timer.cancel();
+    }
+    _disconnectGraceTimers.clear();
+    _disconnectingGuests.clear();
+
     if (!_lobbyDeleted && _activeHostName != null && _roomPasscode != null) {
       _lobbyDeleted = true;
       final hash = WatchPartyCrypto.hashPasscode(_roomPasscode!, _activeHostName!);

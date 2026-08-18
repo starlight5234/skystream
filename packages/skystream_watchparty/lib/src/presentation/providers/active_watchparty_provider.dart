@@ -53,6 +53,7 @@ class ActiveWatchPartyState {
 
   ActiveWatchPartyState copyWith({
     Map<String, dynamic>? activeMediaPayload,
+    bool clearActiveMedia = false,
     bool? waitForMembers,
     bool? isPausedForMembers,
   }) {
@@ -66,7 +67,7 @@ class ActiveWatchPartyState {
       userName: userName,
       passcode: passcode,
       chatService: chatService,
-      activeMediaPayload: activeMediaPayload ?? this.activeMediaPayload,
+      activeMediaPayload: clearActiveMedia ? null : (activeMediaPayload ?? this.activeMediaPayload),
       waitForMembers: waitForMembers ?? this.waitForMembers,
       isPausedForMembers: isPausedForMembers ?? this.isPausedForMembers,
     );
@@ -83,7 +84,16 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 
   void setActiveMedia(Map<String, dynamic>? mediaPayload, {bool waitForMembers = false}) {
     if (state == null) return;
-    state = state!.copyWith(
+    state = ActiveWatchPartyState(
+      peerConnection: state!.peerConnection,
+      dataChannel: state!.dataChannel,
+      creatorService: state!.creatorService,
+      database: state!.database,
+      isHost: state!.isHost,
+      hostName: state!.hostName,
+      userName: state!.userName,
+      passcode: state!.passcode,
+      chatService: state!.chatService,
       activeMediaPayload: mediaPayload,
       waitForMembers: waitForMembers,
       isPausedForMembers: waitForMembers,

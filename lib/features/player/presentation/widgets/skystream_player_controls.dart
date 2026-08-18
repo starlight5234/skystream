@@ -1178,8 +1178,9 @@ class SkyStreamPlayerControlsState
                   ),
 
                 // Resume Prompt Button
-                if (resumePromptPosition != null ||
-                    resumePromptPercentage != null)
+                if (widget.overlayWidget == null &&
+                    (resumePromptPosition != null ||
+                        resumePromptPercentage != null))
                   ResumePromptOverlay(
                     focusNode: _resumeFocusNode,
                     positionMs: resumePromptPosition,

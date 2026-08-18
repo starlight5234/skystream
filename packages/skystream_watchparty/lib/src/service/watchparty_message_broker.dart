@@ -7,6 +7,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   final Map<String, RTCDataChannel> _activeDataChannels;
   final List<Map<String, dynamic>> _messages = [];
   final Map<String, DateTime> lastSeen = {};
+  String? activeMediaSharer;
   
   Timer? _keepAliveTimer;
   void Function(String guestName)? onGuestTimeout;
@@ -59,9 +60,9 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       _broadcastSystemMessage('$guestName has joined the watch party');
     }
 
-    // Sync full existing chat history (chat, media cards) to reconnected guest
+    // Sync full existing chat history (chat, media cards) to newly joined guest only (not rejoining/reconnecting)
     // Use batching with small yields to prevent saturating the WebRTC send buffer
-    if (_messages.isNotEmpty) {
+    if (_messages.isNotEmpty && !isRejoining) {
       final historySnapshot = List<Map<String, dynamic>>.from(_messages);
       unawaited(Future(() async {
         const batchSize = 15;
@@ -108,17 +109,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     _addSystemMessage('$guestName has left the watch party');
     _broadcastSystemMessage('$guestName has left the watch party');
 
-    onSharerLeftStream?.call(guestName);
-    final sharerLeftEvent = jsonEncode({
-      'type': 'control',
-      'action': 'sharer_left_stream',
-      'sharer': guestName,
-    });
-    for (final entry in _activeDataChannels.entries) {
-      if (entry.key != guestName) {
-        try {
-          entry.value.send(RTCDataChannelMessage(sharerLeftEvent));
-        } catch (_) {}
+    if (activeMediaSharer != null && activeMediaSharer == guestName) {
+      activeMediaSharer = null;
+      onSharerLeftStream?.call(guestName);
+      final sharerLeftEvent = jsonEncode({
+        'type': 'control',
+        'action': 'sharer_left_stream',
+        'sharer': guestName,
+      });
+      for (final entry in _activeDataChannels.entries) {
+        if (entry.key != guestName) {
+          try {
+            entry.value.send(RTCDataChannelMessage(sharerLeftEvent));
+          } catch (_) {}
+        }
       }
     }
 
@@ -197,6 +201,9 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           _relayRawJson(decoded, excludeChannelKey: guestName);
         } else if (action == 'sharer_left_stream') {
           final sharer = decoded['sharer'] as String? ?? guestName;
+          if (activeMediaSharer == sharer) {
+            activeMediaSharer = null;
+          }
           onSharerLeftStream?.call(sharer);
           _relayRawJson(decoded, excludeChannelKey: guestName);
         }
@@ -206,10 +213,12 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       lastSeen[guestName] = DateTime.now();
 
       if (type == 'media_card') {
+        final sender = decoded['sender'] as String? ?? guestName;
+        activeMediaSharer = sender;
         _addDeduplicatedMessage({
           'type': 'media_card',
           'msgId': msgId,
-          'sender': decoded['sender'] ?? guestName,
+          'sender': sender,
           'media': decoded['media'],
           'isMe': false,
           'time': DateTime.now(),
@@ -245,6 +254,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   }
 
   void broadcastMediaCard(String sender, Map<String, dynamic> mediaPayload, {String? msgId}) {
+    activeMediaSharer = sender;
     final effectiveMsgId = msgId ?? '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
     final payload = {
       'type': 'media_card',
@@ -338,6 +348,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   void clear() {
     _messages.clear();
     lastSeen.clear();
+    activeMediaSharer = null;
     notifyListeners();
   }
 

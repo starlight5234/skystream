@@ -28,7 +28,6 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _backoffTimer;
   String? _kickMessage;
   StreamSubscription<Map<String, dynamic>?>? _lobbyDbSubscription;
-  VoidCallback? onAllGuestsLeft;
   void Function(String guestName)? onGuestConnected;
   void Function(String requesterName)? onSyncStateRequested;
   void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
@@ -61,6 +60,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isHost) {
       _setupHostListeners();
     } else {
+      _setupDbListener();
       _setupGuestListeners();
     }
   }
@@ -139,12 +139,6 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
     _creatorService!.messageBroker.onSharerLeftStream = (sharer) {
       onSharerLeftStream?.call(sharer);
-    };
-
-    _creatorService!.onGuestDisconnected = (guestName) {
-      if (_creatorService!.activeDataChannels.isEmpty) {
-        onAllGuestsLeft?.call();
-      }
     };
 
     _creatorService!.addListener(_onCreatorServiceUpdated);
@@ -331,8 +325,6 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       _flushOutbox();
     }
-
-    _setupDbListener();
   }
 
   Future<void> _attemptReconnection() async {
@@ -415,11 +407,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
         if (lobbyExists && !_connectionClosed) {
           // Exponential backoff: 2s, 4s, 8s, 16s, capped at 30s
-          final backoffSeconds = _reconnectAttempts <= 1 ? 2
-              : _reconnectAttempts == 2 ? 4
-              : _reconnectAttempts == 3 ? 8
-              : _reconnectAttempts == 4 ? 16
-              : 30;
+          final backoffSeconds = (_reconnectAttempts <= 1 ? 2 : 2 << (_reconnectAttempts - 1)).clamp(2, 30);
           notifyListeners();
           _backoffTimer?.cancel();
           _backoffTimer = Timer(Duration(seconds: backoffSeconds), () {
@@ -782,6 +770,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _cleanup() {
+    WidgetsBinding.instance.removeObserver(this);
     _clearGuestChannelCallbacks();
     _connectionClosed = true;
     _keepAliveTimer?.cancel();
@@ -799,7 +788,15 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    if (!_isHost && !_connectionClosed) {
+      if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+        try {
+          final jsonMsg = jsonEncode({'type': 'control', 'action': 'leave'});
+          _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+        } catch (_) {}
+      }
+      unawaited(_database.leaveLobby(hostName: _hostName, guestName: _userName).catchError((_) {}));
+    }
     if (_isHost && _creatorService != null) {
       _creatorService!.messageBroker.removeListener(_onBrokerUpdated);
       _creatorService!.removeListener(_onCreatorServiceUpdated);
