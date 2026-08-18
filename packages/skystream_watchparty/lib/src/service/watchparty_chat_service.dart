@@ -763,11 +763,24 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> leaveParty() async {
+    _connectionClosed = true;
+    _isReconnecting = false;
+    _clearGuestChannelCallbacks();
+    _backoffTimer?.cancel();
+    _backoffTimer = null;
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _isHandshakeInFlight = false;
+    notifyListeners();
+
     if (_isHost) {
       if (_creatorService != null) {
         await _creatorService!.cancelHosting();
       }
     } else {
+      if (_joinerService != null) {
+        _joinerService!.cleanup();
+      }
       if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
         try {
           final jsonMsg = jsonEncode({'type': 'control', 'action': 'leave'});
@@ -777,7 +790,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await _database.leaveLobby(hostName: _hostName, guestName: _userName);
       } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       _cleanup();
     }
   }
@@ -786,6 +799,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _clearGuestChannelCallbacks();
     _connectionClosed = true;
+    _isReconnecting = false;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     _backoffTimer?.cancel();
@@ -801,7 +815,17 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    if (!_isHost && !_connectionClosed) {
+    final wasClosed = _connectionClosed;
+    _connectionClosed = true;
+    _isReconnecting = false;
+    _clearGuestChannelCallbacks();
+    _backoffTimer?.cancel();
+    _backoffTimer = null;
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _isHandshakeInFlight = false;
+
+    if (!_isHost && !wasClosed) {
       if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
         try {
           final jsonMsg = jsonEncode({'type': 'control', 'action': 'leave'});

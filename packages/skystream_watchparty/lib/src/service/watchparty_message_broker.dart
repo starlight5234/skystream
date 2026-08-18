@@ -195,6 +195,9 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           onSyncStateReceived?.call(positionMs, isPlaying);
           _relayRawJson(decoded, excludeChannelKey: guestName);
         } else if (action == 'player_command') {
+          if (activeMediaSharer != null && activeMediaSharer != guestName) {
+            return;
+          }
           final cmd = decoded['cmd'] as String? ?? 'ping';
           final positionMs = decoded['positionMs'] as int? ?? 0;
           onPlayerCommandReceived?.call(cmd, positionMs);

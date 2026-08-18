@@ -18,6 +18,7 @@ class ActiveWatchPartyState {
   final Map<String, dynamic>? activeMediaPayload;
   final bool waitForMembers;
   final bool isPausedForMembers;
+  final bool isLocalControlUnlocked;
 
   const ActiveWatchPartyState({
     this.peerConnection,
@@ -32,6 +33,7 @@ class ActiveWatchPartyState {
     this.activeMediaPayload,
     this.waitForMembers = false,
     this.isPausedForMembers = false,
+    this.isLocalControlUnlocked = false,
   });
 
   String? get mediaSharer =>
@@ -49,13 +51,17 @@ class ActiveWatchPartyState {
   }
 
   bool get canControlPlayback =>
-      isMediaSharer || allowMemberControl;
+      isMediaSharer || allowMemberControl || isLocalControlUnlocked;
+
+  bool get shouldBroadcastPlayerCommands =>
+      isMediaSharer || (allowMemberControl && !isLocalControlUnlocked);
 
   ActiveWatchPartyState copyWith({
     Map<String, dynamic>? activeMediaPayload,
     bool clearActiveMedia = false,
     bool? waitForMembers,
     bool? isPausedForMembers,
+    bool? isLocalControlUnlocked,
   }) {
     return ActiveWatchPartyState(
       peerConnection: peerConnection,
@@ -70,6 +76,9 @@ class ActiveWatchPartyState {
       activeMediaPayload: clearActiveMedia ? null : (activeMediaPayload ?? this.activeMediaPayload),
       waitForMembers: waitForMembers ?? this.waitForMembers,
       isPausedForMembers: isPausedForMembers ?? this.isPausedForMembers,
+      isLocalControlUnlocked: clearActiveMedia
+          ? false
+          : (isLocalControlUnlocked ?? this.isLocalControlUnlocked),
     );
   }
 }
@@ -89,6 +98,7 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
       clearActiveMedia: mediaPayload == null,
       waitForMembers: waitForMembers,
       isPausedForMembers: waitForMembers,
+      isLocalControlUnlocked: false,
     );
   }
 
@@ -101,15 +111,9 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
 
   void unlockPlaybackControl() {
     if (state == null) return;
-    if (state!.activeMediaPayload != null) {
-      final updatedPayload = Map<String, dynamic>.from(state!.activeMediaPayload!);
-      updatedPayload['allowMemberControl'] = true;
-      state = state!.copyWith(activeMediaPayload: updatedPayload);
-    } else {
-      state = state!.copyWith(
-        activeMediaPayload: {'allowMemberControl': true},
-      );
-    }
+    state = state!.copyWith(
+      isLocalControlUnlocked: true,
+    );
   }
 
   void clearSession() {

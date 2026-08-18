@@ -76,8 +76,11 @@ class WatchPartySyncCoordinator {
 
     chatService.onSyncStateRequested = (requester) {
       if (_disposed) return;
+      final currentSession = ref.read(activeWatchPartyProvider);
+      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isMediaSharer) return;
+
       final currentMs = adapter.positionMs;
-      final isWaiting = ref.read(activeWatchPartyProvider)?.isPausedForMembers == true;
+      final isWaiting = currentSession?.isPausedForMembers == true;
       final isPlaying = isWaiting ? true : adapter.isPlaying;
       chatService.sendSyncStateResponse(currentMs, isPlaying);
 
@@ -104,6 +107,9 @@ class WatchPartySyncCoordinator {
 
     chatService.onPlayerCommandReceived = (cmd, positionMs) {
       if (_disposed) return;
+      final currentSession = ref.read(activeWatchPartyProvider);
+      if (currentSession?.isLocalControlUnlocked == true && !currentSession!.isMediaSharer) return;
+
       if (cmd == 'play') {
         adapter.play();
       } else if (cmd == 'pause') {
@@ -117,7 +123,7 @@ class WatchPartySyncCoordinator {
       if (_disposed) return;
       ref.read(activeWatchPartyProvider.notifier).unlockPlaybackControl();
       adapter.showNotification(
-        'Stream sharer ($sharerName) left the player. Playback controls unlocked.',
+        'Stream sharer ($sharerName) left the player. Switched to local playback control.',
       );
     };
 
@@ -153,11 +159,16 @@ class WatchPartySyncCoordinator {
       return false;
     }
 
+    final shouldBroadcast = session.shouldBroadcastPlayerCommands;
     if (adapter.isPlaying) {
-      session.chatService.sendPlayerCommand('pause', adapter.positionMs);
+      if (shouldBroadcast) {
+        session.chatService.sendPlayerCommand('pause', adapter.positionMs);
+      }
       adapter.pause();
     } else {
-      session.chatService.sendPlayerCommand('play', adapter.positionMs);
+      if (shouldBroadcast) {
+        session.chatService.sendPlayerCommand('play', adapter.positionMs);
+      }
       adapter.play();
     }
     return true;
@@ -180,7 +191,9 @@ class WatchPartySyncCoordinator {
       return false;
     }
 
-    session.chatService.sendPlayerCommand('seek', targetPosition.inMilliseconds);
+    if (session.shouldBroadcastPlayerCommands) {
+      session.chatService.sendPlayerCommand('seek', targetPosition.inMilliseconds);
+    }
     adapter.seekTo(targetPosition);
     return true;
   }
@@ -206,7 +219,9 @@ class WatchPartySyncCoordinator {
       return false;
     }
 
-    session.chatService.sendPlayerCommand('seek', targetMs);
+    if (session.shouldBroadcastPlayerCommands) {
+      session.chatService.sendPlayerCommand('seek', targetMs);
+    }
     adapter.seekTo(target);
     return true;
   }
