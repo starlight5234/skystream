@@ -21,6 +21,7 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
 
   final List<Map<String, dynamic>> _messages = [];
   final List<Map<String, dynamic>> _outboxQueue = [];
+  final Map<String, Set<String>> _guestMediaVotes = {};
   bool _connectionClosed = false;
   bool _isReconnecting = false;
   int _reconnectAttempts = 0;
@@ -109,6 +110,16 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
     }
     return _messages;
   }
+
+  Map<String, Set<String>> get mediaVotes {
+    if (_isHost && _creatorService != null) {
+      return _creatorService!.messageBroker.mediaVotes;
+    }
+    return _guestMediaVotes;
+  }
+
+  int getMediaVoteCount(String mediaKey) => mediaVotes[mediaKey]?.length ?? 0;
+  bool hasUserVoted(String mediaKey) => mediaVotes[mediaKey]?.contains(_userName) ?? false;
 
   bool get connectionClosed => _connectionClosed;
   String? get kickMessage => _kickMessage;
@@ -231,6 +242,31 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
           } else if (action == 'sharer_left_stream') {
             final sharer = decoded['sharer'] as String? ?? 'Sharer';
             onSharerLeftStream?.call(sharer);
+          } else if (action == 'vote_media') {
+            _lastSeen = DateTime.now();
+            final mediaKey = decoded['mediaKey'] as String?;
+            final voter = decoded['voter'] as String?;
+            final voted = decoded['voted'] as bool? ?? true;
+            if (mediaKey != null && mediaKey.isNotEmpty && voter != null && voter.isNotEmpty) {
+              final currentSet = _guestMediaVotes.putIfAbsent(mediaKey, () => <String>{});
+              if (voted) {
+                currentSet.add(voter);
+              } else {
+                currentSet.remove(voter);
+              }
+              notifyListeners();
+            }
+          } else if (action == 'sync_votes') {
+            _lastSeen = DateTime.now();
+            final votesData = decoded['votes'] as Map<String, dynamic>?;
+            if (votesData != null) {
+              _guestMediaVotes.clear();
+              for (final entry in votesData.entries) {
+                final list = (entry.value as List<dynamic>?)?.map((e) => e.toString()).toSet() ?? <String>{};
+                _guestMediaVotes[entry.key] = list;
+              }
+              notifyListeners();
+            }
           }
           return;
         }
@@ -702,6 +738,40 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
         _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
       } catch (_) {}
     }
+  }
+
+  void toggleMediaVote(String mediaKey) {
+    if (mediaKey.isEmpty) return;
+
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.toggleMediaVote(mediaKey, _userName);
+      notifyListeners();
+      return;
+    }
+
+    final currentSet = _guestMediaVotes.putIfAbsent(mediaKey, () => <String>{});
+    final bool voted;
+    if (currentSet.contains(_userName)) {
+      currentSet.remove(_userName);
+      voted = false;
+    } else {
+      currentSet.add(_userName);
+      voted = true;
+    }
+
+    if (_dataChannel != null && _dataChannel!.state == RTCDataChannelState.RTCDataChannelOpen) {
+      final jsonMsg = jsonEncode({
+        'type': 'control',
+        'action': 'vote_media',
+        'mediaKey': mediaKey,
+        'voter': _userName,
+        'voted': voted,
+      });
+      try {
+        _dataChannel!.send(RTCDataChannelMessage(jsonMsg));
+      } catch (_) {}
+    }
+    notifyListeners();
   }
 
   void sendMessage(String text) {

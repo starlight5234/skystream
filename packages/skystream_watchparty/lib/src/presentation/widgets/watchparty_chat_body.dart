@@ -9,6 +9,7 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
   final WatchPartyChatService chatService;
   final bool isHost;
   final String passcode;
+  final bool embedded;
   final WatchPartyCreatorService? creatorService;
   final VoidCallback? onCopyInviteLink;
   final void Function(Map<String, dynamic> mediaPayload)? onJoinMediaStream;
@@ -18,6 +19,7 @@ class WatchPartyChatBody extends ConsumerStatefulWidget {
     required this.chatService,
     required this.isHost,
     required this.passcode,
+    this.embedded = false,
     this.creatorService,
     this.onCopyInviteLink,
     this.onJoinMediaStream,
@@ -283,101 +285,118 @@ class _WatchPartyChatBodyState extends ConsumerState<WatchPartyChatBody> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Consumer(
+                          const SizedBox(height: 10),                          Consumer(
                             builder: (context, ref, _) {
                               final activeSession = ref.watch(activeWatchPartyProvider);
                               final activeMedia = activeSession?.activeMediaPayload;
-                              final bool isCurrentlyWatching;
-                              if (activeMedia == null) {
-                                isCurrentlyWatching = false;
-                              } else {
-                                final bool activeIsTv = activeMedia['isTvShow'] == true || activeMedia['episodeNumber'] != null;
-                                final bool cardIsTv = media['isTvShow'] == true || media['episodeNumber'] != null;
-                                if (activeIsTv || cardIsTv) {
-                                  final activeEpUrl = activeMedia['episodeUrl'];
-                                  final cardEpUrl = media['episodeUrl'];
-                                  if (activeEpUrl != null && activeEpUrl.isNotEmpty && cardEpUrl != null && cardEpUrl.isNotEmpty) {
-                                    isCurrentlyWatching = activeEpUrl == cardEpUrl;
-                                  } else {
-                                    final activeUrl = activeMedia['mediaUrl'];
-                                    final cardUrl = media['mediaUrl'];
-                                    final sameUrl = activeUrl != null && activeUrl.isNotEmpty && activeUrl == cardUrl;
-                                    final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
-                                    final cardTitle = media['title']?.toString().toLowerCase().trim();
-                                    final sameTitle = activeTitle != null && activeTitle == cardTitle;
-                                    final sameSeason = activeMedia['season'] == media['season'];
-                                    final sameEpisode = activeMedia['episodeNumber'] == media['episodeNumber'];
-                                    isCurrentlyWatching = (sameUrl || sameTitle) && sameSeason && sameEpisode;
-                                  }
-                                } else {
-                                  final activeUrl = activeMedia['mediaUrl'];
-                                  final cardUrl = media['mediaUrl'];
-                                  if (activeUrl != null && activeUrl.isNotEmpty && cardUrl != null && cardUrl.isNotEmpty) {
-                                    isCurrentlyWatching = activeUrl == cardUrl;
-                                  } else {
-                                    final activeTitle = activeMedia['title']?.toString().toLowerCase().trim();
-                                    final cardTitle = media['title']?.toString().toLowerCase().trim();
-                                    isCurrentlyWatching = activeTitle != null && activeTitle == cardTitle;
-                                  }
-                                }
-                              }
+                              final isRoomStreamActive = activeSession?.isRoomStreamActive ?? false;
+                              final isMatchingThisCard = ActiveWatchPartyState.isSameMedia(activeMedia, media);
 
-                              if (isCurrentlyWatching) {
-                                return SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: null,
-                                    icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
-                                    label: const Text('Currently Watching', style: TextStyle(fontSize: 12)),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 8),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                  ),
-                                );
-                              }
+                              // Canonical key for voting (deduplicated across duplicate cards of same media)
+                              final mediaKey = '${media['title'] ?? ''}_${media['season']}_${media['episodeNumber']}_${media['episodeUrl'] ?? media['mediaUrl'] ?? ''}';
 
-                              return SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () async {
-                                    if (activeMedia != null) {
-                                      final switchStream = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          surfaceTintColor: Colors.transparent,
-                                          title: const Text('Switch Stream?'),
-                                          content: Text(
-                                            'You are currently watching "${activeMedia['title'] ?? 'another video'}". Do you want to switch to "${media['title'] ?? 'this stream'}"?',
+                              return AnimatedBuilder(
+                                animation: activeSession?.chatService ?? widget.chatService,
+                                builder: (context, _) {
+                                  final chatService = activeSession?.chatService ?? widget.chatService;
+                                  final voteCount = chatService.getMediaVoteCount(mediaKey);
+                                  final hasVoted = chatService.hasUserVoted(mediaKey);
+
+                                  // CASE 1: This card matches the room's currently active stream
+                                  if (isRoomStreamActive && isMatchingThisCard) {
+                                    if (widget.embedded) {
+                                      return SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          onPressed: null,
+                                          icon: const Icon(Icons.check_circle_outline_rounded, size: 16, color: Colors.green),
+                                          label: const Text('Currently Watching', style: TextStyle(fontSize: 12)),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                           ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context, false),
-                                              child: const Text('Cancel'),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () => Navigator.pop(context, true),
-                                              child: const Text('Switch'),
-                                            ),
-                                          ],
                                         ),
                                       );
-                                      if (switchStream != true || !context.mounted) return;
                                     }
-                                    widget.onJoinMediaStream?.call(media);
-                                  },
-                                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                  label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
+
+                                    return SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          widget.onJoinMediaStream?.call(media);
+                                        },
+                                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                        label: const Text('Join Stream', style: TextStyle(fontSize: 12)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  // CASE 2: Another stream is currently active in the room -> Show "Request to Watch" on-card vote button
+                                  if (isRoomStreamActive && !isMatchingThisCard) {
+                                    return SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          chatService.toggleMediaVote(mediaKey);
+                                        },
+                                        icon: Icon(
+                                          hasVoted ? Icons.thumb_up_rounded : Icons.thumb_up_alt_outlined,
+                                          size: 15,
+                                          color: hasVoted ? Theme.of(context).colorScheme.primary : null,
+                                        ),
+                                        label: Text(
+                                          hasVoted
+                                              ? 'Requested ${voteCount > 0 ? '👍 $voteCount' : ''}'
+                                              : 'Request to Watch${voteCount > 0 ? ' 👍 $voteCount' : ''}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: hasVoted ? FontWeight.bold : FontWeight.normal,
+                                            color: hasVoted ? Theme.of(context).colorScheme.primary : null,
+                                          ),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          minimumSize: Size.zero,
+                                          side: hasVoted
+                                              ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5)
+                                              : null,
+                                          backgroundColor: hasVoted
+                                              ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
+                                              : null,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  // CASE 3: No stream is currently active (Idle lobby / sharer stopped) -> Show "Start Stream"
+                                  final voteSuffix = voteCount > 0 ? ' (👍 $voteCount)' : '';
+                                  return SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        widget.onJoinMediaStream?.call(media);
+                                      },
+                                      icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                      label: Text('Start Stream$voteSuffix', style: const TextStyle(fontSize: 12)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Theme.of(context).colorScheme.primary,
+                                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                  );
+                                },
                               );
                             },
                           ),

@@ -56,6 +56,29 @@ class ActiveWatchPartyState {
   bool get shouldBroadcastPlayerCommands =>
       isMediaSharer || (allowMemberControl && !isLocalControlUnlocked);
 
+  bool get isRoomStreamActive =>
+      activeMediaPayload != null && !isLocalControlUnlocked;
+
+  static bool isSameMedia(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (a == null || b == null) return false;
+    final aEpUrl = a['episodeUrl'] as String?;
+    final bEpUrl = b['episodeUrl'] as String?;
+    if (aEpUrl != null && aEpUrl.isNotEmpty && bEpUrl != null && bEpUrl.isNotEmpty) {
+      return aEpUrl == bEpUrl;
+    }
+    final aMediaUrl = a['mediaUrl'] as String?;
+    final bMediaUrl = b['mediaUrl'] as String?;
+    if (aMediaUrl != null && aMediaUrl.isNotEmpty && bMediaUrl != null && bMediaUrl.isNotEmpty) {
+      if (aMediaUrl == bMediaUrl) return true;
+    }
+    final aTitle = a['title']?.toString().toLowerCase().trim();
+    final bTitle = b['title']?.toString().toLowerCase().trim();
+    final sameTitle = aTitle != null && aTitle == bTitle;
+    final sameSeason = a['season'] == b['season'];
+    final sameEpisode = a['episodeNumber'] == b['episodeNumber'];
+    return sameTitle && sameSeason && sameEpisode;
+  }
+
   ActiveWatchPartyState copyWith({
     Map<String, dynamic>? activeMediaPayload,
     bool clearActiveMedia = false,

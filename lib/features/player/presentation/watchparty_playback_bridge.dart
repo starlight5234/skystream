@@ -59,6 +59,28 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     if (!context.mounted) return false;
 
     if (promptResult != null && promptResult.choice == WatchPartyPlayChoice.watchTogether) {
+      if (activeParty.isRoomStreamActive && !activeParty.isMediaSharer) {
+        final currentTitle = activeParty.activeMediaPayload?['title'] ?? 'another stream';
+        final sharerName = activeParty.mediaSharer ?? 'Another member';
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            surfaceTintColor: Colors.transparent,
+            title: const Text('Stream Currently Active'),
+            content: Text(
+              '$sharerName is currently streaming "$currentTitle". Please wait for the current stream to finish, or use "Request to Watch" in chat.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return false;
+      }
+
       final item = detailedItem ?? baseItem;
       final episode = item.episodes?.firstWhereOrNull((e) => e.url == url);
 

@@ -7,6 +7,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   final Map<String, RTCDataChannel> _activeDataChannels;
   final List<Map<String, dynamic>> _messages = [];
   final Map<String, DateTime> lastSeen = {};
+  final Map<String, Set<String>> _mediaVotes = {};
   String? activeMediaSharer;
   
   Timer? _keepAliveTimer;
@@ -22,6 +23,36 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   }
 
   List<Map<String, dynamic>> get messages => _messages;
+  Map<String, Set<String>> get mediaVotes => _mediaVotes;
+
+  int getMediaVoteCount(String mediaKey) => _mediaVotes[mediaKey]?.length ?? 0;
+  bool hasUserVoted(String mediaKey, String userName) =>
+      _mediaVotes[mediaKey]?.contains(userName) ?? false;
+
+  void toggleMediaVote(String mediaKey, String voter) {
+    final currentSet = _mediaVotes.putIfAbsent(mediaKey, () => <String>{});
+    final bool voted;
+    if (currentSet.contains(voter)) {
+      currentSet.remove(voter);
+      voted = false;
+    } else {
+      currentSet.add(voter);
+      voted = true;
+    }
+    final jsonMsg = jsonEncode({
+      'type': 'control',
+      'action': 'vote_media',
+      'mediaKey': mediaKey,
+      'voter': voter,
+      'voted': voted,
+    });
+    for (final ch in _activeDataChannels.values) {
+      try {
+        ch.send(RTCDataChannelMessage(jsonMsg));
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
 
   void _startKeepAliveTimer() {
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
@@ -58,6 +89,19 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     if (!isRejoining) {
       _addSystemMessage('$guestName has joined the watch party');
       _broadcastSystemMessage('$guestName has joined the watch party');
+    }
+
+    // Sync existing media votes snapshot to new guest
+    if (_mediaVotes.isNotEmpty) {
+      final serializedVotes = _mediaVotes.map((k, v) => MapEntry(k, v.toList()));
+      final syncVotesMsg = jsonEncode({
+        'type': 'control',
+        'action': 'sync_votes',
+        'votes': serializedVotes,
+      });
+      try {
+        channel.send(RTCDataChannelMessage(syncVotesMsg));
+      } catch (_) {}
     }
 
     // Sync full existing chat history (chat, media cards) to newly joined guest only (not rejoining/reconnecting)
@@ -202,6 +246,20 @@ class WatchPartyMessageBroker extends ChangeNotifier {
           final positionMs = decoded['positionMs'] as int? ?? 0;
           onPlayerCommandReceived?.call(cmd, positionMs);
           _relayRawJson(decoded, excludeChannelKey: guestName);
+        } else if (action == 'vote_media') {
+          final mediaKey = decoded['mediaKey'] as String?;
+          final voter = decoded['voter'] as String? ?? guestName;
+          final voted = decoded['voted'] as bool? ?? true;
+          if (mediaKey != null && mediaKey.isNotEmpty) {
+            final currentSet = _mediaVotes.putIfAbsent(mediaKey, () => <String>{});
+            if (voted) {
+              currentSet.add(voter);
+            } else {
+              currentSet.remove(voter);
+            }
+            notifyListeners();
+            _relayRawJson(decoded, excludeChannelKey: guestName);
+          }
         } else if (action == 'sharer_left_stream') {
           final sharer = decoded['sharer'] as String? ?? guestName;
           if (activeMediaSharer == sharer) {
@@ -351,6 +409,7 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   void clear() {
     _messages.clear();
     lastSeen.clear();
+    _mediaVotes.clear();
     activeMediaSharer = null;
     notifyListeners();
   }

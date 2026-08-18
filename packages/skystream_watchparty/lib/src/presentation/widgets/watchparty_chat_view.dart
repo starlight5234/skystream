@@ -80,12 +80,16 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
       session.chatService.removeListener(_onChatServiceStateChanged);
       _subscribedSession = null;
 
-      if (!widget.embedded && !_disconnectDialogShowing) {
-        _disconnectDialogShowing = true;
-        _showDisconnectDialog();
+      final kickMsg = session.chatService.kickMessage;
+      if (kickMsg != null) {
+        if (!widget.embedded && !_disconnectDialogShowing) {
+          _disconnectDialogShowing = true;
+          _showDisconnectDialog();
+        } else {
+          widget.onShowNotification?.call(kickMsg);
+          ref.read(activeWatchPartyProvider.notifier).clearSession();
+        }
       } else {
-        final msg = session.chatService.kickMessage ?? 'The watch party connection was closed.';
-        widget.onShowNotification?.call(msg);
         ref.read(activeWatchPartyProvider.notifier).clearSession();
       }
       return;
@@ -776,6 +780,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
                 chatService: session.chatService,
                 isHost: session.isHost,
                 passcode: session.passcode,
+                embedded: widget.embedded,
                 creatorService: session.creatorService,
                 onCopyInviteLink: _copyInviteLink,
                 onJoinMediaStream: widget.onJoinMediaStream,
@@ -834,6 +839,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
                     chatService: session.chatService,
                     isHost: session.isHost,
                     passcode: session.passcode,
+                    embedded: widget.embedded,
                     creatorService: session.creatorService,
                     onCopyInviteLink: _copyInviteLink,
                     onJoinMediaStream: widget.onJoinMediaStream,
