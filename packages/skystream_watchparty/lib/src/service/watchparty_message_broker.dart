@@ -8,7 +8,10 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   final List<Map<String, dynamic>> _messages = [];
   final Map<String, DateTime> lastSeen = {};
   final Map<String, Set<String>> _mediaVotes = {};
+  Map<String, dynamic>? currentActiveMedia;
   String? activeMediaSharer;
+  bool allowMemberControl = false;
+  bool forceSyncOnRejoin = false;
   
   Timer? _keepAliveTimer;
   void Function(String guestName)? onGuestTimeout;
@@ -89,6 +92,22 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     if (!isRejoining) {
       _addSystemMessage('$guestName has joined the watch party');
       _broadcastSystemMessage('$guestName has joined the watch party');
+    }
+
+    // Sync active stream state to new guest
+    if (currentActiveMedia != null) {
+      final syncActiveStream = jsonEncode({
+        'type': 'control',
+        'action': 'stream_started',
+        'media': currentActiveMedia,
+        'sharer': activeMediaSharer ?? 'Host',
+        'allowMemberControl': allowMemberControl,
+        'waitForMembers': false,
+        'forceSyncOnRejoin': forceSyncOnRejoin,
+      });
+      try {
+        channel.send(RTCDataChannelMessage(syncActiveStream));
+      } catch (_) {}
     }
 
     // Sync existing media votes snapshot to new guest
@@ -260,6 +279,17 @@ class WatchPartyMessageBroker extends ChangeNotifier {
             notifyListeners();
             _relayRawJson(decoded, excludeChannelKey: guestName);
           }
+        } else if (action == 'stream_started') {
+          currentActiveMedia = decoded['media'] as Map<String, dynamic>?;
+          activeMediaSharer = decoded['sharer'] as String? ?? guestName;
+          allowMemberControl = decoded['allowMemberControl'] as bool? ?? false;
+          forceSyncOnRejoin = decoded['forceSyncOnRejoin'] as bool? ?? false;
+          notifyListeners();
+          _relayRawJson(decoded, excludeChannelKey: guestName);
+        } else if (action == 'host_rejoined') {
+          activeMediaSharer = decoded['sharer'] as String? ?? 'Host';
+          notifyListeners();
+          _relayRawJson(decoded, excludeChannelKey: guestName);
         } else if (action == 'sharer_left_stream') {
           final sharer = decoded['sharer'] as String? ?? guestName;
           if (activeMediaSharer == sharer) {
@@ -275,7 +305,6 @@ class WatchPartyMessageBroker extends ChangeNotifier {
 
       if (type == 'media_card') {
         final sender = decoded['sender'] as String? ?? guestName;
-        activeMediaSharer = sender;
         _addDeduplicatedMessage({
           'type': 'media_card',
           'msgId': msgId,
@@ -315,7 +344,6 @@ class WatchPartyMessageBroker extends ChangeNotifier {
   }
 
   void broadcastMediaCard(String sender, Map<String, dynamic> mediaPayload, {String? msgId}) {
-    activeMediaSharer = sender;
     final effectiveMsgId = msgId ?? '${DateTime.now().millisecondsSinceEpoch}_${_messages.length}';
     final payload = {
       'type': 'media_card',
@@ -337,6 +365,41 @@ class WatchPartyMessageBroker extends ChangeNotifier {
       'isMe': true,
       'time': DateTime.now(),
     });
+  }
+
+  void broadcastStreamStarted(
+    String sharer,
+    Map<String, dynamic> mediaPayload, {
+    bool allowMemberControl = false,
+    bool waitForMembers = false,
+    bool forceSyncOnRejoin = false,
+  }) {
+    currentActiveMedia = mediaPayload;
+    activeMediaSharer = sharer;
+    this.allowMemberControl = allowMemberControl;
+    this.forceSyncOnRejoin = forceSyncOnRejoin;
+    final payload = {
+      'type': 'control',
+      'action': 'stream_started',
+      'sharer': sharer,
+      'media': mediaPayload,
+      'allowMemberControl': allowMemberControl,
+      'waitForMembers': waitForMembers,
+      'forceSyncOnRejoin': forceSyncOnRejoin,
+    };
+    broadcastRawJson(payload);
+    notifyListeners();
+  }
+
+  void broadcastHostRejoined(String hostName) {
+    activeMediaSharer = hostName;
+    final payload = {
+      'type': 'control',
+      'action': 'host_rejoined',
+      'sharer': hostName,
+    };
+    broadcastRawJson(payload);
+    notifyListeners();
   }
 
   void broadcastRawJson(Map<String, dynamic> payload) {
@@ -410,7 +473,10 @@ class WatchPartyMessageBroker extends ChangeNotifier {
     _messages.clear();
     lastSeen.clear();
     _mediaVotes.clear();
+    currentActiveMedia = null;
     activeMediaSharer = null;
+    allowMemberControl = false;
+    forceSyncOnRejoin = false;
     notifyListeners();
   }
 

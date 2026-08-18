@@ -34,6 +34,8 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
   void Function(int positionMs, bool isPlaying)? onSyncStateReceived;
   void Function(String cmd, int positionMs)? onPlayerCommandReceived;
   void Function(String sharerName)? onSharerLeftStream;
+  void Function(Map<String, dynamic> mediaPayload, String sharer, bool allowMemberControl, bool waitForMembers, bool forceSyncOnRejoin)? onStreamStarted;
+  void Function(String sharer)? onHostRejoined;
   
   Timer? _keepAliveTimer;
   DateTime _lastSeen = DateTime.now();
@@ -239,6 +241,22 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
             final cmd = decoded['cmd'] as String? ?? 'ping';
             final positionMs = decoded['positionMs'] as int? ?? 0;
             onPlayerCommandReceived?.call(cmd, positionMs);
+          } else if (action == 'stream_started') {
+            _lastSeen = DateTime.now();
+            final mediaPayload = decoded['media'] as Map<String, dynamic>?;
+            final sharer = decoded['sharer'] as String? ?? 'Host';
+            final allowMemberControl = decoded['allowMemberControl'] as bool? ?? false;
+            final waitForMembers = decoded['waitForMembers'] as bool? ?? false;
+            final forceSyncOnRejoin = decoded['forceSyncOnRejoin'] as bool? ?? false;
+            if (mediaPayload != null) {
+              onStreamStarted?.call(mediaPayload, sharer, allowMemberControl, waitForMembers, forceSyncOnRejoin);
+              notifyListeners();
+            }
+          } else if (action == 'host_rejoined') {
+            _lastSeen = DateTime.now();
+            final sharer = decoded['sharer'] as String? ?? 'Host';
+            onHostRejoined?.call(sharer);
+            notifyListeners();
           } else if (action == 'sharer_left_stream') {
             final sharer = decoded['sharer'] as String? ?? 'Sharer';
             onSharerLeftStream?.call(sharer);
@@ -737,6 +755,29 @@ class WatchPartyChatService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         _dataChannel!.send(RTCDataChannelMessage(jsonEncode(payload)));
       } catch (_) {}
+    }
+  }
+
+  void broadcastStreamStarted(
+    Map<String, dynamic> mediaPayload, {
+    bool allowMemberControl = false,
+    bool waitForMembers = false,
+    bool forceSyncOnRejoin = false,
+  }) {
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastStreamStarted(
+        _userName,
+        mediaPayload,
+        allowMemberControl: allowMemberControl,
+        waitForMembers: waitForMembers,
+        forceSyncOnRejoin: forceSyncOnRejoin,
+      );
+    }
+  }
+
+  void notifyHostRejoinedStream() {
+    if (_isHost && _creatorService != null) {
+      _creatorService!.messageBroker.broadcastHostRejoined(_userName);
     }
   }
 

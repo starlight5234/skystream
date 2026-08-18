@@ -50,10 +50,12 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
 
   ActiveWatchPartyState? _subscribedSession;
   bool _disconnectDialogShowing = false;
+  Map<String, dynamic>? _initialActiveMedia;
 
   @override
   void initState() {
     super.initState();
+    _initialActiveMedia = widget.session?.activeMediaPayload;
     _updateSessionSubscription();
   }
 
@@ -514,6 +516,52 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
     );
   }
 
+  Widget _buildStreamSwitchedBanner(ActiveWatchPartyState session) {
+    if (!widget.embedded || session.isHost) return const SizedBox.shrink();
+    final currentRoomMedia = session.activeMediaPayload;
+    if (currentRoomMedia == null) return const SizedBox.shrink();
+    if (ActiveWatchPartyState.isSameMedia(_initialActiveMedia, currentRoomMedia)) {
+      return const SizedBox.shrink();
+    }
+
+    final title = currentRoomMedia['title'] as String? ?? 'new video';
+
+    return Container(
+      color: Colors.deepPurple.shade900,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.movie_filter_rounded, size: 16, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Host switched stream to "$title"',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              widget.onJoinMediaStream?.call(currentRoomMedia);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.white.withOpacity(0.2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Switch Now',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeaderActions(ActiveWatchPartyState session, {required bool isCompact}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -834,6 +882,7 @@ class _WatchPartyChatViewState extends ConsumerState<WatchPartyChatView> {
                   ),
                 ),
                 _buildReconnectingBanner(session),
+                _buildStreamSwitchedBanner(session),
                 Expanded(
                   child: WatchPartyChatBody(
                     chatService: session.chatService,

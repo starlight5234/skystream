@@ -123,9 +123,34 @@ class WatchPartySyncCoordinator {
       if (_disposed) return;
       ref.read(activeWatchPartyProvider.notifier).unlockPlaybackControl();
       adapter.showNotification(
-        'Stream sharer ($sharerName) left the player. Switched to local playback control.',
+        'Host ($sharerName) left the player. Switched to local playback control.',
       );
     };
+
+    chatService.onHostRejoined = (sharerName) {
+      if (_disposed) return;
+      final currentSession = ref.read(activeWatchPartyProvider);
+      if (currentSession != null && !currentSession.isHost) {
+        ref.read(activeWatchPartyProvider.notifier).resetLocalControl();
+        adapter.showNotification('Host ($sharerName) rejoined the stream.');
+        if (currentSession.forceSyncOnRejoin) {
+          chatService.requestSyncState();
+        }
+      }
+    };
+
+    chatService.onStreamStarted = (mediaPayload, sharer, allowMemberControl, waitForMembers, forceSyncOnRejoin) {
+      if (_disposed) return;
+      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
+        mediaPayload,
+        waitForMembers: waitForMembers,
+        forceSyncOnRejoin: forceSyncOnRejoin,
+      );
+    };
+
+    if (session.isHost && session.activeMediaPayload != null) {
+      chatService.notifyHostRejoinedStream();
+    }
 
     if (!session.isPausedForMembers) {
       _syncRequestTimer?.cancel();

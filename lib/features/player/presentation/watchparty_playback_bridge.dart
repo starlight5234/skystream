@@ -49,39 +49,14 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     final activeParty = ref.read(activeWatchPartyProvider);
     if (activeParty == null) return false;
 
-    final partySettings = await WatchPartySettings.loadFromPrefs();
-    if (!context.mounted) return false;
-
+    final item = detailedItem ?? baseItem;
     final promptResult = await WatchPartyPlayPromptDialog.show(
       context,
-      settings: partySettings,
+      title: item.title,
     );
-    if (!context.mounted) return false;
+    if (!context.mounted) return true;
 
-    if (promptResult != null && promptResult.choice == WatchPartyPlayChoice.watchTogether) {
-      if (activeParty.isRoomStreamActive && !activeParty.isMediaSharer) {
-        final currentTitle = activeParty.activeMediaPayload?['title'] ?? 'another stream';
-        final sharerName = activeParty.mediaSharer ?? 'Another member';
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            surfaceTintColor: Colors.transparent,
-            title: const Text('Stream Currently Active'),
-            content: Text(
-              '$sharerName is currently streaming "$currentTitle". Please wait for the current stream to finish, or use "Request to Watch" in chat.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        return false;
-      }
-
-      final item = detailedItem ?? baseItem;
+    if (promptResult == WatchPartyPlayChoice.shareSuggestion) {
       final episode = item.episodes?.firstWhereOrNull((e) => e.url == url);
 
       String? repoUrl;
@@ -121,18 +96,21 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
         'episodeName': episode?.name,
         'providerName': item.provider,
         'repoUrl': repoUrl,
-        'sharer': activeParty.userName,
-        'allowMemberControl': promptResult.allowMemberControl,
+        'sender': activeParty.userName,
       };
+
       activeParty.chatService.sendMediaCard(payload);
-      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
-        payload,
-        waitForMembers: promptResult.waitForMembers,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Shared "${item.title}" to WatchParty lobby'),
+          duration: const Duration(seconds: 2),
+        ),
       );
-      return false;
-    } else if (promptResult != null && promptResult.choice == WatchPartyPlayChoice.skip) {
+      return true;
+    } else if (promptResult == WatchPartyPlayChoice.watchAlone) {
       return false;
     }
+
     return true;
   }
 

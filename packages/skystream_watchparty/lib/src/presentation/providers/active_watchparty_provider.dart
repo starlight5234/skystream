@@ -19,6 +19,7 @@ class ActiveWatchPartyState {
   final bool waitForMembers;
   final bool isPausedForMembers;
   final bool isLocalControlUnlocked;
+  final bool forceSyncOnRejoin;
 
   const ActiveWatchPartyState({
     this.peerConnection,
@@ -34,6 +35,7 @@ class ActiveWatchPartyState {
     this.waitForMembers = false,
     this.isPausedForMembers = false,
     this.isLocalControlUnlocked = false,
+    this.forceSyncOnRejoin = false,
   });
 
   String? get mediaSharer =>
@@ -56,8 +58,7 @@ class ActiveWatchPartyState {
   bool get shouldBroadcastPlayerCommands =>
       isMediaSharer || (allowMemberControl && !isLocalControlUnlocked);
 
-  bool get isRoomStreamActive =>
-      activeMediaPayload != null && !isLocalControlUnlocked;
+  bool get isRoomStreamActive => activeMediaPayload != null;
 
   static bool isSameMedia(Map<String, dynamic>? a, Map<String, dynamic>? b) {
     if (a == null || b == null) return false;
@@ -85,6 +86,7 @@ class ActiveWatchPartyState {
     bool? waitForMembers,
     bool? isPausedForMembers,
     bool? isLocalControlUnlocked,
+    bool? forceSyncOnRejoin,
   }) {
     return ActiveWatchPartyState(
       peerConnection: peerConnection,
@@ -102,6 +104,7 @@ class ActiveWatchPartyState {
       isLocalControlUnlocked: clearActiveMedia
           ? false
           : (isLocalControlUnlocked ?? this.isLocalControlUnlocked),
+      forceSyncOnRejoin: forceSyncOnRejoin ?? this.forceSyncOnRejoin,
     );
   }
 }
@@ -114,7 +117,11 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
     state = session;
   }
 
-  void setActiveMedia(Map<String, dynamic>? mediaPayload, {bool waitForMembers = false}) {
+  void setActiveMedia(
+    Map<String, dynamic>? mediaPayload, {
+    bool waitForMembers = false,
+    bool forceSyncOnRejoin = false,
+  }) {
     if (state == null) return;
     state = state!.copyWith(
       activeMediaPayload: mediaPayload,
@@ -122,6 +129,7 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
       waitForMembers: waitForMembers,
       isPausedForMembers: waitForMembers,
       isLocalControlUnlocked: false,
+      forceSyncOnRejoin: forceSyncOnRejoin,
     );
   }
 
@@ -136,6 +144,13 @@ class ActiveWatchPartyNotifier extends Notifier<ActiveWatchPartyState?> {
     if (state == null) return;
     state = state!.copyWith(
       isLocalControlUnlocked: true,
+    );
+  }
+
+  void resetLocalControl() {
+    if (state == null) return;
+    state = state!.copyWith(
+      isLocalControlUnlocked: false,
     );
   }
 

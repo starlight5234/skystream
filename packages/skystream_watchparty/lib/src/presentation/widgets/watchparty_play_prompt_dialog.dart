@@ -1,77 +1,34 @@
 import 'package:flutter/material.dart';
-import '../../config/watchparty_settings.dart';
 
 enum WatchPartyPlayChoice {
-  watchTogether,
-  skip,
+  shareSuggestion,
+  watchAlone,
+  cancel,
 }
 
-class WatchPartyPlayResult {
-  final WatchPartyPlayChoice choice;
-  final bool waitForMembers;
-  final bool allowMemberControl;
-
-  const WatchPartyPlayResult({
-    required this.choice,
-    required this.waitForMembers,
-    this.allowMemberControl = false,
-  });
-}
-
-class WatchPartyPlayPromptDialog extends StatefulWidget {
-  final WatchPartySettings settings;
+class WatchPartyPlayPromptDialog extends StatelessWidget {
+  final String? title;
 
   const WatchPartyPlayPromptDialog({
     super.key,
-    required this.settings,
+    this.title,
   });
 
-  static Future<WatchPartyPlayResult?> show(
+  static Future<WatchPartyPlayChoice?> show(
     BuildContext context, {
-    required WatchPartySettings settings,
+    String? title,
   }) {
-    return showDialog<WatchPartyPlayResult>(
+    return showDialog<WatchPartyPlayChoice>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => WatchPartyPlayPromptDialog(settings: settings),
+      builder: (context) => WatchPartyPlayPromptDialog(title: title),
     );
-  }
-
-  @override
-  State<WatchPartyPlayPromptDialog> createState() => _WatchPartyPlayPromptDialogState();
-}
-
-class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog> {
-  late bool _waitForMembers;
-  late bool _allowMemberControl;
-
-  @override
-  void initState() {
-    super.initState();
-    _waitForMembers = widget.settings.waitForMembersDefault;
-    _allowMemberControl = widget.settings.allowMemberControlDefault;
-  }
-
-  void _onToggleWaitForMembers(bool? value) {
-    if (value == null) return;
-    setState(() {
-      _waitForMembers = value;
-    });
-    // Persist memory-based preference asynchronously
-    widget.settings.update(waitForMembersDefault: value);
-  }
-
-  void _onToggleAllowMemberControl(bool? value) {
-    if (value == null) return;
-    setState(() {
-      _allowMemberControl = value;
-    });
-    widget.settings.update(allowMemberControlDefault: value);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final displayTitle = title != null && title!.isNotEmpty ? '"$title"' : 'this video';
 
     return AlertDialog(
       surfaceTintColor: Colors.transparent,
@@ -91,88 +48,26 @@ class _WatchPartyPlayPromptDialogState extends State<WatchPartyPlayPromptDialog>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Would you like to watch this video with your WatchParty room, or watch alone?',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          InkWell(
-            onTap: () => _onToggleWaitForMembers(!_waitForMembers),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _waitForMembers,
-                    onChanged: _onToggleWaitForMembers,
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  const Expanded(
-                    child: Text(
-                      'Wait for members before starting',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          InkWell(
-            onTap: () => _onToggleAllowMemberControl(!_allowMemberControl),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _allowMemberControl,
-                    onChanged: _onToggleAllowMemberControl,
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  const Expanded(
-                    child: Text(
-                      'Allow members to control playback',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          Text(
+            'You are in an active WatchParty. Would you like to share $displayTitle as a suggestion to the party, or watch it alone?',
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
         ],
       ),
       actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       actions: [
         TextButton(
-          onPressed: () {
-            Navigator.pop(
-              context,
-              const WatchPartyPlayResult(
-                choice: WatchPartyPlayChoice.skip,
-                waitForMembers: false,
-                allowMemberControl: false,
-              ),
-            );
-          },
-          child: const Text('Skip (Watch Alone)', style: TextStyle(color: Colors.grey)),
+          onPressed: () => Navigator.pop(context, WatchPartyPlayChoice.cancel),
+          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        ),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context, WatchPartyPlayChoice.watchAlone),
+          child: const Text('Watch Alone'),
         ),
         ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pop(
-              context,
-              WatchPartyPlayResult(
-                choice: WatchPartyPlayChoice.watchTogether,
-                waitForMembers: _waitForMembers,
-                allowMemberControl: _allowMemberControl,
-              ),
-            );
-          },
-          icon: const Icon(Icons.play_arrow_rounded),
-          label: const Text('Watch Together'),
+          onPressed: () => Navigator.pop(context, WatchPartyPlayChoice.shareSuggestion),
+          icon: const Icon(Icons.share_rounded, size: 16),
+          label: const Text('Share Suggestion'),
           style: ElevatedButton.styleFrom(
             backgroundColor: theme.colorScheme.primary,
             foregroundColor: theme.colorScheme.onPrimary,
