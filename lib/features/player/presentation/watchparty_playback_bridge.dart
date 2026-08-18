@@ -137,9 +137,16 @@ class WatchPartyPlaybackBridge implements WatchPartyPlaybackInterceptor {
     final waitForMembers = mediaPayload['waitForMembers'] as bool? ?? false;
     final forceSyncOnRejoin = mediaPayload['forceSyncOnRejoin'] as bool? ?? false;
 
+    final effectivePayload = Map<String, dynamic>.from(mediaPayload);
+    if (effectivePayload['sharer'] == null || (effectivePayload['sharer'] as String).isEmpty) {
+      effectivePayload['sharer'] = activeParty?.activeMediaPayload?['sharer'] ?? activeParty?.hostName ?? 'Host';
+    }
+    final allowMemberControl = (effectivePayload['allowMemberControl'] as bool?) ?? activeParty?.allowMemberControl ?? false;
+    effectivePayload['allowMemberControl'] = allowMemberControl;
+
     if (activeParty != null) {
       ref.read(activeWatchPartyProvider.notifier).setActiveMedia(
-        mediaPayload,
+        effectivePayload,
         waitForMembers: waitForMembers,
         forceSyncOnRejoin: forceSyncOnRejoin,
       );

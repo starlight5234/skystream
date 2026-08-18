@@ -179,8 +179,13 @@ class SkyStreamPlayerControlsState
           onSeekRelative: (amount) async {
             _seekRelative(amount);
           },
-          onSeekTo: (position) =>
-              ref.read(playerControllerProvider.notifier).seekTo(position),
+          onSeekTo: (position) async {
+            if (widget.onSeekTo != null) {
+              widget.onSeekTo!(position);
+            } else {
+              await ref.read(playerControllerProvider.notifier).seekTo(position);
+            }
+          },
           getVolumeLevel: () =>
               ref.read(playerControllerProvider.notifier).getVolumeLevel(),
           setVolumeLevel: (value) =>

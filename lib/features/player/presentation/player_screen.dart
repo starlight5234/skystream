@@ -813,6 +813,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                       final currentItem = widget.item;
                                       final currentEpisode = widget.episode;
                                       final titleText = currentItem.title;
+                                      final isLocal = widget.videoUrl.startsWith('file://') ||
+                                          currentItem.url.startsWith('file://') ||
+                                          currentItem.provider == null ||
+                                          currentItem.provider!.isEmpty;
+                                      if (isLocal) {
+                                        ref.read(notificationServiceProvider).showInfo('Local or direct media cannot be shared to WatchParty.');
+                                        return;
+                                      }
                                       final isMovie = currentItem.contentType == MultimediaContentType.movie || currentEpisode?.name == 'Full Movie';
                                       final isTvShow = !isMovie && (currentItem.contentType == MultimediaContentType.series || currentItem.contentType == MultimediaContentType.anime || (currentItem.episodes != null && currentItem.episodes!.length > 1));
                                       final payload = {
@@ -825,11 +833,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                                         'episodeNumber': isMovie ? null : currentEpisode?.episode,
                                         'episodeName': isMovie ? null : currentEpisode?.name,
                                         'providerName': currentItem.provider,
-                                        'sharer': activeSession.userName,
+                                        'sender': activeSession.userName,
                                       };
                                       activeSession.chatService.sendMediaCard(payload);
-                                      ref.read(activeWatchPartyProvider.notifier).setActiveMedia(payload);
-                                      ref.read(notificationServiceProvider).showInfo('Media card shared to WatchParty!');
+                                      ref.read(notificationServiceProvider).showInfo('Shared "$titleText" to WatchParty lobby!');
                                     },
                                     isTv: _isTv,
                                   ),

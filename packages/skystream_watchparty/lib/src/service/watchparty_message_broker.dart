@@ -251,7 +251,6 @@ class WatchPartyMessageBroker extends ChangeNotifier {
         } else if (action == 'get_sync_state') {
           final requester = decoded['requester'] as String? ?? guestName;
           onSyncStateRequested?.call(requester);
-          _relayRawJson(decoded, excludeChannelKey: guestName);
         } else if (action == 'sync_state_response') {
           final positionMs = decoded['positionMs'] as int? ?? 0;
           final isPlaying = decoded['isPlaying'] as bool? ?? false;
